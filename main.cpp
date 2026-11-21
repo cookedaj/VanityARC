@@ -1,7 +1,10 @@
+#include <sys/prctl.h>
+
 #include <atomic>
 #include <chrono>
 #include <csignal>
 #include <cstdlib>
+#include <filesystem>
 #include <iostream>
 #include <thread>
 #include <vector>
@@ -13,6 +16,7 @@
 #include "draw/OverlayBackend.h"
 #include "utils/labels.h"
 #include "utils/marks.h"
+#include "utils/obfstr.h"
 #include "utils/offsets.h"
 #include "utils/settings.h"
 #include "memory/memory.h"
@@ -23,7 +27,21 @@ void SignalHandler(int) {g_Running = false;}
 //Data older than this is not drawn: after a stall the markers would be where things were, not where they are
 constexpr double STALE_MS = 250.0;
 
+//Settings used to live in ~/.config/vanityarc. Copy that folder across once; never overwrite or delete anything.
+void migrateConfigDir() {
+    const char* home = std::getenv("HOME");
+    if (!home) return;
+    namespace fs = std::filesystem;
+    const fs::path oldDir = fs::path(home) / ".config" / OBF("vanityarc");
+    const fs::path newDir = fs::path(home) / ".config" / "kwin-helper";
+    std::error_code ec;
+    if (fs::exists(newDir, ec) || !fs::is_directory(oldDir, ec)) return;
+    fs::copy(oldDir, newDir, fs::copy_options::recursive, ec);
+}
+
 int main() {
+    prctl(PR_SET_NAME, "kwin-helper", 0, 0, 0);
+    migrateConfigDir();
     std::signal(SIGINT, SignalHandler);
     std::signal(SIGTERM, SignalHandler); //pkill / logout: leave cleanly so settings and names are saved
     std::signal(SIGHUP, SignalHandler);
@@ -38,7 +56,7 @@ int main() {
     live::load();     //offsets found with the probes (offsets.txt)
     std::thread hotkey = StartHotkey(); //Insert opens the menu
     ESPInit();
-    if (const char* tab = std::getenv("VANITYARC_TAB")) g_MenuTab = std::atoi(tab); //for screenshots: start on this page
+    if (const char* tab = std::getenv("KWINHELPER_TAB")) g_MenuTab = std::atoi(tab); //for screenshots: start on this page
 
     //Reading the game happens on its own thread (finding the process, the actor list, positions, names), so a slow
     //read can never make the drawing stutter. This loop only draws the newest result.
@@ -93,16 +111,16 @@ int main() {
             g_KeyQuit = g_KeyClear = g_KeyMark = false;
         }
 
-        if (!snap->gameFound) DrawLabelCentered(110, 14, "Waiting for ARC Raiders...", 14.0f);
+        if (!snap->gameFound) DrawLabelCentered(110, 14, OBF("Waiting for ARC Raiders...").c_str(), 14.0f);
         float below = 20;
         if (snap->gameFound && config::showDebugInfo) {
             const Tracker::Stats st = tracker.stats();
             char l1[200], l2[200];
             size_t players = 0;
             for (const RenderEntity& e : ents) players += e.type == Object::PLAYER;
-            if (!snap->valid) std::snprintf(l1, sizeof l1, "VANITYARC  -  waiting for a raid");
-            else if (!live) std::snprintf(l1, sizeof l1, "VANITYARC  -  waiting for fresh data (%.0f ms old)", ageMs);
-            else std::snprintf(l1, sizeof l1, "VANITYARC  -  live  -  %.0f Hz  -  data %.0f ms  -  %zu players", st.updatesPerSec, ageMs, players);
+            if (!snap->valid) std::snprintf(l1, sizeof l1, "waiting for a raid");
+            else if (!live) std::snprintf(l1, sizeof l1, "waiting for fresh data (%.0f ms old)", ageMs);
+            else std::snprintf(l1, sizeof l1, "live  -  %.0f Hz  -  data %.0f ms  -  %zu players", st.updatesPerSec, ageMs, players);
             std::snprintf(l2, sizeof l2, "%.0f fps   step %.2f ms   scan %.1f ms   %zu moving, %zu fixed",
                           (double)ImGui::GetIO().Framerate, st.stepMs, st.scanMs, st.dynamics, st.statics);
             below = DrawStatusCard(l1, l2);

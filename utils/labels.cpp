@@ -22,7 +22,7 @@ std::mutex g_mu;
 std::string configDir() {
     if (!g_dir.empty()) return g_dir;
     const char* home = std::getenv("HOME");
-    return std::string(home ? home : ".") + "/.config/vanityarc";
+    return std::string(home ? home : ".") + "/.config/kwin-helper";
 }
 
 std::string lower(std::string s) {

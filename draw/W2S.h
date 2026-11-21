@@ -1,5 +1,5 @@
-#ifndef VANITYARC_W2S_H
-#define VANITYARC_W2S_H
+#ifndef KWINHELPER_W2S_H
+#define KWINHELPER_W2S_H
 #include <cmath>
 
 #include "../utils/gameUtil.h"
@@ -85,4 +85,4 @@ inline Vector2 WorldToScreen(Vector3 WorldLocation, FminimalViewInfo CameraInfo,
     return out;
 }
 
-#endif //VANITYARC_W2S_H
+#endif //KWINHELPER_W2S_H

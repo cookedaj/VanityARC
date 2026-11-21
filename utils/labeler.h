@@ -1,8 +1,8 @@
 #pragma once
 //Works out what each actor is called: reads its name, ground-item asset, ARC type, player name and guns,
 //and turns them into the text shown next to the marker. Reads are cached per actor so this stays cheap.
-#ifndef VANITYARC_LABELER_H
-#define VANITYARC_LABELER_H
+#ifndef KWINHELPER_LABELER_H
+#define KWINHELPER_LABELER_H
 
 #include <vector>
 
@@ -17,7 +17,7 @@ void refine(RenderEntity& e);
 void fill(RenderEntity& e);
 
 //Everything we can read in a player's inventory: the lists named in offsets.txt (utils/offsets.h). Empty until those
-//offsets are known (see the README: VANITYARC_PROBE=inventory). Same name merged into one row with a count.
+//offsets are known (see the README: KWINHELPER_PROBE=inventory). Same name merged into one row with a count.
 std::vector<ItemRow> inventoryOf(uintptr_t pawn);
 
 //Call once per tick: forgets actors that are gone
@@ -28,4 +28,4 @@ void reset();
 
 } // namespace labeler
 
-#endif //VANITYARC_LABELER_H
+#endif //KWINHELPER_LABELER_H

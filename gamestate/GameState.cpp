@@ -304,7 +304,7 @@ void DumpMemoryAround(uintptr_t targetAddress, size_t range) {
 void getViewMatrix(ptr actor) {
     //Finds the camera (FminimalViewInfo) inside an actor: a float that looks like
     //a FOV, with a sane Location 0x50 before it and a sane Rotation 0x28 after
-    //Location (the layout VanityArc's FminimalViewInfo expects). Works with any
+    //Location (the layout kwin-helper's FminimalViewInfo expects). Works with any
     //in-game FOV; the Location/Rotation checks are what reject false hits.
 
     //v1029 expects FOV at actor+0xE60 (VIEW_MATRIX 0xE10 + 0x50). One read of

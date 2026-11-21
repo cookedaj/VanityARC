@@ -1,5 +1,5 @@
-#ifndef VANITYARC_TRACKER_H
-#define VANITYARC_TRACKER_H
+#ifndef KWINHELPER_TRACKER_H
+#define KWINHELPER_TRACKER_H
 //Reads the game on its own thread, so drawing never waits for memory reads. It also finds the game process,
 //notices when the game closes or restarts, and publishes the newest result for the draw thread to pick up.
 #include <atomic>
@@ -73,4 +73,4 @@ private:
     std::vector<ptr> inspected_;
 };
 
-#endif //VANITYARC_TRACKER_H
+#endif //KWINHELPER_TRACKER_H

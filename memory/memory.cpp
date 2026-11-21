@@ -7,6 +7,8 @@
 #include <signal.h>
 #include <vector>
 
+#include "utils/obfstr.h"
+
 
 // Global variables, needed for easy read without a class
 
@@ -220,7 +222,7 @@ pid_t FindGamePID() {
         // Check process name first (cheap), then count threads in /proc/PID/task
         std::ifstream comm_file("/proc/" + pid_str + "/comm");
         std::string comm_name;
-        if (!(comm_file >> comm_name) || comm_name.find("GameThread") == std::string::npos) continue;
+        if (!(comm_file >> comm_name) || comm_name.find(OBF("GameThread")) == std::string::npos) continue;
 
         int thread_count = 0;
         std::error_code tec;

@@ -14,7 +14,7 @@ static void writeFile(const std::string& dir, const std::string& text) {
 }
 
 int main() {
-    const std::string dir = (std::filesystem::temp_directory_path() / "vanityarc_test_offsets").string();
+    const std::string dir = (std::filesystem::temp_directory_path() / "kwinhelper_test_offsets").string();
     std::filesystem::remove_all(dir);
 
     live::load(dir); //no file

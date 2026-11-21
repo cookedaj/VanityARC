@@ -1,7 +1,7 @@
 #pragma once
 //Console messages that could repeat every frame (lobby, loading screen) are printed at most once every 5 s.
-#ifndef VANITYARC_LOG_H
-#define VANITYARC_LOG_H
+#ifndef KWINHELPER_LOG_H
+#define KWINHELPER_LOG_H
 
 #include <chrono>
 #include <iostream>
@@ -18,4 +18,4 @@ inline void logThrottled(const char* msg) {
     std::cout << msg << std::endl;
 }
 
-#endif //VANITYARC_LOG_H
+#endif //KWINHELPER_LOG_H

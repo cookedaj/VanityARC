@@ -2,8 +2,8 @@
 //The overlay window as a Wayland "layer-shell" surface on the overlay layer. KDE draws an active fullscreen window
 //(a fullscreen game, or gamescope -f) above every normal window, even ones marked "keep above"; the overlay layer is
 //the one thing that stays above it. Needs a compositor with wlr-layer-shell (KDE, sway, Hyprland; not GNOME).
-#ifndef VANITYARC_LAYERWINDOW_H
-#define VANITYARC_LAYERWINDOW_H
+#ifndef KWINHELPER_LAYERWINDOW_H
+#define KWINHELPER_LAYERWINDOW_H
 
 #include <string>
 #include <vector>
@@ -42,4 +42,4 @@ private:
     Impl* p_;
 };
 
-#endif //VANITYARC_LAYERWINDOW_H
+#endif //KWINHELPER_LAYERWINDOW_H

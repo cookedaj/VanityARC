@@ -1,8 +1,8 @@
 #pragma once
 //The player list (at the bottom of the screen and in the menu's Players tab) and the inventory windows that open
 //when you click a name. Everything here only displays what the tracker read.
-#ifndef VANITYARC_PLAYERLIST_H
-#define VANITYARC_PLAYERLIST_H
+#ifndef KWINHELPER_PLAYERLIST_H
+#define KWINHELPER_PLAYERLIST_H
 
 #include <algorithm>
 #include <cstdio>
@@ -168,7 +168,7 @@ inline void DrawInspectWindows() {
                         if (r.count > 1) ImGui::Text("  %s  x%d", r.name.c_str(), r.count); else ImGui::Text("  %s", r.name.c_str());
                     }
                 } else if (live::invArrays.empty()) {
-                    ui::Note("The inventory lists are not known yet. Run the inventory probe once (README: VANITYARC_PROBE=inventory) and put what it finds in offsets.txt.");
+                    ui::Note("The inventory lists are not known yet. Run the inventory probe once (README: KWINHELPER_PROBE=inventory) and put what it finds in offsets.txt.");
                 } else {
                     ui::Note("Nothing readable: the game may not send this player's backpack to you.");
                 }
@@ -181,4 +181,4 @@ inline void DrawInspectWindows() {
     ui::PopTheme();
 }
 
-#endif //VANITYARC_PLAYERLIST_H
+#endif //KWINHELPER_PLAYERLIST_H

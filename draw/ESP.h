@@ -1,5 +1,5 @@
-#ifndef VANITYARC_ESP_H
-#define VANITYARC_ESP_H
+#ifndef KWINHELPER_ESP_H
+#define KWINHELPER_ESP_H
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -410,4 +410,4 @@ inline void DrawRadar(const std::vector<RenderEntity>& entities, FminimalViewInf
     DrawArrow(cx, cy - 7, 0, -1, 10, COLOR::white); //you, looking up
 }
 
-#endif //VANITYARC_ESP_H
+#endif //KWINHELPER_ESP_H

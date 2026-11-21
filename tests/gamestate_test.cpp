@@ -113,7 +113,7 @@ int main() {
     base = (u64)region;
     bump = base + 0x10A00000;
     names::setBase(base);
-    labels::setDir("/tmp/vanityarc_gamestate_test_unused"); //never writes: the test does not call save()
+    labels::setDir("/tmp/kwinhelper_gamestate_test_unused"); //never writes: the test does not call save()
 
     buildWorld();
     camActor = alloc(0x1000);

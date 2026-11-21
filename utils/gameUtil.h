@@ -3,8 +3,8 @@
  * Should remain constant between updates
  */
 
-#ifndef VANITYARC_GAMEUTIL_H
-#define VANITYARC_GAMEUTIL_H
+#ifndef KWINHELPER_GAMEUTIL_H
+#define KWINHELPER_GAMEUTIL_H
 #include <cmath>
 #include <iostream>
 #include <iomanip>
@@ -84,4 +84,4 @@ struct ScreenPos {
     float x, y;
 };
 
-#endif //VANITYARC_GAMEUTIL_H
+#endif //KWINHELPER_GAMEUTIL_H

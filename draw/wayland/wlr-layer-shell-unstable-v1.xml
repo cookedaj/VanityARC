@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  The wlr-layer-shell protocol, reduced to what VanityArc uses (the request and event order is what matters on the
+  The wlr-layer-shell protocol, reduced to what kwin-helper uses (the request and event order is what matters on the
   wire, so it is the same as the original). The original is part of wlroots (MIT license).
   get_popup is declared with a plain wl_surface argument only so that no xdg-shell file is needed to build; it is
   never called.

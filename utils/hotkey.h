@@ -1,11 +1,11 @@
-#ifndef VANITYARC_HOTKEY_H
-#define VANITYARC_HOTKEY_H
+#ifndef KWINHELPER_HOTKEY_H
+#define KWINHELPER_HOTKEY_H
 //Menu hotkey. The overlay never has keyboard focus (and Wayland has no global key hooks), so Insert is
 //read straight from the keyboard devices in /dev/input. Only Insert, F6, F7 and F10 are looked at; nothing else
 //is stored or logged, EXCEPT while you are typing into a text box in the menu: then (and only then) the
 //keyboard is grabbed so the game does not see the keys, and the key presses are handed to the menu.
 //This needs read access to /dev/input (group "input"). Without it the menu can still
-//be toggled with:   pkill -USR1 -x VanityArc
+//be toggled with:   pkill -USR1 -x kwin-helper
 #include <atomic>
 #include <cerrno>
 #include <csignal>
@@ -105,7 +105,7 @@ inline void HotkeyThread() {
         } else {
             std::printf("[!] Insert hotkey is off: no keyboard found.\n");
         }
-        std::printf("    Meanwhile you can toggle the menu with:  pkill -USR1 -x VanityArc\n");
+        std::printf("    Meanwhile you can toggle the menu with:  pkill -USR1 -x kwin-helper\n");
         std::fflush(stdout);
         return;
     }
@@ -144,4 +144,4 @@ inline std::thread StartHotkey() {
     return std::thread(HotkeyThread);
 }
 
-#endif //VANITYARC_HOTKEY_H
+#endif //KWINHELPER_HOTKEY_H

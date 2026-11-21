@@ -2,8 +2,8 @@
 //Reads names out of the game: player names and the names of objects (actors, data assets).
 //Everything here is read-only. The scrambling is the v1029 scheme from the offsets thread; after a game
 //patch the constants at the top of names.cpp (and the RVAs) may need new values.
-#ifndef VANITYARC_NAMES_H
-#define VANITYARC_NAMES_H
+#ifndef KWINHELPER_NAMES_H
+#define KWINHELPER_NAMES_H
 
 #include <cstdint>
 #include <string>
@@ -43,4 +43,4 @@ uint32_t pickNameSlot(uintptr_t actor);
 
 } // namespace names
 
-#endif //VANITYARC_NAMES_H
+#endif //KWINHELPER_NAMES_H

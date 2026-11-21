@@ -1,5 +1,5 @@
-#ifndef VANITYARC_GAMESTATE_H
-#define VANITYARC_GAMESTATE_H
+#ifndef KWINHELPER_GAMESTATE_H
+#define KWINHELPER_GAMESTATE_H
 
 #include "config.h"
 #include "utils/localUtil.h"
@@ -74,7 +74,7 @@ private:
     bool scan();            //the whole actor list; false when there is no world yet
     void updateDynamic();   //position, health, team, dead for players and ARC
     gsRet assemble(const FminimalViewInfo& vm);
-    void runLiveProbeIfAsked(const std::vector<RenderEntity>& ents, const FminimalViewInfo& vm); //VANITYARC_PROBE=shield|inventory
+    void runLiveProbeIfAsked(const std::vector<RenderEntity>& ents, const FminimalViewInfo& vm); //KWINHELPER_PROBE=shield|inventory
 };
 
-#endif //VANITYARC_GAMESTATE_H
+#endif //KWINHELPER_GAMESTATE_H

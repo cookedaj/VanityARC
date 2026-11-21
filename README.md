@@ -1,4 +1,4 @@
-# VanityArc
+# kwin-helper
 https://youtu.be/tiK0ihPw6m8
 
 ## Setup
@@ -9,8 +9,8 @@ https://youtu.be/tiK0ihPw6m8
 ```
  Go to Window Management -> Window Rules.
  Click + Add New...
- Description: Discover Overlay Fix
- Window class: Choose "Exact Match" and type "Discover Overlay" (or whatever you named your window in config.h).
+ Description: KWin Helper Fix
+ Window class: Choose "Exact Match" and type "KWin Helper" (or whatever you named your window in config.h).
  Click + Add Property and search for/add these:
      Accept focus: Set to Force and No.
      Focus stealing prevention: Set to Force and Extreme.
@@ -33,11 +33,11 @@ OR
 
 Google/ask AI how to set up the build utility inside of CLion (Release build).
 ```
-9) Run with: `bash start.sh`. If this does not work, it is probably because your output of VanityArc is not in the relative path `./cmake-build-release/VanityArc`. Find where your program built to in the last step and change the code in `start.sh` to match that path.
+9) Run with: `bash start.sh`. If this does not work, it is probably because your output of kwin-helper is not in the relative path `./cmake-build-release/kwin-helper`. Find where your program built to in the last step and change the code in `start.sh` to match that path.
 10) Make sure the game is loaded in windowed mode.
 11) When you start the process, right-click the overlay -> More Actions -> Keep Above Others.
-12) Press Insert to open the in-game menu (show/hide players, ARC, items, containers, names, distances, radar). While it is open the overlay takes the mouse; press Insert again to close it. Insert is read from /dev/input, so you need to be in the `input` group once: `sudo usermod -aG input $USER`, then log out and back in. Without that, `pkill -USR1 -x VanityArc` toggles the menu instead. Menu settings are saved in `~/.config/vanityarc/settings.txt`.
-13) Names: ARC machines, containers, ground items, players and the guns they carry get a name next to the marker (toggle each under "Names"). Open "Rename" in the menu, click a box and type your own name (US keyboard; Enter finishes). While you type, the keyboard is held by the overlay so the game does not see the keys. Your names are saved in `~/.config/vanityarc/labels.txt`; delete a line there (or press `x` in the menu) to go back to the built-in name.
+12) Press Insert to open the in-game menu (show/hide players, ARC, items, containers, names, distances, radar). While it is open the overlay takes the mouse; press Insert again to close it. Insert is read from /dev/input, so you need to be in the `input` group once: `sudo usermod -aG input $USER`, then log out and back in. Without that, `pkill -USR1 -x kwin-helper` toggles the menu instead. Menu settings are saved in `~/.config/kwin-helper/settings.txt`.
+13) Names: ARC machines, containers, ground items, players and the guns they carry get a name next to the marker (toggle each under "Names"). Open "Rename" in the menu, click a box and type your own name (US keyboard; Enter finishes). While you type, the keyboard is held by the overlay so the game does not see the keys. Your names are saved in `~/.config/kwin-helper/labels.txt`; delete a line there (or press `x` in the menu) to go back to the built-in name.
 
 ## Known Issues
 1) ESP gets distorted at the edges.
@@ -101,7 +101,7 @@ Once you find your `ViewMatrix`, you will see a BUNCH of text on the screen (hex
 The tests use a fake in-memory "game", so no game is needed:
 
 ```
-cmake -B cmake-build-tests -DVANITYARC_TESTS=ON && cmake --build cmake-build-tests && ctest --test-dir cmake-build-tests
+cmake -B cmake-build-tests -DKWINHELPER_TESTS=ON && cmake --build cmake-build-tests && ctest --test-dir cmake-build-tests
 ```
 
 They cover the name decoders, the label tables, the keyboard layout, the Insert menu (typing, hover ID clashes), a fuzz run over garbage memory, the batched memory reads, the projection and label decluttering, the ESP drawing, and the tracker thread against the old read path (`gamestate_test`).
@@ -129,22 +129,22 @@ Insert opens the menu: black and white, tabs on the left.
 | Game view | gamescope / stretched resolution, calibration (FOV side, zoom, shift, camera roll) |
 | Settings | overlay and menu opacity, text size, update rate (30-240 Hz), status card, hotkeys, reset |
 
-- **Hotkeys** (read from /dev/input, switch off in Settings): F6 marks or unmarks the player nearest your crosshair as a teammate (only when one player is clearly meant), F7 clears all marks, F10 closes the overlay. Marks are kept by account id in `~/.config/vanityarc/teammates.txt`.
+- **Hotkeys** (read from /dev/input, switch off in Settings): F6 marks or unmarks the player nearest your crosshair as a teammate (only when one player is clearly meant), F7 clears all marks, F10 closes the overlay. Marks are kept by account id in `~/.config/kwin-helper/teammates.txt`.
 - **Player list**: at the bottom of the screen (Players tab > Player list: off / always / only with the menu). With the menu open, click a name to open that player's inventory window.
 - **Safe values**: every setting has a range; a damaged `settings.txt` cannot break the overlay, and "Reset all settings" restores the defaults.
 - **Old data is not drawn**: if the tracker stalls for more than 250 ms the markers disappear instead of showing where things were.
 
 ## Shield and inventory: probes
 
-The shield bar and the inventory window need numbers the public dumps do not have. They are found once with a probe and saved in `~/.config/vanityarc/offsets.txt`. One raid is enough:
+The shield bar and the inventory window need numbers the public dumps do not have. They are found once with a probe and saved in `~/.config/kwin-helper/offsets.txt`. One raid is enough:
 
 ```
-VANITYARC_PROBE=shield,inventory bash start.sh
+KWINHELPER_PROBE=shield,inventory bash start.sh
 ```
 
 1. Start it like that, then start a raid. Stay in third person, so the overlay can tell which player is you.
 2. **Shield:** when `=== SHIELD PROBE ===` appears, take a hit (or do anything that changes your shield). Lines appear for every number that changed. Health is marked `<- known: health`. The shield is the other number that moves with it. Under each candidate there is a ready line: `if this is the shield: shield_component ... shield_value ...`.
 3. **Inventory:** every 8 seconds `=== INVENTORY PROBE ===` lists your item lists and those of the two nearest players, each with a ready `offsets.txt:  inv_array ...` line. Stand near another player for a moment.
-4. Copy the console lines (or just the shield candidates that moved with health, and the inventory lists that name real items) and send them over, or put the ready lines into `offsets.txt` yourself, then restart without `VANITYARC_PROBE`.
+4. Copy the console lines (or just the shield candidates that moved with health, and the inventory lists that name real items) and send them over, or put the ready lines into `offsets.txt` yourself, then restart without `KWINHELPER_PROBE`.
 
 Both probes only read memory. Until the numbers are in `offsets.txt` the shield bar is not drawn and the inventory window shows the guns only.

@@ -7,6 +7,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
+#include <random>
 #include <string>
 
 #include "utils/labeler.h"
@@ -18,7 +19,11 @@ void runLiveProbe(const std::string& mode, ptr localPawn, const std::vector<Rend
 
 namespace {
 using clk = std::chrono::steady_clock;
-constexpr auto SCAN_EVERY = std::chrono::milliseconds(100); //new actors show up within this long (10 scans a second)
+thread_local std::mt19937 scanJitter{std::random_device{}()};
+//New actors show up within about this long (roughly 10 scans a second, with uneven gaps)
+std::chrono::milliseconds nextScanGap() {
+    return std::chrono::milliseconds(std::uniform_int_distribution<int>(80, 120)(scanJitter));
+}
 
 template <typename T>
 void queue(std::vector<ReadReq>& q, ptr addr, T* dst) { q.push_back({addr, (void*)dst, sizeof(T), false}); }
@@ -219,9 +224,9 @@ gsRet GameState::assemble(const FminimalViewInfo& vm) {
     return out;
 }
 
-//VANITYARC_PROBE=shield or inventory (set before starting): prints discovery reports every 2 s, reading memory only
+//KWINHELPER_PROBE=shield or inventory (set before starting): prints discovery reports every 2 s, reading memory only
 void GameState::runLiveProbeIfAsked(const std::vector<RenderEntity>& ents, const FminimalViewInfo& vm) {
-    static const std::string mode = [] { const char* e = std::getenv("VANITYARC_PROBE"); return std::string(e ? e : ""); }();
+    static const std::string mode = [] { const char* e = std::getenv("KWINHELPER_PROBE"); return std::string(e ? e : ""); }();
     if (mode.empty()) return;
     static auto last = clk::now() - std::chrono::seconds(10);
     const auto now = clk::now();
@@ -236,7 +241,7 @@ gsRet GameState::step() {
     const auto t0 = clk::now();
     //The world is checked on every step (4 small reads): leaving a raid or loading a map is noticed at once
     const ptr world = getUworld();
-    const bool full = camActor_ == 0 || world != lastWorld_ || !isValidPtr(world) || t0 - lastScan_ >= SCAN_EVERY;
+    const bool full = camActor_ == 0 || world != lastWorld_ || !isValidPtr(world) || t0 - lastScan_ >= nextScanGap();
     if (full) {
         lastScan_ = t0;
         if (!scan()) { statics_.clear(); dyn_.clear(); camActor_ = 0; return {}; }

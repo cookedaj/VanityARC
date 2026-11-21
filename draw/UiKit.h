@@ -1,8 +1,8 @@
 #pragma once
 //Small widgets for the Insert menu: strictly black and white, square, flat. A row is "label on the left, control on
 //the right". Every widget gets its ID from its label, so labels must be different from each other within a page.
-#ifndef VANITYARC_UIKIT_H
-#define VANITYARC_UIKIT_H
+#ifndef KWINHELPER_UIKIT_H
+#define KWINHELPER_UIKIT_H
 
 #include <cstdio>
 #include <cstring>
@@ -154,4 +154,4 @@ inline bool Tab(const char* label, bool selected, float w) {
 
 } // namespace ui
 
-#endif //VANITYARC_UIKIT_H
+#endif //KWINHELPER_UIKIT_H

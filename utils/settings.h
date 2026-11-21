@@ -1,10 +1,10 @@
 #pragma once
-//Remembers the Insert-menu settings between runs in ~/.config/vanityarc/settings.txt
+//Remembers the Insert-menu settings between runs in ~/.config/kwin-helper/settings.txt
 //(one "name value" per line). Anything missing keeps its value from config.h. Every value has a safe range: a
 //hand-edited or damaged file can never put the overlay in an unusable state. "Reset" in the menu restores the
 //values config.h started with.
-#ifndef VANITYARC_SETTINGS_H
-#define VANITYARC_SETTINGS_H
+#ifndef KWINHELPER_SETTINGS_H
+#define KWINHELPER_SETTINGS_H
 
 #include <algorithm>
 #include <cmath>
@@ -94,7 +94,7 @@ inline void clampAll() {
 inline std::string path(const std::string& dir = "") {
     if (!dir.empty()) return dir + "/settings.txt";
     const char* home = std::getenv("HOME");
-    return std::string(home ? home : ".") + "/.config/vanityarc/settings.txt";
+    return std::string(home ? home : ".") + "/.config/kwin-helper/settings.txt";
 }
 
 inline void load(const std::string& dir = "") {
@@ -128,4 +128,4 @@ inline void save(const std::string& dir = "") {
 
 } // namespace settings
 
-#endif //VANITYARC_SETTINGS_H
+#endif //KWINHELPER_SETTINGS_H

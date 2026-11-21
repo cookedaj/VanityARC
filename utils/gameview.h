@@ -2,8 +2,8 @@
 //Where the game's picture is on the overlay. Normally the picture fills the screen and has the screen's size. With
 //gamescope the game draws at one size (say 1440x1080) and gamescope stretches that to the screen, so a 3D position
 //has to be worked out for the game's own pixels first, then stretched the same way.
-#ifndef VANITYARC_GAMEVIEW_H
-#define VANITYARC_GAMEVIEW_H
+#ifndef KWINHELPER_GAMEVIEW_H
+#define KWINHELPER_GAMEVIEW_H
 
 #include <algorithm>
 #include <cmath>
@@ -66,4 +66,4 @@ inline GameView ComputeGameView(int overlayW, int overlayH, const gamescope::Inf
 
 inline GameView g_gameView; //set once per frame by the main loop; ESP.h reads it
 
-#endif //VANITYARC_GAMEVIEW_H
+#endif //KWINHELPER_GAMEVIEW_H

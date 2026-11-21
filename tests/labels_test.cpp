@@ -18,9 +18,9 @@
 #include <thread>
 #include <chrono>
 #include <filesystem>
-//A throw-away folder under the system temp directory (tests never touch your real ~/.config/vanityarc)
+//A throw-away folder under the system temp directory (tests never touch your real ~/.config/kwin-helper)
 static std::string testDir(const char* name) {
-    return (std::filesystem::temp_directory_path() / (std::string("vanityarc_test_") + name)).string();
+    return (std::filesystem::temp_directory_path() / (std::string("kwinhelper_test_") + name)).string();
 }
 
 

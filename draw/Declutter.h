@@ -2,8 +2,8 @@
 //Decides which labels to draw, and where, when many of them would land on top of each other (a room full of
 //containers). A label can offer several places (below, above, beside its marker): the first free one is used. No
 //ImGui in here: it only works with boxes, so it can be tested without a window.
-#ifndef VANITYARC_DECLUTTER_H
-#define VANITYARC_DECLUTTER_H
+#ifndef KWINHELPER_DECLUTTER_H
+#define KWINHELPER_DECLUTTER_H
 
 #include <algorithm>
 #include <numeric>
@@ -64,4 +64,4 @@ inline std::vector<size_t> ChooseLabels(const std::vector<LabelReq>& reqs) {
     return out;
 }
 
-#endif //VANITYARC_DECLUTTER_H
+#endif //KWINHELPER_DECLUTTER_H

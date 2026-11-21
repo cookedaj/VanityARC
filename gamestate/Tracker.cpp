@@ -6,14 +6,17 @@
 #include <chrono>
 #include <cmath>
 #include <iostream>
+#include <random>
 
 #include "utils/labeler.h"
 #include "utils/names.h"
+#include "utils/obfstr.h"
 
 namespace {
 using clk = std::chrono::steady_clock;
 constexpr int IDLE_MS = 250;      //main menu / loading: look again a few times a second
 constexpr int NO_GAME_MS = 200;
+thread_local std::mt19937 jitterRng{std::random_device{}()}; //uneven step times: a fixed rhythm is easy to spot
 
 bool processAlive(pid_t pid) { return pid > 0 && access(("/proc/" + std::to_string(pid)).c_str(), F_OK) == 0; }
 } // namespace
@@ -108,7 +111,7 @@ void Tracker::run() {
                 labeler::reset();
                 lastData = t0;
             } else if (!announced) {
-                std::cout << "[-] ARC Raiders is not running. Waiting for it..." << std::endl;
+                std::cout << OBF("[-] ARC Raiders is not running. Waiting for it...") << std::endl;
                 announced = true;
             }
         }
@@ -170,7 +173,8 @@ void Tracker::run() {
         if (!r.valid) sleepFor(IDLE_MS);
         else {
             const int stepMs = std::max(4, 1000 / std::max(30, std::min(240, g_trackerHz.load(std::memory_order_relaxed))));
-            if (spent < stepMs) sleepFor(stepMs - spent);
+            const int jitterMs = std::uniform_int_distribution<int>(-2, 2)(jitterRng);
+            if (spent < stepMs) sleepFor(std::max(0, stepMs - spent + jitterMs));
         }
     }
     if (!fixedPid_) ProcessId = 0;

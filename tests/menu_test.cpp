@@ -4,9 +4,9 @@
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
-//A throw-away folder under the system temp directory (tests never touch your real ~/.config/vanityarc)
+//A throw-away folder under the system temp directory (tests never touch your real ~/.config/kwin-helper)
 static std::string testDir(const char* name) {
-    return (std::filesystem::temp_directory_path() / (std::string("vanityarc_test_") + name)).string();
+    return (std::filesystem::temp_directory_path() / (std::string("kwinhelper_test_") + name)).string();
 }
 
 
@@ -49,7 +49,7 @@ int main() {
     for (int i = 0; i < 3; i++) frame([] { DrawMenu(); });
     CHECK(true, "menu draws");
 
-    ImGuiWindow* w = ImGui::FindWindowByName("VanityArc");
+    ImGuiWindow* w = ImGui::FindWindowByName("kwin-helper");
     CHECK(w != nullptr, "menu window exists");
     g_MenuTab = 3; //the Names page, with the rename lists
     for (int i = 0; i < 3; i++) frame([] { DrawMenu(); });
@@ -121,7 +121,7 @@ int main() {
     auto scan = [&](const char* what) {
         g_MenuOpen = true;
         frame([] { DrawMenu(); }); frame([] { DrawMenu(); });
-        ImGuiWindow* mw = ImGui::FindWindowByName("VanityArc");
+        ImGuiWindow* mw = ImGui::FindWindowByName("kwin-helper");
         int hits = 0;
         for (float y = mw->Pos.y + 2; y < mw->Pos.y + mw->Size.y; y += 5)
             for (float x = mw->Pos.x + 4; x < mw->Pos.x + mw->Size.x; x += 9) {

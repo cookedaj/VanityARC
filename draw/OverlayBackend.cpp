@@ -90,9 +90,9 @@ bool initGlfw() {
 } // namespace
 
 bool InitOverlay() {
-    const char* force = std::getenv("VANITYARC_BACKEND");
+    const char* force = std::getenv("KWINHELPER_BACKEND");
     if (!(force && std::strcmp(force, "glfw") == 0)) {
-        const char* mon = std::getenv("VANITYARC_MONITOR");
+        const char* mon = std::getenv("KWINHELPER_MONITOR");
         g_layer = new LayerWindow;
         std::string err;
         if (g_layer->create(mon ? mon : "", &err)) {
@@ -114,10 +114,10 @@ bool InitOverlay() {
     ImGui::CreateContext();
     ImGui::StyleColorsDark();
 
-    //Where the menu remembers its window position: with the other saved settings, not in whatever folder VanityArc was started from
+    //Where the menu remembers its window position: with the other saved settings, not in whatever folder kwin-helper was started from
     {
         const char* home = std::getenv("HOME");
-        const std::string dir = std::string(home ? home : ".") + "/.config/vanityarc";
+        const std::string dir = std::string(home ? home : ".") + "/.config/kwin-helper";
         std::error_code ec;
         std::filesystem::create_directories(dir, ec);
         g_iniPath = dir + "/imgui.ini";

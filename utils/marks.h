@@ -1,8 +1,8 @@
 #pragma once
 //Players you marked as teammates by hand (player list > Teammate). Saved by account id in
-//~/.config/vanityarc/teammates.txt, so a mark survives restarts and new games with the same people.
-#ifndef VANITYARC_MARKS_H
-#define VANITYARC_MARKS_H
+//~/.config/kwin-helper/teammates.txt, so a mark survives restarts and new games with the same people.
+#ifndef KWINHELPER_MARKS_H
+#define KWINHELPER_MARKS_H
 
 #include <cstdlib>
 #include <filesystem>
@@ -21,7 +21,7 @@ inline unsigned& ver() { static unsigned v = 1; return v; }
 inline std::string path(const std::string& dir) {
     if (!dir.empty()) return dir + "/teammates.txt";
     const char* home = std::getenv("HOME");
-    return std::string(home ? home : ".") + "/.config/vanityarc/teammates.txt";
+    return std::string(home ? home : ".") + "/.config/kwin-helper/teammates.txt";
 }
 inline bool valid(const std::string& a) { return !a.empty() && a.size() <= 32 && a.find_first_of(" \t\r\n") == std::string::npos; }
 } // namespace detail
@@ -82,4 +82,4 @@ inline void save(const std::string& dir = "") {
 
 } // namespace marks
 
-#endif //VANITYARC_MARKS_H
+#endif //KWINHELPER_MARKS_H

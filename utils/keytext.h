@@ -1,7 +1,7 @@
 #pragma once
 //Turns Linux key codes into the characters they type (US keyboard layout) so names can be typed into the menu.
-#ifndef VANITYARC_KEYTEXT_H
-#define VANITYARC_KEYTEXT_H
+#ifndef KWINHELPER_KEYTEXT_H
+#define KWINHELPER_KEYTEXT_H
 
 #include <linux/input-event-codes.h>
 
@@ -24,4 +24,4 @@ inline char KeyToChar(int code, bool shift) {
     return 0;
 }
 
-#endif //VANITYARC_KEYTEXT_H
+#endif //KWINHELPER_KEYTEXT_H

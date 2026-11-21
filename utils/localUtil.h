@@ -1,7 +1,7 @@
 #pragma once
 
-#ifndef VANITYARC_LOCALUTIL_H
-#define VANITYARC_LOCALUTIL_H
+#ifndef KWINHELPER_LOCALUTIL_H
+#define KWINHELPER_LOCALUTIL_H
 #include <cmath>
 #include <cstdint>
 #include <deque>
@@ -56,4 +56,4 @@ struct RenderEntity {
     }
 };
 
-#endif //VANITYARC_LOCALUTIL_H
+#endif //KWINHELPER_LOCALUTIL_H

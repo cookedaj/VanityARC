@@ -189,7 +189,7 @@ int main() {
     //---- status card and toast
     {
         Toast("Teammate marked: cooked", 5.0);
-        CHECK(draw([&] { DrawToast(DrawStatusCard("VANITYARC - live", "120 fps")); }) > 0, "status card and toast draw");
+        CHECK(draw([&] { DrawToast(DrawStatusCard("live", "120 fps")); }) > 0, "status card and toast draw");
     }
 
     //---- the radar panel

@@ -1,7 +1,7 @@
 #pragma once
 //F6: mark (or unmark) the player nearest the crosshair as a teammate. Only when it is clear which player is meant.
-#ifndef VANITYARC_MARKING_H
-#define VANITYARC_MARKING_H
+#ifndef KWINHELPER_MARKING_H
+#define KWINHELPER_MARKING_H
 
 #include <cmath>
 #include <string>
@@ -50,4 +50,4 @@ inline MarkResult MarkNearestAtCrosshair(const std::vector<RenderEntity>& ents, 
     return r;
 }
 
-#endif //VANITYARC_MARKING_H
+#endif //KWINHELPER_MARKING_H

@@ -1,9 +1,9 @@
 #pragma once
 //Display names. The game gives raw names ("DA_EnemyType_Tick", "BP_SocketContainer_Gvt_BinTrash_01_A_C",
 //"DA_Item_BattleRifle_BreachAction_01"); this turns them into what you see on screen ("Tick", "Trash can",
-//"Ferro") and keeps the names you typed yourself in ~/.config/vanityarc/labels.txt.
-#ifndef VANITYARC_LABELS_H
-#define VANITYARC_LABELS_H
+//"Ferro") and keeps the names you typed yourself in ~/.config/kwin-helper/labels.txt.
+#ifndef KWINHELPER_LABELS_H
+#define KWINHELPER_LABELS_H
 
 #include <map>
 #include <string>
@@ -36,10 +36,10 @@ std::map<std::string, std::string> seen(Cat c); //a copy, safe to use while the 
 
 void load();                      //read the saved names (call once at start)
 void save();
-void setDir(const std::string& dir); //tests only; default is ~/.config/vanityarc
+void setDir(const std::string& dir); //tests only; default is ~/.config/kwin-helper
 
 const char* catName(Cat c);
 
 } // namespace labels
 
-#endif //VANITYARC_LABELS_H
+#endif //KWINHELPER_LABELS_H

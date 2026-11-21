@@ -11,7 +11,7 @@ static int fails = 0;
 #define CHECK(cond, msg) do { bool ok_ = (cond); std::printf("%s  %s\n", ok_ ? "PASS" : "FAIL", msg); if (!ok_) fails++; } while (0)
 
 static std::string testDir(const char* name) {
-    return (std::filesystem::temp_directory_path() / (std::string("vanityarc_test_") + name)).string();
+    return (std::filesystem::temp_directory_path() / (std::string("kwinhelper_test_") + name)).string();
 }
 static void writeFile(const std::string& dir, const std::string& text) {
     std::filesystem::create_directories(dir);

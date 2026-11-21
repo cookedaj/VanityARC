@@ -305,7 +305,7 @@ void runNameProbe(const std::vector<RenderEntity>& ents, const std::vector<Rende
 
 
 //==============================================================================================
-// Live probes: VANITYARC_PROBE=shield or VANITYARC_PROBE=inventory, set before starting (see the README). Read only.
+// Live probes: KWINHELPER_PROBE=shield or KWINHELPER_PROBE=inventory, set before starting (see the README). Read only.
 //==============================================================================================
 namespace {
 

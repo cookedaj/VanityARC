@@ -2,8 +2,8 @@
 //When the game is started through gamescope (for example "gamescope -w 1440 -h 1080 -W 1920 -H 1080 -S stretch -f --
 //%command%") the game draws a 1440x1080 picture and gamescope stretches it to the screen. The overlay has to know both
 //sizes, so it reads them from the running gamescope's command line.
-#ifndef VANITYARC_GAMESCOPE_H
-#define VANITYARC_GAMESCOPE_H
+#ifndef KWINHELPER_GAMESCOPE_H
+#define KWINHELPER_GAMESCOPE_H
 
 #include <string>
 #include <sys/types.h>
@@ -32,4 +32,4 @@ Info find();
 
 } // namespace gamescope
 
-#endif //VANITYARC_GAMESCOPE_H
+#endif //KWINHELPER_GAMESCOPE_H

@@ -1,9 +1,9 @@
 #pragma once
-//Offsets that are not in the public dumps and can be set WITHOUT rebuilding: ~/.config/vanityarc/offsets.txt, one
-//"name value" per line (decimal or 0x hex). They are found with the probes (VANITYARC_PROBE=shield / inventory, see
+//Offsets that are not in the public dumps and can be set WITHOUT rebuilding: ~/.config/kwin-helper/offsets.txt, one
+//"name value" per line (decimal or 0x hex). They are found with the probes (KWINHELPER_PROBE=shield / inventory, see
 //the README) and survive game restarts. -1 means "not known": that feature simply stays off.
-#ifndef VANITYARC_OFFSETS_H
-#define VANITYARC_OFFSETS_H
+#ifndef KWINHELPER_OFFSETS_H
+#define KWINHELPER_OFFSETS_H
 
 #include <cstdint>
 #include <cstdlib>
@@ -28,7 +28,7 @@ inline std::vector<InvArray> invArrays;
 inline std::string path(const std::string& dir = "") {
     if (!dir.empty()) return dir + "/offsets.txt";
     const char* home = std::getenv("HOME");
-    return std::string(home ? home : ".") + "/.config/vanityarc/offsets.txt";
+    return std::string(home ? home : ".") + "/.config/kwin-helper/offsets.txt";
 }
 
 inline void reset() {
@@ -75,4 +75,4 @@ inline void load(const std::string& dir = "") {
 
 } // namespace live
 
-#endif //VANITYARC_OFFSETS_H
+#endif //KWINHELPER_OFFSETS_H

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(VanityArc)
+project(kwin-helper)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -68,7 +68,7 @@ set(IMGUI_SOURCES
 )
 
 # --- 2. ADD EXECUTABLE WITH IMGUI SOURCES ---
-add_executable(VanityArc
+add_executable(kwin-helper
         main.cpp
         config.h
         memory/memory.h
@@ -76,40 +76,44 @@ add_executable(VanityArc
 )
 
 # --- 3. INCLUDES AND LINKS ---
-target_include_directories(VanityArc PRIVATE
+target_include_directories(kwin-helper PRIVATE
         ${GEN_DIR}
         ${CMAKE_SOURCE_DIR}
         ${IMGUI_DIR}
         ${IMGUI_DIR}/backends
 )
 
-target_link_libraries(VanityArc PRIVATE glfw OpenGL::GL PkgConfig::WAYLAND)
-# --- Headless tests (they need no game and no display): cmake -B cmake-build-tests -DVANITYARC_TESTS=ON
-option(VANITYARC_TESTS "Build the headless tests" OFF)
-if(VANITYARC_TESTS)
+target_link_libraries(kwin-helper PRIVATE glfw OpenGL::GL PkgConfig::WAYLAND)
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
+    target_compile_options(kwin-helper PRIVATE -ffunction-sections -fdata-sections)
+    target_link_options(kwin-helper PRIVATE -s -Wl,--gc-sections)
+endif()
+# --- Headless tests (they need no game and no display): cmake -B cmake-build-tests -DKWINHELPER_TESTS=ON
+option(KWINHELPER_TESTS "Build the headless tests" OFF)
+if(KWINHELPER_TESTS)
     enable_testing()
-    function(vanityarc_test name)
+    function(kwinhelper_test name)
         add_executable(${name} tests/${name}.cpp ${ARGN})
         target_include_directories(${name} PRIVATE ${CMAKE_SOURCE_DIR} ${IMGUI_DIR} ${IMGUI_DIR}/backends)
         add_test(NAME ${name} COMMAND ${name})
     endfunction()
-    vanityarc_test(key_test)
-    vanityarc_test(scatter_test memory/memory.cpp)
-    vanityarc_test(draw_test)
-    vanityarc_test(settings_test)
-    vanityarc_test(offsets_test)
-    vanityarc_test(gamescope_test utils/gamescope.cpp)
-    vanityarc_test(gamestate_test gamestate/GameState.cpp gamestate/Fast.cpp gamestate/Tracker.cpp gamestate/Probe.cpp utils/gamescope.cpp
+    kwinhelper_test(key_test)
+    kwinhelper_test(scatter_test memory/memory.cpp)
+    kwinhelper_test(draw_test)
+    kwinhelper_test(settings_test)
+    kwinhelper_test(offsets_test)
+    kwinhelper_test(gamescope_test utils/gamescope.cpp)
+    kwinhelper_test(gamestate_test gamestate/GameState.cpp gamestate/Fast.cpp gamestate/Tracker.cpp gamestate/Probe.cpp utils/gamescope.cpp
             utils/names.cpp utils/labels.cpp utils/labeler.cpp memory/memory.cpp)
     target_link_libraries(gamestate_test PRIVATE pthread)
-    vanityarc_test(names_test utils/names.cpp gamestate/Probe.cpp memory/memory.cpp)
-    vanityarc_test(labels_test utils/names.cpp utils/labels.cpp utils/labeler.cpp memory/memory.cpp)
-    vanityarc_test(fuzz_test utils/names.cpp utils/labels.cpp utils/labeler.cpp memory/memory.cpp)
-    vanityarc_test(menu_test utils/labels.cpp
+    kwinhelper_test(names_test utils/names.cpp gamestate/Probe.cpp memory/memory.cpp)
+    kwinhelper_test(labels_test utils/names.cpp utils/labels.cpp utils/labeler.cpp memory/memory.cpp)
+    kwinhelper_test(fuzz_test utils/names.cpp utils/labels.cpp utils/labeler.cpp memory/memory.cpp)
+    kwinhelper_test(menu_test utils/labels.cpp
             ${IMGUI_DIR}/imgui.cpp ${IMGUI_DIR}/imgui_draw.cpp ${IMGUI_DIR}/imgui_tables.cpp ${IMGUI_DIR}/imgui_widgets.cpp
             ${IMGUI_DIR}/backends/imgui_impl_glfw.cpp ${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp)
     target_link_libraries(menu_test PRIVATE glfw OpenGL::GL)
-    vanityarc_test(esp_test utils/labels.cpp
+    kwinhelper_test(esp_test utils/labels.cpp
             ${IMGUI_DIR}/imgui.cpp ${IMGUI_DIR}/imgui_draw.cpp ${IMGUI_DIR}/imgui_tables.cpp ${IMGUI_DIR}/imgui_widgets.cpp
             ${IMGUI_DIR}/backends/imgui_impl_glfw.cpp ${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp)
     target_link_libraries(esp_test PRIVATE glfw OpenGL::GL)

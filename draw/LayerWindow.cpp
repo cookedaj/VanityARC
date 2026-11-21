@@ -157,7 +157,7 @@ bool LayerWindow::create(const std::string& monitor, std::string* error) {
     if (!monitor.empty() && !out) std::fprintf(stderr, "[!] Monitor '%s' not found (have: %s). The compositor will choose.\n", monitor.c_str(), have.c_str());
 
     d.surf = wl_compositor_create_surface(d.comp);
-    d.ls = zwlr_layer_shell_v1_get_layer_surface(d.shell, d.surf, out, ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY, "vanityarc");
+    d.ls = zwlr_layer_shell_v1_get_layer_surface(d.shell, d.surf, out, ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY, "kwin-helper");
     static const zwlr_layer_surface_v1_listener ll = {Impl::onConfigure, Impl::onClosed};
     zwlr_layer_surface_v1_add_listener(d.ls, &ll, &d);
     zwlr_layer_surface_v1_set_size(d.ls, 0, 0); //0 + all four edges anchored = the whole output

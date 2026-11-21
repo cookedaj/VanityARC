@@ -182,7 +182,7 @@ int main() {
     CHECK(has("BP_LootContainer_Trash_C"), "report: container name in census");
     CHECK(has("CurrentItemActors") && has("+0x10=0x"), "report: held-item array printed");
 
-    //---- live probes: VANITYARC_PROBE=shield / inventory
+    //---- live probes: KWINHELPER_PROBE=shield / inventory
     {
         u64 pawn = makeObject(0x1400, 0x2000, 9);
         u64 health = makeObject(0x900, 0x2000, 0);

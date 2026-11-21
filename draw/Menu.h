@@ -1,7 +1,7 @@
-#ifndef VANITYARC_MENU_H
-#define VANITYARC_MENU_H
+#ifndef KWINHELPER_MENU_H
+#define KWINHELPER_MENU_H
 //The Insert menu: black and white, tabs on the left (ESP, Players, Radar, Names, Game view, Settings).
-//Settings and your own names are saved in ~/.config/vanityarc/ (see settings.h and labels.h).
+//Settings and your own names are saved in ~/.config/kwin-helper/ (see settings.h and labels.h).
 #include <algorithm>
 #include <array>
 #include <cstdio>
@@ -246,7 +246,7 @@ inline void PageSettings() {
     Switch("Status card", &config::showDebugInfo);
     Switch("Hotkeys (F6, F7, F10)", &config::hotkeysEnabled);
     Section("FILES");
-    Note("Settings, names, offsets and marks are in ~/.config/vanityarc/");
+    Note("Settings, names, offsets and marks are in ~/.config/kwin-helper/");
     static bool armed = false;
     if (ImGui::Button(armed ? "Click again to reset everything" : "Reset all settings")) {
         if (armed) { settings::resetAll(); armed = false; Toast("Settings reset"); }
@@ -263,10 +263,10 @@ inline void DrawMenu() {
     ui::PushTheme(std::min(1.0f, std::max(0.5f, config::menuOpacity)));
     ImGui::SetNextWindowPos(ImVec2(120, 110), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(ImVec2(820, 640), ImGuiCond_Always);
-    ImGui::Begin("VanityArc", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoScrollbar);
+    ImGui::Begin("kwin-helper", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoScrollbar);
 
     ImGui::PushFont(OverlayFont(), 20.0f);
-    ImGui::TextUnformatted("VANITYARC");
+    ImGui::TextUnformatted("Overlay");
     ImGui::PopFont();
     ImGui::SameLine(ImGui::GetWindowWidth() - 150);
     ImGui::TextColored(ImColor(ui::GREY), "Insert closes");
@@ -303,4 +303,4 @@ inline void DrawUi() {
     DrawMenu();
 }
 
-#endif //VANITYARC_MENU_H
+#endif //KWINHELPER_MENU_H

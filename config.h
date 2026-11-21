@@ -1,5 +1,5 @@
-#ifndef VANITYARC_CONFIG_H
-#define VANITYARC_CONFIG_H
+#ifndef KWINHELPER_CONFIG_H
+#define KWINHELPER_CONFIG_H
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -11,7 +11,7 @@ namespace config {
     inline bool makeDeadBotESPTranslucent = true;
     inline bool makeDeadPlayerESPTranslucent = true;
 
-    //What to draw. These are also the checkboxes in the Insert menu (changes there last until VanityArc restarts)
+    //What to draw. These are also the checkboxes in the Insert menu (changes there last until kwin-helper restarts)
     inline bool showPlayers = true;
     inline bool showArc = true;
     inline bool showPickups = true;     //items on the ground
@@ -78,7 +78,7 @@ namespace config {
     inline int SCREEN_H = 1440 /*<-Make you monitor height*/ * 0.94/*just trust me, this helps with distortion around screen edge*/;
     inline int SCREEN_W = 2560 /*<-Make you monitor width*/;
 
-    inline const auto OVERLAY_NAME = "Discover Overlay"; //Name of the overlay
+    inline const auto OVERLAY_NAME = "KWin Helper"; //Name of the overlay
 
 }
 
@@ -164,4 +164,4 @@ namespace vtabels {
     inline constexpr uintptr_t CAMMANAGER = 0x14d8af9d0; //v1029, found by the camera scan (VIEW_MATRIX 0xE10 confirmed live)
 }
 
-#endif //VANITYARC_CONFIG_H
+#endif //KWINHELPER_CONFIG_H

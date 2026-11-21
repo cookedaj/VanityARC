@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Only needed for the FALLBACK overlay window (VANITYARC_BACKEND=glfw, or a compositor without layer-shell).
+# Only needed for the FALLBACK overlay window (KWINHELPER_BACKEND=glfw, or a compositor without layer-shell).
 # The normal overlay is a layer-shell window: it shows above fullscreen games by itself and needs no KDE rule.
-# One-time setup for the VanityArc overlay on KDE Plasma (Wayland). Safe to re-run.
-# Edits the KDE window rule "Discover Overlay Fix" (creates it if missing) so the overlay:
+# One-time setup for the kwin-helper overlay on KDE Plasma (Wayland). Safe to re-run.
+# Edits the KDE window rule "KWin Helper Fix" (creates it if missing) so the overlay:
 #   - stays above the game, with no title bar (the title bar shifts everything down ~25 px)
 #   - never takes keyboard focus from the game, and is pinned to the top-left of ONE monitor
 # Usage: bash fix-overlay-rule.sh [MONITOR]   e.g. DP-1. Default = your primary monitor.
@@ -25,8 +25,8 @@ if [ -z "$POS" ]; then
 fi
 
 F="${KWINRULES_FILE:-kwinrulesrc}"
-TITLE="Discover Overlay"          # must match OVERLAY_NAME in config.h
-DESC="Discover Overlay Fix"
+TITLE="KWin Helper"          # must match OVERLAY_NAME in config.h
+DESC="KWin Helper Fix"
 
 rd() { kreadconfig6 --file "$F" "$@"; }
 wr() { kwriteconfig6 --file "$F" "$@"; }
@@ -58,4 +58,4 @@ force acceptfocus false
 force position "$POS"
 
 qdbus6 org.kde.KWin /KWin reconfigure >/dev/null 2>&1 || true
-echo "Done. Overlay pinned to monitor '${WANT:-primary}' at $POS. Restart VanityArc (bash start.sh) to apply it."
+echo "Done. Overlay pinned to monitor '${WANT:-primary}' at $POS. Restart kwin-helper (bash start.sh) to apply it."
