@@ -1,0 +1,241 @@
+#include "memory.h"
+
+#include <iostream>
+#include <algorithm>
+#include <cerrno>
+#include <cstring>
+#include <signal.h>
+#include <vector>
+
+
+// Global variables, needed for easy read without a class
+
+std::atomic<pid_t> ProcessId{0};
+long BaseAddress = 0;
+
+#define debug false
+
+// Memory read/write function templates implementation
+template<typename T>
+T ReadMemory(pid_t pid, long address)
+#if !debug
+{
+    T buffer;
+    struct iovec local[1];
+    struct iovec remote[1];
+
+    local[0].iov_base = &buffer;
+    local[0].iov_len = sizeof(T);
+    remote[0].iov_base = (void*)address;
+    remote[0].iov_len = sizeof(T);
+
+    ssize_t nread = process_vm_readv(pid, local, 1, remote, 1, 0);
+    if (nread != sizeof(T))
+    {
+        // Silent failure - don't spam console
+        buffer = T{};
+    }
+
+    return buffer;
+}
+#else
+{
+    T buffer;
+    struct iovec local[1];
+    struct iovec remote[1];
+
+    local[0].iov_base = &buffer;
+    local[0].iov_len = sizeof(T);
+    remote[0].iov_base = (void*)address;
+    remote[0].iov_len = sizeof(T);
+
+    ssize_t nread = process_vm_readv(pid, local, 1, remote, 1, 0);
+    if (nread != sizeof(T))
+    {
+        std::cerr << "[ReadMemory] Failed to read " << sizeof(T)
+                  << " bytes at address 0x" << std::hex << address
+                  << " (pid " << pid << "). nread=" << nread << std::endl;
+        perror("[ReadMemory] process_vm_readv");
+        buffer = T{};
+    }
+
+    return buffer;
+}
+#endif
+
+// Implementation for GameData.h template
+template<typename T>
+T ReadMemory(uintptr_t address)
+{
+    return ReadMemory<T>(ProcessId, address);
+}
+
+void ReadMemoryBuffer(pid_t pid, long address, void* buffer, size_t size)
+{
+
+    struct iovec local[1];
+    struct iovec remote[1];
+
+    local[0].iov_base = buffer;
+    local[0].iov_len = size;
+    remote[0].iov_base = (void*)address;
+    remote[0].iov_len = size;
+
+    ssize_t nread = process_vm_readv(pid, local, 1, remote, 1, 0);
+    if (nread != (ssize_t)size)
+    {
+        // If the read fails, zero out the buffer to prevent using old/garbage data.
+        memset(buffer, 0, size);
+#if debug
+        std::cerr << "[ReadMemory (Buffer)] Failed to read " << size
+                  << " bytes at address 0x" << std::hex << address
+                  << " (pid " << pid << "). nread=" << nread << std::endl;
+        perror("[ReadMemory (Buffer)] process_vm_readv");
+        //std::cout << "Trace: " << __FILE__ << ":" << __LINE__ << " in " << __func__ << std::endl;
+#endif
+    }
+}
+
+void ReadMemoryBuffer(uintptr_t address, void* buffer, size_t size)
+{
+    ReadMemoryBuffer(ProcessId, address, buffer, size);
+}
+
+size_t ReadScatter(pid_t pid, ReadReq* r, size_t n)
+{
+    //process_vm_readv stops at the first read it cannot do and reports how many bytes came before it. So: find which
+    //read that was, mark it failed, and carry on with the ones after it.
+    thread_local std::vector<struct iovec> loc, rem;
+    size_t ok = 0, i = 0;
+    while (i < n) {
+        const size_t cnt = std::min<size_t>(n - i, 1024); //IOV_MAX
+        loc.resize(cnt);
+        rem.resize(cnt);
+        for (size_t k = 0; k < cnt; k++) {
+            loc[k] = {r[i + k].dst, r[i + k].len};
+            rem[k] = {(void*)r[i + k].addr, r[i + k].len};
+            r[i + k].ok = false;
+        }
+        ssize_t got = process_vm_readv(pid, loc.data(), cnt, rem.data(), cnt, 0);
+        if (got < 0) {
+            if (errno != EFAULT) { //no such process / no permission: nothing in this batch can be read
+                for (size_t k = i; k < n; k++) std::memset(r[k].dst, 0, r[k].len);
+                return ok;
+            }
+            got = 0;
+        }
+        size_t k = 0, acc = 0;
+        while (k < cnt && acc + r[i + k].len <= (size_t)got) {
+            r[i + k].ok = true;
+            acc += r[i + k].len;
+            ok++;
+            k++;
+        }
+        if (k == cnt) { i += cnt; continue; } //every read in this batch worked
+        std::memset(r[i + k].dst, 0, r[i + k].len); //the one that failed (may be half read)
+        i += k + 1;
+    }
+    return ok;
+}
+
+size_t ReadScatter(ReadReq* reqs, size_t n)
+{
+    return ReadScatter(ProcessId, reqs, n);
+}
+
+// Read a string from memory with maximum length
+std::string ReadString(pid_t pid, long address, size_t maxLength)
+{
+    if (maxLength == 0) return "";
+    std::vector<char> buffer(maxLength, 0);
+
+    struct iovec local[1];
+    struct iovec remote[1];
+
+    local[0].iov_base = buffer.data();
+    local[0].iov_len = maxLength;
+    remote[0].iov_base = (void*)address;
+    remote[0].iov_len = maxLength;
+
+    ssize_t nread = process_vm_readv(pid, local, 1, remote, 1, 0);
+    if (nread <= 0)
+    {
+        return "";
+    }
+
+    // Ensure null-termination
+    buffer[maxLength - 1] = '\0';
+    return std::string(buffer.data());
+}
+
+
+// Explicit template instantiations for common types
+template int ReadMemory<int>(pid_t pid, long address);
+template long ReadMemory<long>(pid_t pid, long address);
+template float ReadMemory<float>(pid_t pid, long address);
+template double ReadMemory<double>(pid_t pid, long address);
+template uintptr_t ReadMemory<uintptr_t>(pid_t pid, long address);
+
+
+// Explicit template instantiations for GameData.h template
+template int ReadMemory<int>(uintptr_t address);
+template long ReadMemory<long>(uintptr_t address);
+template float ReadMemory<float>(uintptr_t address);
+template double ReadMemory<double>(uintptr_t address);
+template uintptr_t ReadMemory<uintptr_t>(uintptr_t address);
+template Vector3 ReadMemory<Vector3>(uintptr_t address);
+template Matrix4x4 ReadMemory<Matrix4x4>(uintptr_t address);
+template FminimalViewInfo ReadMemory<FminimalViewInfo>(uintptr_t address);
+template uint8_t ReadMemory<uint8_t>(uintptr_t address);
+
+//For reading player list or bone list and stuff
+// template TArray<uintptr_t> ReadMemory<TArray<uintptr_t>>(uintptr_t address);
+// template TArray<FTransform> ReadMemory<TArray<FTransform>>(uintptr_t address);
+// //For Camera Stuff
+// template FCameraCacheEntry ReadMemory<FCameraCacheEntry>(uintptr_t address);
+// //For player location
+// template FVector ReadMemory<FVector>(uintptr_t address);
+// template FRotator ReadMemory<FRotator>(uintptr_t address);
+// template FQuat ReadMemory<FQuat>(uintptr_t address);
+// //For TRansform (bones, ship holes, etc.)
+// template FTransform ReadMemory<FTransform>(uintptr_t address);
+// template GUID ReadMemory<GUID>(uintptr_t address);
+// template RepMovement ReadMemory<RepMovement>(uintptr_t address);
+
+template char ReadMemory<char>(uintptr_t address);
+template bool ReadMemory<bool>(uintptr_t address);
+
+#include <filesystem>
+#include <fstream>
+namespace fs = std::filesystem;
+
+pid_t FindGamePID() {
+    std::error_code ec; //error_code overloads: a process that exits while we scan must not throw
+    for (fs::directory_iterator it("/proc", ec), end; !ec && it != end; it.increment(ec)) {
+        const std::string pid_str = it->path().filename().string();
+
+        // Check if directory name is a number (PID)
+        if (pid_str.empty() || !isdigit((unsigned char)pid_str[0])) continue;
+
+        // Check process name first (cheap), then count threads in /proc/PID/task
+        std::ifstream comm_file("/proc/" + pid_str + "/comm");
+        std::string comm_name;
+        if (!(comm_file >> comm_name) || comm_name.find("GameThread") == std::string::npos) continue;
+
+        int thread_count = 0;
+        std::error_code tec;
+        for (fs::directory_iterator t("/proc/" + pid_str + "/task", tec), tend; !tec && t != tend; t.increment(tec))
+            thread_count++;
+
+        // Unreal Engine games run well over 100 threads
+        if (thread_count > 100) {
+            pid_t pid = (pid_t)std::strtol(pid_str.c_str(), nullptr, 10);
+            std::cout << "[+] Found game process: PID " << pid
+                      << " (" << comm_name << ") with "
+                      << thread_count << " threads" << std::endl;
+            return pid;
+        }
+    }
+
+    return 0; //not running (yet); the caller decides whether to say so and retry
+}

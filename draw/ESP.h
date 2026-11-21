@@ -1,0 +1,413 @@
+#ifndef VANITYARC_ESP_H
+#define VANITYARC_ESP_H
+#include <algorithm>
+#include <cmath>
+#include <cstdio>
+#include <string>
+#include <vector>
+
+#include "Declutter.h"
+#include "Overlay.h"
+#include "W2S.h"
+#include "../utils/gameview.h"
+#include "../utils/localUtil.h"
+#include "../utils/marks.h"
+
+inline double getProportionalRadius(double dist, double maxDist) {
+    return (1-(dist/maxDist)) * 6 + 4;
+}
+
+//The projection settings from config.h / the Calibration part of the menu
+inline Projection MakeProjection() {
+    Projection p;
+    if (g_gameView.renderW > 0 && g_gameView.renderH > 0) { //gamescope / stretched resolution: see gameview.h
+        p.width = g_gameView.renderW;
+        p.height = g_gameView.renderH;
+        p.dx = g_gameView.dx; p.dy = g_gameView.dy; p.dw = g_gameView.dw; p.dh = g_gameView.dh;
+    } else {
+        p.width = config::SCREEN_W;
+        p.height = config::SCREEN_H;
+    }
+    p.fovHorizontal = config::fovIsHorizontal;
+    p.scale = config::fovScale;
+    p.offX = config::centerOffsetX;
+    p.offY = config::centerOffsetY;
+    p.useRoll = config::useCameraRoll;
+    return p;
+}
+
+namespace COLOR {
+    inline ImU32 red = IM_COL32(207, 56, 56, 255);
+    inline ImU32 darkred = IM_COL32(147, 36, 36, 255);
+    inline ImU32 blue = IM_COL32(58, 45, 237, 255);
+    inline ImU32 orange = IM_COL32(240, 168, 43, 255);
+    inline ImU32 darkorange = IM_COL32(120, 85, 21, 255);
+    inline ImU32 green = IM_COL32(34, 189, 39, 255);
+    inline ImU32 greenHealth = IM_COL32(34, 189, 39, 255); //because the green for items and for health CAN be different
+    inline ImU32 cyan = IM_COL32(39, 219, 217, 255);
+    inline ImU32 white = IM_COL32(255, 255, 255, 255);
+    inline ImU32 grey = IM_COL32(170, 170, 170, 255);
+
+    inline ImU32 shield = IM_COL32(80, 170, 255, 255);
+
+    inline bool mono() { return config::monochrome; } //white and grey only
+
+    //The enemy colour chosen in the menu
+    inline ImU32 enemy() {
+        if (mono()) return white;
+        switch ((int)config::boxColor) {
+            case 1: return IM_COL32(255, 255, 255, 255);
+            case 2: return IM_COL32(245, 215, 60, 255);
+            case 3: return IM_COL32(70, 120, 255, 255);
+            case 4: return IM_COL32(40, 200, 70, 255);
+            case 5: return IM_COL32(170, 90, 255, 255);
+            default: return red;
+        }
+    }
+    inline ImU32 mate() { return mono() ? grey : green; }
+    inline ImU32 arc(bool dead) { return mono() ? (dead ? IM_COL32(110, 110, 110, 150) : white) : (dead ? darkorange : orange); }
+    inline ImU32 container() { return mono() ? IM_COL32(150, 150, 150, 170) : green; }
+    inline ImU32 pickup() { return mono() ? IM_COL32(215, 215, 215, 200) : cyan; }
+    inline ImU32 deadPlayer() { return mono() ? IM_COL32(110, 110, 110, 150) : darkred; }
+    inline ImU32 shieldBar() { return mono() ? IM_COL32(170, 170, 170, 255) : shield; }
+
+    inline ImU32 withAlpha(ImU32 color, int alpha) {
+        return (color & 0x00FFFFFF) | ((ImU32)(alpha & 0xFF) << 24);
+    }
+
+    //Red at 0 to green at 1 (white in monochrome)
+    inline ImU32 health(float f) {
+        f = std::min(1.0f, std::max(0.0f, f));
+        if (mono()) return white;
+        const int r = (int)(207 + (34 - 207) * f), g = (int)(56 + (189 - 56) * f), b = (int)(56 + (39 - 56) * f);
+        return IM_COL32(r, g, b, 255);
+    }
+}
+
+inline void ESPInit() {
+    if (config::makeLootESPTranslucent) {
+        COLOR::green = COLOR::withAlpha(COLOR::green, 128);
+        COLOR::cyan = COLOR::withAlpha(COLOR::cyan, 128);
+    }
+    if (config::makeDeadBotESPTranslucent) COLOR::darkorange = COLOR::withAlpha(COLOR::darkorange, 128);
+    if (config::makeDeadPlayerESPTranslucent) COLOR::darkred = COLOR::withAlpha(COLOR::darkred, 128);
+}
+
+//Your squad (same team id) or players you marked by hand
+inline bool IsTeammate(const RenderEntity& e, int localTeam) {
+    return (localTeam >= 0 && e.teamID == localTeam) || marks::isMarked(e.account);
+}
+
+//--- a short message at the top of the screen ("Teammate marked: ...")
+inline std::string g_toast;
+inline double g_toastUntil = 0;
+inline void Toast(const std::string& text, double seconds = 3.0) {
+    g_toast = text;
+    g_toastUntil = ImGui::GetTime() + seconds;
+}
+
+//Status card at the top, in the middle. Returns where the next thing can go.
+inline float DrawStatusCard(const std::string& line1, const std::string& line2) {
+    const float x = (float)config::SCREEN_W * 0.5f, ls = config::labelSize;
+    float y = 20;
+    DrawLabelCentered(x, y, line1.c_str(), ls * 0.9f, COLOR::white, true);
+    y += ls + 10;
+    if (!line2.empty()) { DrawLabelCentered(x, y, line2.c_str(), ls * 0.8f, COLOR::grey, true); y += ls * 0.8f + 10; }
+    return y;
+}
+
+inline void DrawToast(float y) {
+    if (g_toast.empty() || ImGui::GetTime() >= g_toastUntil) return;
+    DrawLabelCentered((float)config::SCREEN_W * 0.5f, y, g_toast.c_str(), config::labelSize, COLOR::white, true);
+}
+
+//--- labels: collected while drawing, then the ones that would overlap are moved or dropped (see Declutter.h)
+struct PendingLabel {
+    LabelReq box;
+    std::string text;
+    float x = 0, y = 0, size = 15;
+    std::vector<ImVec2> centers; //where each alternative is centred (same order as box.alts)
+    ImU32 color = IM_COL32(255, 255, 255, 255);
+};
+
+inline std::vector<PendingLabel>& PendingLabels() {
+    static std::vector<PendingLabel> v;
+    return v;
+}
+
+inline LabelRect LabelAt(float x, float y, const ImVec2& ts) {
+    return {x - ts.x / 2 - 2, y - ts.y / 2 - 1, x + ts.x / 2 + 2, y + ts.y / 2 + 1};
+}
+
+inline void QueueLabel(float x, float y, const std::string& text, float size, int prio, double dist, bool force = false) {
+    if (text.empty()) return;
+    const ImVec2 ts = LabelSize(text.c_str(), size);
+    PendingLabel p;
+    p.x = x; p.y = y; p.size = size; p.text = text;
+    const LabelRect r = LabelAt(x, y, ts);
+    p.box.x0 = r.x0; p.box.x1 = r.x1; p.box.y0 = r.y0; p.box.y1 = r.y1;
+    p.box.prio = prio; p.box.dist = dist; p.box.force = force;
+    PendingLabels().push_back(std::move(p));
+}
+
+//A label for a round marker at (cx, cy): below it if that is free, else above, to the right, to the left, or lower
+inline void QueueMarkerLabel(float cx, float cy, float radius, const std::string& text, float size, int prio, double dist) {
+    if (text.empty()) return;
+    const ImVec2 ts = LabelSize(text.c_str(), size);
+    const float below = cy + radius + 9;
+    QueueLabel(cx, below, text, size, prio, dist);
+    PendingLabel& p = PendingLabels().back();
+    const ImVec2 alts[4] = {ImVec2(cx, cy - radius - 9), ImVec2(cx + radius + 8 + ts.x / 2, cy),
+                            ImVec2(cx - radius - 8 - ts.x / 2, cy), ImVec2(cx, below + ts.y + 2)};
+    for (const ImVec2& c : alts) { p.centers.push_back(c); p.box.alts.push_back(LabelAt(c.x, c.y, ts)); }
+}
+
+//Keeps labels away from this area (an arrow, a panel) without drawing anything
+inline void QueueReserve(const LabelRect& r) {
+    PendingLabel p;
+    p.box.x0 = r.x0; p.box.y0 = r.y0; p.box.x1 = r.x1; p.box.y1 = r.y1;
+    p.box.prio = -1; p.box.force = true;
+    PendingLabels().push_back(std::move(p));
+}
+
+inline void FlushLabels() {
+    auto& v = PendingLabels();
+    std::vector<LabelReq> reqs;
+    reqs.reserve(v.size());
+    for (const PendingLabel& p : v) reqs.push_back(p.box);
+    for (const LabelPick& pick : ChoosePlaces(reqs)) {
+        const PendingLabel& p = v[pick.index];
+        if (p.text.empty()) continue; //a reserved area
+        const ImVec2 c = pick.alt < 0 ? ImVec2(p.x, p.y) : p.centers[(size_t)pick.alt];
+        DrawLabelCentered(c.x, c.y, p.text.c_str(), p.size, p.color, config::labelCards);
+    }
+    v.clear();
+}
+
+//The two bars on the right of a player box: health (red to green) and, next to it, the shield. The shield bar is gone
+//when the shield is used up (or when the shield cannot be read).
+inline void DrawPlayerBars(float x0, float y0, float w, float h, const RenderEntity& ent) {
+    const float bw = std::min(5.0f, std::max(2.0f, h * 0.05f));
+    auto bar = [&](float bx, float frac, ImU32 col) {
+        DrawRectFilled(bx - 1, y0 - 1, bx + bw + 1, y0 + h + 1, IM_COL32(0, 0, 0, 200));
+        DrawRectFilled(bx, y0 + h - h * frac, bx + bw, y0 + h, col);
+    };
+    float bx = x0 + w + 4.0f;
+    const float hp = (float)std::min(1.0, std::max(0.0, ent.playerHealth / 100.0)); //never taller than the box
+    bar(bx, hp, COLOR::health(hp));
+    if (ent.hasShield && ent.shield >= 1.0 && ent.shieldMax > 0) {
+        const float sh = (float)std::min(1.0, std::max(0.0, ent.shield / ent.shieldMax));
+        bar(bx + bw + 3.0f, sh, COLOR::shieldBar());
+    }
+}
+
+//Arrows at the screen edge for enemy players who are not on screen (to the side, or behind you). The arrows keep
+//other labels away from them; their distance labels only appear where there is room.
+inline void DrawEdgeArrows(const View& v, std::vector<std::pair<const RenderEntity*, double>>& edge) {
+    if (edge.empty()) return;
+    std::sort(edge.begin(), edge.end(), [](const auto& a, const auto& b) { return a.second < b.second; });
+    if (edge.size() > 8) edge.resize(8);
+    const float hx = std::max(20.0f, (float)v.rw / 2 - 46), hy = std::max(20.0f, (float)v.rh / 2 - 46); //edges of the game's picture
+    char buf[32];
+    for (const auto& e : edge) {
+        double x, y, z;
+        v.toCamera(e.first->pos, x, y, z);
+        double ux, uy;
+        if (z >= 1.0) { ux = x / z * v.focal * v.sx; uy = -(y / z) * v.focal * v.sy; } //where it would be on screen, relative to the middle
+        else { ux = x; uy = -z; }                                          //behind: left/right as it is, down on screen
+        double len = std::hypot(ux, uy);
+        if (len < 1e-6) { ux = 0; uy = 1; len = 1; }
+        ux /= len; uy /= len;
+        const float t = std::min(hx / (float)std::max(std::abs(ux), 1e-6), hy / (float)std::max(std::abs(uy), 1e-6));
+        const float px = (float)v.cx + (float)ux * t, py = (float)v.cy + (float)uy * t;
+        DrawArrow(px, py, (float)ux, (float)uy, 15.0f, COLOR::enemy());
+        QueueReserve({px - 14, py - 14, px + 14, py + 14});
+        std::snprintf(buf, sizeof buf, "%.0fm", e.second);
+        QueueLabel(px - (float)ux * 30, py - (float)uy * 30, buf, config::labelSize * 0.9f, 0, e.second);
+    }
+}
+
+inline void DrawESP(const std::vector<RenderEntity>& entities, FminimalViewInfo vm, int localPlayerTeam) {
+    const View v(vm, MakeProjection());
+    if (!v.ok) return;
+    const float W = (float)config::SCREEN_W, H = (float)config::SCREEN_H;
+    const float ls = config::labelSize, ls2 = config::labelSize * 0.9f;
+    auto onScreen = [&](double x, double y) { return x > -60 && x < W + 60 && y > -60 && y < H + 60; };
+    std::vector<std::pair<const RenderEntity*, double>> edge;
+    char buf[64];
+
+    for (const auto& ent : entities) {
+        if (ent.type == Object::NONE && !isDebugMode) continue;
+        //From the camera as it is now, not as it was when the entity was read
+        const double dist = ent.pos.Dist(vm.Location) / 100.0;
+        Vector2 sp;
+        const bool front = v.project(ent.pos, sp);
+
+        if (isDebugMode) {
+            if (front && dist < 150) {
+                snprintf(buf, sizeof buf, "0x%lx [%.0fm]", (unsigned long)ent.vt, dist);
+                DrawTextImGui(sp.x, sp.y, COLOR::white, buf);
+            }
+            continue;
+        }
+
+        //To consider. 1) Dist, 2) dead?, 3) visible, 4) team
+        if (ent.type == Object::PLAYER) {
+            const bool mate = IsTeammate(ent, localPlayerTeam); //your squad, or marked by hand
+            if (!config::showPlayers) continue;
+            if (dist > config::maxPlayerDist) continue;
+            if (mate && !config::showTeammates) continue;
+            if (!mate && config::hideUnknownTeams && localPlayerTeam < 0) continue; //no team to compare with
+            if (ent.isDead) {
+                if (!config::showDeadPlayers || !front || !onScreen(sp.x, sp.y)) continue;
+                const double rad = getProportionalRadius(dist, config::maxPlayerDist);
+                DrawCircleOutlined((float)sp.x, (float)sp.y, (float)rad, COLOR::deadPlayer());
+                snprintf(buf, sizeof buf, "%.0fm", dist);
+                QueueMarkerLabel((float)sp.x, (float)sp.y, (float)rad, buf, ls2, 2, dist);
+                if (config::showPlayerNames) QueueLabel((float)sp.x, (float)(sp.y - rad - 10), ent.label, ls, 1, dist);
+                continue;
+            }
+
+            //should be rendered from this point on
+            const ImU32 color = mate ? COLOR::mate() : COLOR::enemy();
+            Vector3 headPos = ent.pos; headPos.z += 90;
+            Vector3 feetPos = ent.pos; feetPos.z -= 90;
+            Vector2 sHead, sFeet;
+            if (!v.project(headPos, sHead) || !v.project(feetPos, sFeet) || !onScreen(sHead.x, (sHead.y + sFeet.y) / 2)) {
+                if (!mate && config::showOffscreen) edge.push_back({&ent, dist});
+                continue;
+            }
+
+            const float h = (float)(sFeet.y - sHead.y);
+            if (h < 2.0f) continue;
+            const float w = h / 2.0f * (float)(v.sx / v.sy), x0 = (float)sHead.x - w / 2, y0 = (float)sHead.y; //a stretched picture makes people wider
+            const float th = std::min(4.0f, std::max(1.0f, config::boxThickness));
+            const int style = (int)config::boxStyle;
+            if (style == 1) DrawBoxOutlined(x0, y0, w, h, color, th);
+            else if (style == 2) DrawSidesBox(x0, y0, w, h, color, th);
+            else DrawCornerBox(x0, y0, w, h, color, th);
+
+            DrawPlayerBars(x0, y0, w, h, ent); //health, and the shield next to it
+
+            //name above, distance and guns below. Players are always drawn, even over other labels.
+            if (config::showPlayerNames) QueueLabel((float)sHead.x, y0 - 10, ent.label, ls, 0, dist, true);
+            snprintf(buf, sizeof buf, "%.0fm", dist);
+            float below = y0 + h + 10;
+            QueueLabel((float)sHead.x, below, buf, ls2, 0, dist, true);
+            below += ls2 + 2;
+            if (config::showPlayerGuns) QueueLabel((float)sHead.x, below, ent.sub, ls2, 0, dist, true);
+        } else {
+            if (!front || !onScreen(sp.x, sp.y)) continue;
+            ImU32 color;
+            double radius;
+            int prio;
+            bool nameOn;
+            bool diamond = false;
+            if (ent.type == Object::ARC) {
+                if (!config::showArc || (ent.isDead && !config::showDeadArc)) continue;
+                if (ent.isTurret && !config::showTurrets) continue;
+                if (dist > config::maxArcDist) continue;
+                color = COLOR::arc(ent.isDead);
+                radius = getProportionalRadius(dist, config::maxArcDist);
+                prio = 1;
+                nameOn = config::showArcNames;
+                diamond = COLOR::mono(); //in white and grey a diamond tells ARC from loot
+            } else if (ent.type == Object::SEARCH) {
+                if (!config::showContainers || dist > config::maxLootDist) continue;
+                color = COLOR::container();
+                radius = getProportionalRadius(dist, config::maxLootDist);
+                prio = 3;
+                nameOn = config::showContainerNames && dist <= config::nameMaxLootDist;
+            } else if (ent.type == Object::PICKUP) {
+                if (!config::showPickups || dist > config::maxLootDist) continue;
+                color = COLOR::pickup();
+                radius = getProportionalRadius(dist, config::maxLootDist);
+                prio = 2;
+                nameOn = config::showItemNames && dist <= config::nameMaxLootDist;
+            } else {
+                continue;
+            }
+
+            if (diamond) DrawDiamondFilled((float)sp.x, (float)sp.y, (float)radius, color);
+            else DrawCircleOutlined((float)sp.x, (float)sp.y, (float)radius, color);
+            std::string text;
+            if (nameOn && !ent.label.empty()) text = ent.label + "  ";
+            snprintf(buf, sizeof buf, "%.0fm", dist);
+            text += buf;
+            QueueMarkerLabel((float)sp.x, (float)sp.y, (float)radius, text, ls2, prio, dist);
+        }
+    }
+    DrawEdgeArrows(v, edge);
+    FlushLabels();
+}
+
+//The radar: a panel with three rings, your own arrow, and the edges of your view
+inline void DrawRadar(const std::vector<RenderEntity>& entities, FminimalViewInfo cameraInfo, int localPlayerTeam) {
+    const float cx = config::radarCenterX, cy = config::radarCenterY, R = config::radarRadius;
+    const double rangeM = R * config::scale / 100.0; //metres from the centre to the edge
+
+    //Panel, rings, crosshairs
+    DrawRectFilled(cx - R - 14, cy - R - 26, cx + R + 14, cy + R + 14, IM_COL32(0, 0, 0, 150));
+    DrawRectOutline(cx - R - 14, cy - R - 26, cx + R + 14, cy + R + 14, IM_COL32(255, 255, 255, 70), 1.0f);
+    DrawCircleFilled(cx, cy, R, IM_COL32(0, 0, 0, 110));
+    for (int i = 1; i <= 3; i++) DrawCircleRing(cx, cy, R * i / 3.0f, IM_COL32(255, 255, 255, i == 3 ? 90 : 35), 1.0f);
+    DrawLine(cx - R, cy, cx + R, cy, IM_COL32(255, 255, 255, 40), 1);
+    DrawLine(cx, cy - R, cx, cy + R, IM_COL32(255, 255, 255, 40), 1);
+    char title[48];
+    std::snprintf(title, sizeof title, "RADAR  %.0f m", rangeM);
+    DrawLabelCentered(cx, cy - R - 13, title, 12.0f, IM_COL32(190, 190, 190, 255));
+
+    //What you can see: the edges of the view, drawn as two lines
+    if (cameraInfo.FOV > 10 && cameraInfo.FOV < 130) {
+        double tanH = std::tan(cameraInfo.FOV * 3.14159265358979 / 360.0);
+        const Projection pr = MakeProjection(); //the game's own picture shape, not the screen's
+        if (!config::fovIsHorizontal) tanH *= (double)pr.width / std::max(1, pr.height);
+        const float a = (float)std::atan(tanH);
+        DrawLine(cx, cy, cx - R * std::sin(a), cy - R * std::cos(a), IM_COL32(255, 255, 255, 70), 1);
+        DrawLine(cx, cy, cx + R * std::sin(a), cy - R * std::cos(a), IM_COL32(255, 255, 255, 70), 1);
+    }
+
+    // Convert yaw from degrees to radians
+    float yawRad = (cameraInfo.Rotation.y + 90.0f) * 3.14159265358979323846f / 180.0f;
+    float cosA = cos(yawRad);
+    float sinA = sin(yawRad);
+
+    for (const auto& ent : entities) {
+        if (ent.type != Object::PLAYER && ent.type != Object::ARC) continue;
+        if (ent.type == Object::PLAYER && !config::showPlayers) continue;
+        if (ent.type == Object::ARC && !config::showArc) continue;
+        if (ent.pos.Dist(cameraInfo.Location) / 100.0 > rangeM) continue; //beyond the radar range
+        if (ent.isDead) continue;
+
+        float deltaX = ent.pos.x - cameraInfo.Location.x;
+        float deltaY = ent.pos.y - cameraInfo.Location.y;
+
+        // Rotate by camera yaw
+        float rotatedX = deltaX * cosA + deltaY * sinA;
+        float rotatedY = -deltaX * sinA + deltaY * cosA;
+
+        float screenX = cx + rotatedX / config::scale;
+        float screenY = cy + rotatedY / config::scale;
+
+        // Clamp to radar circle
+        float dx = screenX - cx;
+        float dy = screenY - cy;
+        float dist = sqrt(dx * dx + dy * dy);
+        if (dist > R - 3) {
+            float clampScale = (R - 3) / dist;
+            screenX = cx + dx * clampScale;
+            screenY = cy + dy * clampScale;
+        }
+
+        if (ent.type == Object::ARC) {
+            if (COLOR::mono()) DrawDiamondFilled(screenX, screenY, 4, COLOR::arc(false));
+            else DrawCircleFilled(screenX, screenY, 3, COLOR::arc(false));
+        } else {
+            DrawCircleFilled(screenX, screenY, 3, IsTeammate(ent, localPlayerTeam) ? COLOR::mate() : COLOR::enemy());
+        }
+    }
+
+    DrawArrow(cx, cy - 7, 0, -1, 10, COLOR::white); //you, looking up
+}
+
+#endif //VANITYARC_ESP_H
