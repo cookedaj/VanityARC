@@ -87,6 +87,8 @@ private:
         bool haveGood = false;
         skeleton::Pose good;                   //mesh space
         std::chrono::steady_clock::time_point goodAt{};
+        std::vector<uint8_t> bones;            //the bone list as last read whole, reused between reads (BONE_PERIOD)
+        std::chrono::steady_clock::time_point bonesAt{};
     };
     std::unordered_map<ptr, PoseState> poseSeen_;
     //What a standing / crouched, idle / moving player looks like, learned from players the game IS animating (you
@@ -99,7 +101,7 @@ private:
     Timing timing_{};
 
     bool scan();            //the whole actor list; false when there is no world yet
-    void updatePose(Tracked& t, const std::vector<uint8_t>& bones, const skeleton::Xform& mesh);
+    void updatePose(Tracked& t, const std::vector<uint8_t>& bones, const skeleton::Xform& mesh, bool freshBones);
     void updateDynamic();   //position, health, team, dead for players and ARC
     gsRet assemble(const FminimalViewInfo& vm);
     void runLiveProbeIfAsked(const std::vector<RenderEntity>& ents, const FminimalViewInfo& vm); //KWINHELPER_PROBE=shield|inventory

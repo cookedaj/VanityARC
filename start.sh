@@ -15,7 +15,8 @@ if [ -z "${KWINHELPER_SG:-}" ] && ! id -nG | tr ' ' '\n' | grep -qx input \
     exec sg input -c "env KWINHELPER_SG=1 bash '$SELF' $*"
 fi
 
-BIN=./cmake-build-release/kwin-helper
+# KWINHELPER_BIN picks another build (the probe build, see the README); the release build is the default
+BIN="${KWINHELPER_BIN:-./cmake-build-release/kwin-helper}"
 if [ ! -x "$BIN" ]; then
     echo "Not built yet. Build it first:" >&2
     echo "  cmake -B cmake-build-release -DCMAKE_BUILD_TYPE=Release && cmake --build cmake-build-release" >&2

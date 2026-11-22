@@ -34,7 +34,7 @@ inline std::vector<Entry>& table() {
         B("showPlayerNames", &config::showPlayerNames); B("showPlayerGuns", &config::showPlayerGuns);
         B("showArcNames", &config::showArcNames); B("showContainerNames", &config::showContainerNames);
         B("showItemNames", &config::showItemNames); B("labelCards", &config::labelCards);
-        B("showSkeleton", &config::showSkeleton); B("dimHidden", &config::dimHidden); D("skeletonMaxDist", &config::skeletonMaxDist, 20, 300);
+        B("showSkeleton", &config::showSkeleton); B("dimHidden", &config::dimHidden); D("hiddenAlpha", &config::hiddenAlpha, 40, 255); B("showBars", &config::showBars); D("skeletonMaxDist", &config::skeletonMaxDist, 20, 300);
         B("showOffscreen", &config::showOffscreen); B("showTeammates", &config::showTeammates);
         B("hideUnknownTeams", &config::hideUnknownTeams); B("monochrome", &config::monochrome);
         B("enableRadar", &config::enableRadar);
@@ -46,6 +46,7 @@ inline std::vector<Entry>& table() {
         D("trackerHz", &config::trackerHz, 30, 240);
         D("listMode", &config::listMode, 0, 2); D("listRows", &config::listRows, 3, 16);
         B("showDebugInfo", &config::showDebugInfo); B("hotkeysEnabled", &config::hotkeysEnabled);
+        B("streamHide", &config::streamHide);
         B("fovIsHorizontal", &config::fovIsHorizontal); B("useCameraRoll", &config::useCameraRoll);
         F("fovScale", &config::fovScale, 0.5, 2);
         F("centerOffsetX", &config::centerOffsetX, -300, 300); F("centerOffsetY", &config::centerOffsetY, -300, 300);

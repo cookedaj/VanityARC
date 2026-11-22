@@ -2,6 +2,7 @@
 #define KWINHELPER_MENU_H
 //The Insert menu: black and white, tabs on the left (ESP, Players, Radar, Names, Game view, Settings).
 //Settings and your own names are saved in ~/.config/kwin-helper/ (see settings.h and labels.h).
+#include <atomic>
 #include <algorithm>
 #include <array>
 #include <cstdio>
@@ -20,6 +21,7 @@
 #include "../utils/settings.h"
 
 inline bool g_MenuOpen = false;
+inline std::atomic<bool> g_MenuQuit{false}; //the menu's Quit button; the main loop ends the program
 inline int g_MenuTab = 0; //which page is shown
 inline int g_RenameTab = -1; //Names page: -1 = leave the choice to the user, 0..3 = show that list (tests)
 inline const char* const MENU_TABS[] = {"ESP", "Players", "Radar", "Names", "Game view", "Settings"};
@@ -155,10 +157,13 @@ inline void PageEsp() {
     Choice("Box colour", &config::boxColor, {"Red", "White", "Yellow", "Blue", "Green", "Violet"});
     Switch("Monochrome (white and grey)", &config::monochrome);
     Slider("Line thickness", &config::boxThickness, 1.0f, 4.0f, "%.1f px");
+    Switch("Health and shield bars", &config::showBars);
     Section("SKELETON");
     Switch("Skeleton on players", &config::showSkeleton);
-    Switch("Dim players behind cover", &config::dimHidden);
+    Note("A faint skeleton means the game is not drawing that player right now, so the pose is an estimate.");
     SliderD("Skeleton range", &config::skeletonMaxDist, 20, 300, "%.0f m");
+    Switch("Dim players behind cover", &config::dimHidden);
+    if (config::dimHidden) SliderD("Hidden player opacity", &config::hiddenAlpha, 40, 255, "%.0f");
     Section("DISTANCE");
     SliderD("Players range", &config::maxPlayerDist, 50, 800, "%.0f m");
     SliderD("ARC range", &config::maxArcDist, 20, 500, "%.0f m");
@@ -249,6 +254,8 @@ inline void PageSettings() {
     Section("OTHER");
     Switch("Status card", &config::showDebugInfo);
     Switch("Hotkeys (F6, F7, F10)", &config::hotkeysEnabled);
+    Switch("Stream hide (F8)", &config::streamHide);
+    Note("Stream hide draws nothing, so recordings and streams show no overlay. F8 always works, even with Hotkeys off. While it is on the menu cannot be opened: press F8 first.");
     Section("FILES");
     Note("Settings, names, offsets and marks are in ~/.config/kwin-helper/");
     static bool armed = false;
@@ -257,6 +264,8 @@ inline void PageSettings() {
         else armed = true;
     }
     if (armed) { ImGui::SameLine(); if (ImGui::Button("Cancel")) armed = false; }
+    Section("QUIT");
+    if (ImGui::Button("Quit overlay")) g_MenuQuit = true;
 }
 
 //Pass to RenderEnd(). Draws nothing while the menu is closed.
@@ -295,7 +304,7 @@ inline void DrawMenu() {
     ImGui::EndChild();
 
     ImGui::Separator();
-    ImGui::TextColored(ImColor(ui::GREY), "F6 mark teammate    F7 clear marks    F10 quit overlay");
+    ImGui::TextColored(ImColor(ui::GREY), "F6 mark teammate    F7 clear marks    F8 stream hide    F10 quit overlay");
     ImGui::End();
     ui::PopTheme();
 }

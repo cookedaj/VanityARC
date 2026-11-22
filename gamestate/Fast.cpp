@@ -15,7 +15,9 @@
 #include "utils/offsets.h"
 
 void printStatusLine(const std::vector<RenderEntity>& ents, const FminimalViewInfo& vm); //GameState.cpp
+#ifdef KWINHELPER_PROBES
 void runLiveProbe(const std::string& mode, ptr localPawn, const std::vector<RenderEntity>& ents, const FminimalViewInfo& vm, FILE* out = stdout); //Probe.cpp
+#endif
 
 namespace {
 using clk = std::chrono::steady_clock;
@@ -46,6 +48,7 @@ double shieldNumber(uint64_t raw) {
 double ms(clk::time_point a, clk::time_point b) { return std::chrono::duration<double, std::milli>(b - a).count(); }
 
 constexpr auto POSE_FROZEN_AFTER = std::chrono::milliseconds(300); //a drawn, animated player's bones change every game tick
+constexpr auto BONE_PERIOD = std::chrono::milliseconds(16);        //a bone list is read at most about 60 times a second; between reads the last one is reused
 
 uint64_t fnv1a(const uint8_t* p, size_t n) {
     uint64_t h = 1469598103934665603ULL;
@@ -146,7 +149,7 @@ bool GameState::scan() {
 //every frame), the game stops animating players it is not drawing, and nobody far away is animated at all, so:
 //  - a list that cannot be read is replaced by the last good one for a moment (no flicker),
 //  - a frozen player gets the pose of someone the game IS animating in the same stance and speed (drawn faint).
-void GameState::updatePose(Tracked& t, const std::vector<uint8_t>& bones, const skeleton::Xform& mesh) {
+void GameState::updatePose(Tracked& t, const std::vector<uint8_t>& bones, const skeleton::Xform& mesh, bool freshBones) {
     using namespace std::chrono;
     const auto now = clk::now();
     PoseState& ps = poseSeen_[t.ent.actor];
@@ -172,8 +175,12 @@ void GameState::updatePose(Tracked& t, const std::vector<uint8_t>& bones, const 
     bool readOk = false;
     skeleton::Pose comp;
     if (haveBones) {
-        const uint64_t h = fnv1a(bones.data(), bones.size());
-        if (h != ps.hash) { ps.hash = h; ps.changed = now; }
+        if (freshBones) { //a list read just now: compare it with the last one, and keep it for the next steps
+            const uint64_t h = fnv1a(bones.data(), bones.size());
+            if (h != ps.hash) { ps.hash = h; ps.changed = now; }
+            ps.bones.assign(bones.begin(), bones.end());
+            ps.bonesAt = now;
+        }
         skeleton::Xform local[skeleton::BONES];
         skeleton::decode(bones.data(), local);
         readOk = skeleton::componentPose(local, comp);
@@ -185,7 +192,8 @@ void GameState::updatePose(Tracked& t, const std::vector<uint8_t>& bones, const 
         const double pelvisZ = comp.j[skeleton::PELVIS].z;
         const bool idle = ps.speed < 40.0;
         const bool plausible = crouched ? (pelvisZ > 25.0 && pelvisZ < 60.0) : pelvisZ > 70.0;
-        if (animated && !t.ent.isDead && plausible && (idle || moving)) { tmpl_[cls] = comp; haveTmpl_[cls] = true; }
+        //Not from a roll or a sprint: those poses are not a stance to copy (450 cm/s is above a walk, below a sprint)
+        if (animated && !t.ent.isDead && plausible && (idle || moving) && ps.speed < 450.0) { tmpl_[cls] = comp; haveTmpl_[cls] = true; }
     } else if (ps.haveGood && now - ps.goodAt < milliseconds(400)) {
         comp = ps.good; readOk = true;   //a half-written list: the last whole one, moved with the player
     }
@@ -207,6 +215,7 @@ void GameState::updateDynamic() {
     struct Row {
         ptr vt = 0, root = 0, hc = 0, sc = 0; int team = 0; uint8_t destroyed = 0; Vector3 pos; double hp = 0; uint64_t shRaw = 0, shMaxRaw = 0;
         bool wantPose = false; ptr ctrl = 0, mesh = 0, boneData = 0; uint64_t rtRaw = 0; int boneNum = 0; MeshXf mx{}; std::vector<uint8_t> bones;
+        const std::vector<uint8_t>* view = nullptr; bool freshBones = false; //the bone list to use: this step's read, or the cached one
     };
     const bool shieldOn = live::shieldValue >= 0;
     const bool skeletonOn = g_skeletonOn.load(std::memory_order_relaxed);
@@ -254,12 +263,23 @@ void GameState::updateDynamic() {
     }
     ReadScatter(rq.data(), rq.size());
 
-    //Third round: the bone list itself, only for players whose mesh and a list of exactly 97 bones were readable
+    //Third round: the bone list itself, only for players whose mesh and a list of exactly 97 bones were readable. A list
+    //read less than BONE_PERIOD ago is reused instead: reading it on every step would cost the game and the CPU for no gain.
     rq.clear();
-    for (Row& r : rows) {
+    const auto boneNow = clk::now();
+    const size_t boneBytes = (size_t)skeleton::BONES * skeleton::RECORD;
+    for (size_t i = 0; i < n; i++) {
+        Row& r = rows[i];
         if (!r.wantPose || r.boneNum != skeleton::BONES || !isValidPtr(r.boneData)) continue;
-        r.bones.resize((size_t)skeleton::BONES * skeleton::RECORD);
-        rq.push_back({r.boneData, r.bones.data(), r.bones.size(), false});
+        auto cached = poseSeen_.find(dyn_[i].ent.actor);
+        if (cached != poseSeen_.end() && cached->second.bones.size() == boneBytes && boneNow - cached->second.bonesAt < BONE_PERIOD) {
+            r.view = &cached->second.bones;
+            continue;
+        }
+        r.bones.resize(boneBytes);
+        r.view = &r.bones;
+        r.freshBones = true;
+        rq.push_back({r.boneData, r.bones.data(), boneBytes, false});
     }
     if (!rq.empty()) ReadScatter(rq.data(), rq.size());
 
@@ -268,6 +288,8 @@ void GameState::updateDynamic() {
     auto renderTime = [](const Row& r) { float f[2]; std::memcpy(f, &r.rtRaw, 8); return std::isfinite(f[1]) ? f[1] : -1.0f; }; //LastRenderTimeOnScreen
     float newest = -1;
     for (const Row& r : rows) newest = std::max(newest, renderTime(r));
+    //Each newer render time re-anchors the estimate (the game's clock advances every frame, so this happens constantly).
+    //During a real stall nothing is drawn, so a stale estimate there has no visible effect.
     const auto clockNow = clk::now();
     if (newest > clockVal_) { clockVal_ = newest; clockAt_ = clockNow; }
     const double gameClock = clockVal_ >= 0 ? clockVal_ + std::chrono::duration<double>(clockNow - clockAt_).count() : -1;
@@ -293,7 +315,8 @@ void GameState::updateDynamic() {
                 mesh.q = {r.mx.q[0], r.mx.q[1], r.mx.q[2], r.mx.q[3]};
                 mesh.t = Vector3(r.mx.t[0], r.mx.t[1], r.mx.t[2]);
                 mesh.s = Vector3(r.mx.s[0], r.mx.s[1], r.mx.s[2]);
-                updatePose(t, r.bones, mesh);
+                static const std::vector<uint8_t> none;
+                updatePose(t, r.view ? *r.view : none, mesh, r.freshBones);
             }
             const ptr comp = live::shieldComponent >= 0 ? r.sc : r.hc;
             t.ent.hasShield = shieldOn && isValidPtr(comp);
@@ -353,6 +376,7 @@ gsRet GameState::assemble(const FminimalViewInfo& vm) {
 
 //KWINHELPER_PROBE=shield or inventory (set before starting): prints discovery reports every 2 s, reading memory only
 void GameState::runLiveProbeIfAsked(const std::vector<RenderEntity>& ents, const FminimalViewInfo& vm) {
+#ifdef KWINHELPER_PROBES
     static const std::string mode = [] { const char* e = std::getenv("KWINHELPER_PROBE"); return std::string(e ? e : ""); }();
     if (mode.empty()) return;
     static auto last = clk::now() - std::chrono::seconds(10);
@@ -360,6 +384,9 @@ void GameState::runLiveProbeIfAsked(const std::vector<RenderEntity>& ents, const
     if (now - last < std::chrono::seconds(2)) return;
     last = now;
     runLiveProbe(mode, meActor_, ents, vm);
+#else
+    (void)ents; (void)vm; //the release build has no probes
+#endif
 }
 
 gsRet GameState::step() {

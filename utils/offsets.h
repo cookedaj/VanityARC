@@ -1,6 +1,6 @@
 #pragma once
 //Offsets that are not in the public dumps and can be set WITHOUT rebuilding: ~/.config/kwin-helper/offsets.txt, one
-//"name value" per line (decimal or 0x hex). They are found with the probes (KWINHELPER_PROBE=shield / inventory, see
+//"name value" per line (decimal or 0x hex). They are found with a probe build (cmake -DKWINHELPER_PROBES=ON, see
 //the README) and survive game restarts. -1 means "not known": that feature simply stays off.
 #ifndef KWINHELPER_OFFSETS_H
 #define KWINHELPER_OFFSETS_H

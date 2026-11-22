@@ -122,29 +122,39 @@ Insert opens the menu: black and white, tabs on the left.
 
 | Tab | What it has |
 | --- | --- |
-| ESP | master switch, what to show, names, box style / colour / thickness, monochrome, ranges |
+| ESP | master switch, what to show, names, box style / colour / thickness, health and shield bars, monochrome, skeleton (range, dim players behind cover and how faint), ranges |
 | Players | the player list options, teammate marks, and every player in view (click a name for the inventory, TEAM marks a teammate) |
 | Radar | on/off, size, range, position presets |
 | Names | rename ARC, containers, items and players |
 | Game view | gamescope / stretched resolution, calibration (FOV side, zoom, shift, camera roll) |
-| Settings | overlay and menu opacity, text size, update rate (30-240 Hz), status card, hotkeys, reset |
+| Settings | overlay and menu opacity, text size, update rate (30-240 Hz), status card, hotkeys, stream hide, reset, quit |
 
-- **Hotkeys** (read from /dev/input, switch off in Settings): F6 marks or unmarks the player nearest your crosshair as a teammate (only when one player is clearly meant), F7 clears all marks, F10 closes the overlay. Marks are kept by account id in `~/.config/kwin-helper/teammates.txt`.
+- **Hotkeys** (read from /dev/input, switch off in Settings): F6 marks or unmarks the player nearest your crosshair as a teammate (only when one player is clearly meant), F7 clears all marks, F10 closes the overlay, F8 turns stream hide on or off. Marks are kept by account id in `~/.config/kwin-helper/teammates.txt`.
+- **Stream hide (F8)**: while on, the overlay draws nothing, so a screen recording or stream shows none of it. F8 works even with Hotkeys off, and while it is on the menu cannot be opened (press F8 first). It is saved, so the overlay starts hidden if you quit while it is on. From a terminal: `pkill -USR2 -x kwin-helper` does the same as F8.
+- **Boxes follow the pose**: a crouching player gets a shorter box. A faint skeleton or box means the game is not drawing that player right now.
 - **Player list**: at the bottom of the screen (Players tab > Player list: off / always / only with the menu). With the menu open, click a name to open that player's inventory window.
 - **Safe values**: every setting has a range; a damaged `settings.txt` cannot break the overlay, and "Reset all settings" restores the defaults.
 - **Old data is not drawn**: if the tracker stalls for more than 250 ms the markers disappear instead of showing where things were.
 
 ## Shield and inventory: probes
 
-The shield bar and the inventory window need numbers the public dumps do not have. They are found once with a probe and saved in `~/.config/kwin-helper/offsets.txt`. One raid is enough:
+The shield bar and the inventory window need numbers the public dumps do not have. They are found once with a probe and saved in `~/.config/kwin-helper/offsets.txt`. One raid is enough.
+
+The release build has no probe code in it. Build a probe version in its own folder (it is never used for normal play):
 
 ```
-KWINHELPER_PROBE=shield,inventory bash start.sh
+cmake -B cmake-build-probe -DKWINHELPER_PROBES=ON && cmake --build cmake-build-probe
+```
+
+Then start it with the probe build and the probe variable:
+
+```
+KWINHELPER_BIN=./cmake-build-probe/kwin-helper KWINHELPER_PROBE=shield,inventory bash start.sh
 ```
 
 1. Start it like that, then start a raid. Stay in third person, so the overlay can tell which player is you.
 2. **Shield:** when `=== SHIELD PROBE ===` appears, take a hit (or do anything that changes your shield). Lines appear for every number that changed. Health is marked `<- known: health`. The shield is the other number that moves with it. Under each candidate there is a ready line: `if this is the shield: shield_component ... shield_value ...`.
 3. **Inventory:** every 8 seconds `=== INVENTORY PROBE ===` lists your item lists and those of the two nearest players, each with a ready `offsets.txt:  inv_array ...` line. Stand near another player for a moment.
-4. Copy the console lines (or just the shield candidates that moved with health, and the inventory lists that name real items) and send them over, or put the ready lines into `offsets.txt` yourself, then restart without `KWINHELPER_PROBE`.
+4. Copy the console lines (or just the shield candidates that moved with health, and the inventory lists that name real items) and send them over, or put the ready lines into `offsets.txt` yourself, then go back to the release build (no probe variable).
 
 Both probes only read memory. Until the numbers are in `offsets.txt` the shield bar is not drawn and the inventory window shows the guns only.

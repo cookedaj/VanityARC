@@ -68,6 +68,10 @@ set(IMGUI_SOURCES
 )
 
 # --- 2. ADD EXECUTABLE WITH IMGUI SOURCES ---
+# Offset-finding probes (KWINHELPER_PROBE=... at run time). Off in the release build so the shipped binary carries no
+# probe code or probe strings. For a probe build: cmake -B cmake-build-probe -DKWINHELPER_PROBES=ON
+option(KWINHELPER_PROBES "Compile the offset-finding probes into the program" OFF)
+
 add_executable(kwin-helper
         main.cpp
         config.h
@@ -84,6 +88,9 @@ target_include_directories(kwin-helper PRIVATE
 )
 
 target_link_libraries(kwin-helper PRIVATE glfw OpenGL::GL PkgConfig::WAYLAND)
+if(KWINHELPER_PROBES)
+    target_compile_definitions(kwin-helper PRIVATE KWINHELPER_PROBES)
+endif()
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
     target_compile_options(kwin-helper PRIVATE -ffunction-sections -fdata-sections)
     target_link_options(kwin-helper PRIVATE -s -Wl,--gc-sections)
@@ -95,6 +102,7 @@ if(KWINHELPER_TESTS)
     function(kwinhelper_test name)
         add_executable(${name} tests/${name}.cpp ${ARGN})
         target_include_directories(${name} PRIVATE ${CMAKE_SOURCE_DIR} ${IMGUI_DIR} ${IMGUI_DIR}/backends)
+        target_compile_definitions(${name} PRIVATE KWINHELPER_PROBES) #the tests always exercise the probes
         add_test(NAME ${name} COMMAND ${name})
     endfunction()
     kwinhelper_test(key_test)

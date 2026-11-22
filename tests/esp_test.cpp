@@ -25,6 +25,7 @@ static FminimalViewInfo camera() {
 //Draws one frame and returns how many vertices the overlay produced; allVerticesFinite tells if any was NaN / infinite
 static int g_verts = 0;
 static bool g_finite = true;
+static float g_minY = 1e9f; //the highest point on screen that was drawn (smallest y)
 template <typename F> static int draw(F fn) {
     ImGui::GetIO().DeltaTime = 1.0f / 60.0f;
     ImGui::NewFrame();
@@ -32,8 +33,11 @@ template <typename F> static int draw(F fn) {
     ImDrawList* dl = ImGui::GetBackgroundDrawList();
     g_verts = dl->VtxBuffer.Size;
     g_finite = true;
-    for (const ImDrawVert& v : dl->VtxBuffer)
+    g_minY = 1e9f;
+    for (const ImDrawVert& v : dl->VtxBuffer) {
         if (!std::isfinite(v.pos.x) || !std::isfinite(v.pos.y)) g_finite = false;
+        else g_minY = std::min(g_minY, v.pos.y);
+    }
     ImGui::Render();
     return g_verts;
 }
@@ -161,6 +165,33 @@ int main() {
         pose->j[3].x = std::nan("");
         draw([&] { DrawESP(sk, cam, 3); });
         CHECK(g_finite, "a pose with a missing number never produces a broken line");
+    }
+
+    //---- the box follows the pose (a crouched player is not drawn standing-sized), and the bars are a setting
+    {
+        config::boxStyle = 1; config::showSkeleton = false; config::showBars = true; config::showOffscreen = false;
+        std::vector<RenderEntity> standing = {ent(Object::PLAYER, 3000, 200, 0)};
+        draw([&] { DrawESP(standing, cam, 3); });
+        const float topStanding = g_minY;
+        const int withBars = g_verts;
+        std::vector<RenderEntity> crouched = {ent(Object::PLAYER, 3000, 200, 0)};
+        auto low = std::make_shared<skeleton::Pose>();
+        for (int k = 0; k < skeleton::JOINT_COUNT; k++) low->j[k] = Vector3(3000, 200, -85 + k * 80.0 / 22.0); //a figure 80 cm tall
+        crouched[0].pose = low;
+        draw([&] { DrawESP(crouched, cam, 3); });
+        CHECK(g_minY > topStanding + 5.0f, "a crouched player's box is lower than a standing one (it follows the pose)");
+        std::vector<RenderEntity> odd = {ent(Object::PLAYER, 3000, 200, 0)};
+        auto flat = std::make_shared<skeleton::Pose>();
+        for (int k = 0; k < skeleton::JOINT_COUNT; k++) flat->j[k] = Vector3(3000, 200, 0); //every joint at one height: not a figure
+        odd[0].pose = flat;
+        draw([&] { DrawESP(odd, cam, 3); });
+        CHECK(std::abs(g_minY - topStanding) < 0.5f, "a pose that is not a believable figure leaves the standing box");
+        config::showBars = false;
+        draw([&] { DrawESP(standing, cam, 3); });
+        const int noBars = g_verts;
+        config::showBars = true;
+        CHECK(noBars < withBars, "Health and shield bars off: the bars are not drawn");
+        config::boxStyle = 0; config::showSkeleton = true; config::showOffscreen = true;
     }
 
     //---- overlay opacity scales everything the ESP draws

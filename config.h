@@ -35,6 +35,8 @@ namespace config {
     inline float boxThickness = 1.5f;      //px
     inline bool showTurrets = true;        //ARC turrets (separate from the other ARC)
     inline bool dimHidden = true;          //players the game is not drawing (behind walls, off screen) get a fainter box
+    inline double hiddenAlpha = 120;       //how solid that fainter box is (40 faint to 255 full)
+    inline bool showBars = true;           //health and shield bars beside a player's box
     inline bool showSkeleton = true;       //a stick figure on players (the box stays; players without a readable pose get the box only)
     inline double skeletonMaxDist = 120;   //m, further players only get the box: the pose is read for nearer ones only
     inline float overlayOpacity = 1.0f;    //everything the overlay draws (menu excluded) is multiplied by this
@@ -49,6 +51,7 @@ namespace config {
     inline bool useCameraRoll = true;      //take the camera's roll into account (always 0 in normal play)
     inline bool hideUnknownTeams = false;  //hide players whose team cannot be told (your own team is not known)
     inline bool hotkeysEnabled = true;     //F6 mark teammate, F7 clear marks, F10 quit
+    inline bool streamHide = false;        //F8: draw nothing, so screen recordings and streams show no overlay (no startup banner)
     inline float menuOpacity = 0.94f;      //the Insert menu's background
 
     //Stretched resolution / gamescope (Insert menu: Game view). Auto reads gamescope's command line.

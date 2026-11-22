@@ -184,6 +184,21 @@ inline void FlushLabels() {
     v.clear();
 }
 
+//Top and bottom of a player's box, as heights in the world. Standing, that is 90 cm each way from his position; when a
+//pose is known (crouching, rolling) the box follows the real figure instead of staying standing-sized.
+inline void PlayerBoxZ(const RenderEntity& ent, double& top, double& bottom) {
+    top = ent.pos.z + 90; bottom = ent.pos.z - 90;
+    if (!ent.pose) return;
+    double lo = 1e18, hi = -1e18;
+    for (const Vector3& j : ent.pose->j) {
+        if (!std::isfinite(j.z)) return;
+        lo = std::min(lo, j.z); hi = std::max(hi, j.z);
+    }
+    if (hi - lo < 40.0 || hi - lo > 260.0) return; //not a believable figure: keep the standing box
+    top = hi + 12.0;   //the head ring sits above the head bone
+    bottom = lo - 3.0;
+}
+
 //The two bars on the right of a player box: health (red to green) and, next to it, the shield. The shield bar is gone
 //when the shield is used up (or when the shield cannot be read).
 inline void DrawPlayerBars(float x0, float y0, float w, float h, const RenderEntity& ent) {
@@ -303,9 +318,11 @@ inline void DrawESP(const std::vector<RenderEntity>& entities, FminimalViewInfo 
 
             //should be rendered from this point on
             ImU32 color = mate ? COLOR::mate() : COLOR::enemy();
-            if (config::dimHidden && !ent.isVisible) color = COLOR::withAlpha(color, 120); //not drawn by the game right now: behind cover
-            Vector3 headPos = ent.pos; headPos.z += 90;
-            Vector3 feetPos = ent.pos; feetPos.z -= 90;
+            if (config::dimHidden && !ent.isVisible) color = COLOR::withAlpha(color, (int)config::hiddenAlpha); //not drawn by the game right now: behind cover
+            double boxTop, boxBottom;
+            PlayerBoxZ(ent, boxTop, boxBottom);
+            Vector3 headPos = ent.pos; headPos.z = boxTop;
+            Vector3 feetPos = ent.pos; feetPos.z = boxBottom;
             Vector2 sHead, sFeet;
             if (!v.project(headPos, sHead) || !v.project(feetPos, sFeet) || !onScreen(sHead.x, (sHead.y + sFeet.y) / 2)) {
                 if (!mate && config::showOffscreen) edge.push_back({&ent, dist});
@@ -323,7 +340,7 @@ inline void DrawESP(const std::vector<RenderEntity>& entities, FminimalViewInfo 
 
             if (config::showSkeleton && ent.pose && dist <= config::skeletonMaxDist) DrawSkeleton(v, *ent.pose, color, th, ent.poseLive);
 
-            DrawPlayerBars(x0, y0, w, h, ent); //health, and the shield next to it
+            if (config::showBars) DrawPlayerBars(x0, y0, w, h, ent); //health, and the shield next to it
 
             //name above, distance and guns below. Players are always drawn, even over other labels.
             if (config::showPlayerNames) QueueLabel((float)sHead.x, y0 - 10, ent.label, ls, 0, dist, true);

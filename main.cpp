@@ -66,6 +66,24 @@ int main() {
     const std::vector<RenderEntity> noEntities;
     while (g_Running && !OverlayShouldClose()) {
         MenuPollToggle();
+        //Stream-hide (F8, SIGUSR2 or the menu switch): while on, the overlay draws nothing and takes no mouse, so a screen
+        //recording or stream shows none of it. The menu is closed, because it would be invisible and would block clicks.
+        if (g_MenuQuit.exchange(false)) g_Running = false;
+        if (g_KeyStream.exchange(false)) {
+            config::streamHide = !config::streamHide;
+            settings::save();
+            std::cout << (config::streamHide ? "[+] Stream hide ON: the overlay draws nothing (F8 to show it)" : "[+] Stream hide OFF: the overlay is visible") << std::endl;
+        }
+        SetOverlayHidden(config::streamHide);
+        if (config::streamHide) {
+            g_MenuToggle = false;
+            if (g_MenuOpen) {
+                g_MenuOpen = false;
+                if (g_SetInteractive) g_SetInteractive(false);
+                settings::clampAll(); settings::save(); labels::save(); marks::save(); //what a normal menu close does
+            }
+            g_TextGrab = false;
+        }
         MenuFeedKeys(); //typing into the menu's text boxes
         RenderBegin();
 

@@ -4,6 +4,7 @@
 #include <GLFW/glfw3.h>
 
 #include <cfloat>
+#include <atomic>
 #include <chrono>
 #include <cstdlib>
 #include <cstring>
@@ -185,9 +186,13 @@ void RenderBegin() {
     );
 }
 
+static std::atomic<bool> g_overlayHidden{false};
+void SetOverlayHidden(bool on) { g_overlayHidden = on; }
+
 void RenderEnd(void (*extra)()) {
     ImGui::End();
-    if (extra) extra();
+    const bool hidden = g_overlayHidden.load();
+    if (extra && !hidden) extra(); //the menu is not drawn while hidden
     ImGui::Render();
     int w, h;
     if (g_kind == Kind::Layer) { w = g_layer->width(); h = g_layer->height(); }
@@ -195,7 +200,7 @@ void RenderEnd(void (*extra)()) {
     glViewport(0, 0, w, h);
     glClearColor(0, 0, 0, 0);
     glClear(GL_COLOR_BUFFER_BIT);
-    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+    if (!hidden) ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
     if (g_kind == Kind::Layer) g_layer->swap();
     else glfwSwapBuffers(g_glfw);
 }

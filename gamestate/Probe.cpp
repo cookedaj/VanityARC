@@ -309,6 +309,7 @@ void runNameProbe(const std::vector<RenderEntity>& ents, const std::vector<Rende
 //==============================================================================================
 // Live probes: KWINHELPER_PROBE=shield or KWINHELPER_PROBE=inventory, set before starting (see the README). Read only.
 //==============================================================================================
+#ifdef KWINHELPER_PROBES //the offset-finding probes: not in the release build (cmake -DKWINHELPER_PROBES=ON)
 namespace {
 
 //Every object the pawn points to between +0x300 and +0x1400 (its components), with where the pointer sits
@@ -772,3 +773,4 @@ void runLiveProbe(const std::string& mode, ptr localPawn, const std::vector<Rend
         for (size_t i = 0; i < near.size() && i < 2; i++) { char who[48]; std::snprintf(who, sizeof who, "player %.0f m away", near[i].first / 100.0); inventoryProbeOne(near[i].second, who, out); }
     }
 }
+#endif //KWINHELPER_PROBES

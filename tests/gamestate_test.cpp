@@ -242,6 +242,7 @@ int main() {
         CHECK(e1frozen && e1frozen->pose && !e1frozen->poseLive, "bones unchanged for a while: the skeleton is kept but marked as not live");
         const u64 bones = get<u64>(get<u64>(enemy1 + off::MESH) + off::BONE_ARRAY);
         put<double>(bones + 0x60 * 1 + 0x20 + 8, 3.0); //the pelvis moves: the animation is running again
+        std::this_thread::sleep_for(std::chrono::milliseconds(20)); //past BONE_PERIOD: the list is read again
         fast.step();
         gsRet rmoving = fast.step();
         const RenderEntity* e1moving = findPlayer(rmoving, enemy1);

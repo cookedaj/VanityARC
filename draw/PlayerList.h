@@ -63,11 +63,12 @@ inline std::vector<ptr> InspectedActors() {
 inline void DrawPlayerRows(int maxRows) {
     const auto players = PlayersByDistance();
     if (players.empty()) { ui::Note("No players in view."); return; }
-    const float xDist = 210, xHp = 275, xSh = 340, xTeam = 400, xGun = 480, rowW = 760;
+    const float xDist = 190, xHp = 245, xSh = 295, xSeen = 360, xTeam = 415, xGun = 495, rowW = 780;
     ImGui::TextColored(ImColor(ui::GREY), "NAME");
     ImGui::SameLine(xDist); ImGui::TextColored(ImColor(ui::GREY), "DIST");
     ImGui::SameLine(xHp); ImGui::TextColored(ImColor(ui::GREY), "HP");
     ImGui::SameLine(xSh); ImGui::TextColored(ImColor(ui::GREY), "SHIELD");
+    ImGui::SameLine(xSeen); ImGui::TextColored(ImColor(ui::GREY), "SEEN");
     ImGui::SameLine(xTeam); ImGui::TextColored(ImColor(ui::GREY), "TEAM");
     ImGui::SameLine(xGun); ImGui::TextColored(ImColor(ui::GREY), "GUNS");
     int shown = 0;
@@ -92,6 +93,7 @@ inline void DrawPlayerRows(int maxRows) {
         ImGui::SameLine(xHp); ImGui::TextUnformatted(b);
         if (e->hasShield && e->shield >= 1.0) std::snprintf(b, sizeof b, "%.0f", e->shield); else std::snprintf(b, sizeof b, "-");
         ImGui::SameLine(xSh); ImGui::TextUnformatted(b);
+        ImGui::SameLine(xSeen); ImGui::TextUnformatted(e->isDead ? "" : (e->isVisible ? "yes" : "-")); //the game is drawing him right now
         ImGui::PopStyleColor();
         ImGui::SameLine(xTeam);
         if (squad) ImGui::TextColored(ImColor(ui::GREY), "squad");
@@ -145,7 +147,7 @@ inline void DrawInspectWindows() {
                 char b[160];
                 std::snprintf(b, sizeof b, "%.0f m   -   %s", e->pos.Dist(g_ui.vm.Location) / 100.0, e->isDead ? "down" : "alive");
                 ImGui::TextUnformatted(b);
-                std::snprintf(b, sizeof b, "Health %.0f%s", e->playerHealth, e->hasShield && e->shield >= 1.0 ? "" : "");
+                std::snprintf(b, sizeof b, "Health %.0f", e->playerHealth);
                 std::string line = b;
                 if (e->hasShield) { std::snprintf(b, sizeof b, "   Shield %.0f / %.0f", e->shield, e->shieldMax); line += b; }
                 ImGui::TextUnformatted(line.c_str());
@@ -168,7 +170,7 @@ inline void DrawInspectWindows() {
                         if (r.count > 1) ImGui::Text("  %s  x%d", r.name.c_str(), r.count); else ImGui::Text("  %s", r.name.c_str());
                     }
                 } else if (live::invArrays.empty()) {
-                    ui::Note("The inventory lists are not known yet. Run the inventory probe once (README: KWINHELPER_PROBE=inventory) and put what it finds in offsets.txt.");
+                    ui::Note("The inventory lists are not set up yet (see offsets.txt in the config folder).");
                 } else {
                     ui::Note("Nothing readable: the game may not send this player's backpack to you.");
                 }

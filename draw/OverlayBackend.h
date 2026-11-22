@@ -10,6 +10,7 @@
 bool InitOverlay();
 void RenderBegin();                          //events, new ImGui frame, the full-screen host window for the ESP
 void RenderEnd(void (*extra)() = nullptr);   //extra: more UI on top (the Insert menu); then draws and shows the frame
+void SetOverlayHidden(bool on);             //stream-hide: while on, every frame is empty (transparent), so nothing is shown
 bool OverlayShouldClose();
 void OverlayShutdown();
 const char* OverlayBackendName();            //"layer-shell" or "glfw window"

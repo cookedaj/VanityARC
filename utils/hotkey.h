@@ -1,7 +1,7 @@
 #ifndef KWINHELPER_HOTKEY_H
 #define KWINHELPER_HOTKEY_H
 //Menu hotkey. The overlay never has keyboard focus (and Wayland has no global key hooks), so Insert is
-//read straight from the keyboard devices in /dev/input. Only Insert, F6, F7 and F10 are looked at; nothing else
+//read straight from the keyboard devices in /dev/input. Only Insert, F6, F7, F8 and F10 are looked at; nothing else
 //is stored or logged, EXCEPT while you are typing into a text box in the menu: then (and only then) the
 //keyboard is grabbed so the game does not see the keys, and the key presses are handed to the menu.
 //This needs read access to /dev/input (group "input"). Without it the menu can still
@@ -28,6 +28,8 @@ inline std::atomic<bool> g_MenuToggle{false};
 inline std::atomic<bool> g_HotkeyStop{false};
 //F6 mark the player at the crosshair as a teammate, F7 clear the marks, F10 quit. Set on a key press, cleared by the main loop.
 inline std::atomic<bool> g_KeyMark{false}, g_KeyClear{false}, g_KeyQuit{false};
+//F8 toggles stream-hide (the overlay draws nothing). SIGUSR2 does the same, for testing: pkill -USR2 -x kwin-helper
+inline std::atomic<bool> g_KeyStream{false};
 inline constexpr int MENU_KEY = KEY_INSERT;
 
 //Typing support. The menu sets g_TextGrab while a text box is active; the hotkey thread then grabs the
@@ -46,6 +48,7 @@ inline std::mutex g_KeyMutex;
 inline std::vector<KeyEv> g_KeyQueue;
 
 inline void MenuSignalHandler(int) { g_MenuToggle = true; }
+inline void StreamSignalHandler(int) { g_KeyStream = true; }
 
 //Reads whatever input_event structs are waiting on fd and flips g_MenuToggle on an Insert key press
 //(not on release or key repeat). Returns false once the device is gone.
@@ -62,6 +65,7 @@ inline bool HandleKeyEvents(int fd) {
                 if (ev[i].code == KEY_F6) g_KeyMark = true;
                 else if (ev[i].code == KEY_F7) g_KeyClear = true;
                 else if (ev[i].code == KEY_F10) g_KeyQuit = true;
+                else if (ev[i].code == KEY_F8) g_KeyStream = true;
             }
             if (g_TextGrab) {
                 std::lock_guard<std::mutex> lk(g_KeyMutex);
@@ -141,6 +145,7 @@ inline void HotkeyThread() {
 
 inline std::thread StartHotkey() {
     std::signal(SIGUSR1, MenuSignalHandler);
+    std::signal(SIGUSR2, StreamSignalHandler);
     return std::thread(HotkeyThread);
 }
 
