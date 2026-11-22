@@ -137,14 +137,14 @@ int main() {
     CHECK(D(Cat::Arc, "DA_EnemyType_RollBot_Pop") == "Pop", "arc Pop");
     CHECK(D(Cat::Arc, "DA_EnemyType_RollBot_Flamethrower") == "Fireball", "arc Fireball");
     CHECK(D(Cat::Arc, "DA_EnemyType_Runner") == "Runner", "arc fallback Runner");
-    CHECK(D(Cat::Arc, "DA_EnemyType_HeavyDrone_Laser") == "Heavy drone laser", "arc fallback spaced");
-    CHECK(D(Cat::Container, "BP_SocketContainer_Gvt_BinTrash_01_A_C") == "Trash can", "container trash 1");
-    CHECK(D(Cat::Container, "BP_SocketContainer_01_TrashBin_A_01_C") == "Trash can", "container trash 2");
-    CHECK(D(Cat::Container, "BP_SocketContainer_CUL_MuseumCrate_01_A_C") == "Museum crate", "container museum crate");
-    CHECK(D(Cat::Container, "BP_SocketContainer_Raider_AmmoBox_01_Lid_A_Dynamic_C") == "Ammo box", "container ammo box");
-    CHECK(D(Cat::Container, "BP_SocketContainer_Sct_LockerMedical_01_A_C") == "Medical locker", "container medical locker");
-    CHECK(D(Cat::Container, "BP_SocketContainer_Sct_Locker_01_A_C") == "Security locker", "container locker (the wiki calls it a Security Locker)");
-    CHECK(D(Cat::Container, "BP_SalvageContainer_GreatMullein_C") == "Great mullein", "container fallback");
+    CHECK(D(Cat::Arc, "DA_EnemyType_HeavyDrone_Laser") == "Heavy Drone Laser", "arc fallback spaced (title case)");
+    CHECK(D(Cat::Container, "BP_SocketContainer_Gvt_BinTrash_01_A_C") == "Trash Can", "container trash 1");
+    CHECK(D(Cat::Container, "BP_SocketContainer_01_TrashBin_A_01_C") == "Trash Can", "container trash 2");
+    CHECK(D(Cat::Container, "BP_SocketContainer_CUL_MuseumCrate_01_A_C") == "Museum Crate", "container museum crate (not in the loot tag list: cleaned name)");
+    CHECK(D(Cat::Container, "BP_SocketContainer_Raider_AmmoBox_01_Lid_A_Dynamic_C") == "Ammo Box", "container ammo box");
+    CHECK(D(Cat::Container, "BP_SocketContainer_Sct_LockerMedical_01_A_C") == "Locker", "container medical locker (not in the loot tag list: shown as Locker)");
+    CHECK(D(Cat::Container, "BP_SocketContainer_Sct_Locker_01_A_C") == "Locker", "container locker (patch 2.5.0 loot tag list)");
+    CHECK(D(Cat::Container, "BP_SalvageContainer_GreatMullein_C") == "Great Mullein", "container fallback (title case)");
     CHECK(D(Cat::Item, "BattleRifle_BreachAction_01") == "Ferro", "item Ferro token");
     CHECK(D(Cat::Item, "DA_Item_BattleRifle_BreachAction_01") == "Ferro", "item Ferro full name");
     CHECK(D(Cat::Item, "DA_WeaponVisuals_SMG_LowTier_01") == "Stitcher", "gun Stitcher (visuals asset)");
@@ -219,7 +219,7 @@ int main() {
     u64 bin = makeObject(0x1000, 0x12C0, 7);
     RenderEntity e2 = ent(Object::SEARCH, 10.0, bin);
     labeler::refine(e2); labeler::fill(e2);
-    CHECK(e2.type == Object::SEARCH && e2.label == "Trash can", "container named Trash can");
+    CHECK(e2.type == Object::SEARCH && e2.label == "Trash Can", "container named Trash can");
 
     //---- inventory lists named in offsets.txt
     addPoolName(0x2400, "DA_Item_Bandage_01");
