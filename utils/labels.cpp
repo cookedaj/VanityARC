@@ -120,10 +120,13 @@ const Rule ITEM_NAMES[] = {
     {"assaultriflebullpup01", "Tempest"}, {"assaultrifleburst01", "Arpeggio"}, {"assaultrifleheavy01", "Bettina"},
     {"assaultriflelowtier01", "Rattler"}, {"assaultriflepneumatic01", "Kettle"},
     {"battleriflebreachaction01", "Ferro"}, {"battleriflenergyburst01", "Aphelion"}, {"battlerifleleveraction01", "Renegade"},
+    {"battleriflesemiautolight01", "Stiletto"}, {"battleriflelight01", "Stiletto"}, //Frozen Trail update
     {"beam01", "Equalizer"}, {"specialbeamrifle01", "Equalizer"},
     {"handcannonsingleaction01", "Anvil"},
     {"launcherantiarcmedium01", "Hullcracker"},
+    {"launcherantiarcsingleshot01", "Rascal"}, {"launcherantiarclight01", "Rascal"}, {"launchergrenadecompact01", "Rascal"}, //Frozen Trail
     {"lmgmedium01", "Torrente"}, {"lmgstandard01", "Torrente"},
+    {"handcannonrevolver01", "Bantam"}, {"handcannondoubleaction01", "Bantam"}, {"handcannondoubleactionsnubnose01", "Bantam"}, //Frozen Trail
     {"pistol01", "Burletta"}, {"pistolhighpower01", "Venator"}, {"pistolsemiauto02", "Venator"}, {"pistolsilenced01", "Hairpin"},
     {"pumpaction01", "Il Toro"}, {"shotgunpumpaction01", "Il Toro"}, {"shotgunenergyadjustable01", "Dolabra"},
     {"shotgunsemiauto01", "Vulcano"},
