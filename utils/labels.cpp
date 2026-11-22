@@ -134,6 +134,7 @@ const Rule ITEM_NAMES[] = {
     {"sniperboltaction01", "Osprey"}, {"sniperrifleboltactionmedium01", "Osprey"}, {"sniperenergy01", "Jupiter"},
     {"specialrailgun01", "Jupiter"},
     //short forms, in case a name arrives without its family prefix
+    {"basicmeleeweapon", "Pickaxe"}, //the starting tool everyone has (confirmed by the player, not a wiki list)
     {"breachaction01", "Ferro"}, {"leveraction01", "Renegade"}, {"pneumatic01", "Kettle"}, {"singleaction01", "Anvil"},
 };
 
