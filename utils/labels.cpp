@@ -82,22 +82,34 @@ std::string cleanName(const std::string& raw) {
     }
     out = lower(out);
     if (!out.empty()) out[0] = (char)std::toupper((unsigned char)out[0]);
+    for (size_t at = out.find("arc"); at != std::string::npos; at = out.find("arc", at + 1)) { //the word ARC, not "arcade"
+        const bool wordStart = at == 0 || out[at - 1] == ' ';
+        const bool wordEnd = at + 3 == out.size() || out[at + 3] == ' ';
+        if (wordStart && wordEnd) { out[at] = 'A'; out[at + 1] = 'R'; out[at + 2] = 'C'; }
+    }
     return out.empty() ? raw : out;
 }
 
 struct Rule { const char* key; const char* name; };
 
 //ARC machines: exact match on the name after "DA_EnemyType_" (letters/digits only)
+//Names as the ARC Raiders wiki lists them (beebom, Nov 2026). The internal keys are the usual ones; a key that does not
+//appear in the game just never matches, and the cleaned name is shown instead.
 const Rule ARC_NAMES[] = {
     {"tick", "Tick"}, {"rollbotpop", "Pop"}, {"rollbotflamethrower", "Fireball"}, {"lightdrone02", "Wasp"},
     {"lightdroneelite", "Hornet"}, {"turretenemy", "Turret"},
+    {"snitch", "Snitch"}, {"surveyor", "Surveyor"}, {"sentinel", "Sentinel"}, {"spotter", "Spotter"},
+    {"bombardier", "Bombardier"}, {"bastion", "Bastion"}, {"rocketeer", "Rocketeer"}, {"leaper", "Leaper"},
+    {"queen", "The Queen"}, {"shredder", "Shredder"}, {"matriarch", "Matriarch"}, {"firefly", "Firefly"},
+    {"comet", "Comet"}, {"vaporizer", "Vaporizer"}, {"arcturbine", "ARC Turbine"}, {"erraticwasp", "Erratic Wasp"},
+    {"bully", "Bully"}, {"skulker", "Skulker"}, {"hydra", "Hydra"},
 };
 
 //Containers: the first rule whose key appears inside the name wins, so specific ones come first
 const Rule CONTAINER_RULES[] = {
-    {"lockermedical", "Medical locker"}, {"medicalbag", "Medical bag"}, {"locker", "Locker"}, {"trash", "Trash can"},
+    {"lockermedical", "Medical locker"}, {"medicalbag", "Medical bag"}, {"locker", "Security locker"}, {"trash", "Trash can"},
     {"suitcase", "Suitcase"}, {"museumcrate", "Museum crate"}, {"ammobox", "Ammo box"}, {"weaponcase", "Weapon case"},
-    {"grenadecontainer", "Grenade case"}, {"backpack", "Backpack"}, {"fusebox", "Fuse box"}, {"seedbox", "Seed box"},
+    {"grenadecontainer", "Grenade tube"}, {"raidercache", "Raider cache"}, {"backpack", "Worn backpack"}, {"fusebox", "Fuse box"}, {"seedbox", "Seed box"},
     {"seedconsole", "Seed console"}, {"workbench", "Workbench"}, {"crate", "Crate"}, {"cupboard", "Cupboard"},
     {"drawer", "Drawer"}, {"cartshelf", "Shelf"}, {"trolley", "Trolley"}, {"computer", "Computer"}, {"server", "Server"},
     {"console", "Console"}, {"desk", "Desk"}, {"streetsweeper", "Street sweeper"}, {"benchkitchen", "Kitchen bench"},
@@ -108,12 +120,9 @@ const Rule ITEM_NAMES[] = {
     {"assaultriflebullpup01", "Tempest"}, {"assaultrifleburst01", "Arpeggio"}, {"assaultrifleheavy01", "Bettina"},
     {"assaultriflelowtier01", "Rattler"}, {"assaultriflepneumatic01", "Kettle"},
     {"battleriflebreachaction01", "Ferro"}, {"battleriflenergyburst01", "Aphelion"}, {"battlerifleleveraction01", "Renegade"},
-    {"battleriflesemiautolight01", "Stiletto"}, {"battleriflelight01", "Stiletto"},
     {"beam01", "Equalizer"}, {"specialbeamrifle01", "Equalizer"},
-    {"handcannonrevolver01", "Bantam"}, {"handcannondoubleaction01", "Bantam"}, {"handcannondoubleactionsnubnose01", "Bantam"},
     {"handcannonsingleaction01", "Anvil"},
-    {"launcherantiarcmedium01", "Hullcracker"}, {"launcherantiarcsingleshot01", "Rascal"}, {"launcherantiarclight01", "Rascal"},
-    {"launchergrenadecompact01", "Rascal"},
+    {"launcherantiarcmedium01", "Hullcracker"},
     {"lmgmedium01", "Torrente"}, {"lmgstandard01", "Torrente"},
     {"pistol01", "Burletta"}, {"pistolhighpower01", "Venator"}, {"pistolsemiauto02", "Venator"}, {"pistolsilenced01", "Hairpin"},
     {"pumpaction01", "Il Toro"}, {"shotgunpumpaction01", "Il Toro"}, {"shotgunenergyadjustable01", "Dolabra"},
@@ -121,7 +130,6 @@ const Rule ITEM_NAMES[] = {
     {"smg01", "Bobcat"}, {"smg02", "Bobcat"}, {"smglowtier01", "Stitcher"}, {"smgmedium01", "Canto"},
     {"sniperboltaction01", "Osprey"}, {"sniperrifleboltactionmedium01", "Osprey"}, {"sniperenergy01", "Jupiter"},
     {"specialrailgun01", "Jupiter"},
-    {"basicmeleeweapon", "Pickaxe"},
     //short forms, in case a name arrives without its family prefix
     {"breachaction01", "Ferro"}, {"leveraction01", "Renegade"}, {"pneumatic01", "Kettle"}, {"singleaction01", "Anvil"},
 };

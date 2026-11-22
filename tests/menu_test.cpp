@@ -51,9 +51,9 @@ int main() {
 
     ImGuiWindow* w = ImGui::FindWindowByName("kwin-helper");
     CHECK(w != nullptr, "menu window exists");
-    g_MenuTab = 3; //the Names page, with the rename lists
+    g_MenuTab = 3; //the Settings page (it has the game view part too)
     for (int i = 0; i < 3; i++) frame([] { DrawMenu(); });
-    CHECK(true, "menu draws the Names page");
+    CHECK(true, "menu draws the Settings page");
 
     //typing: a text box that is made active, then keys arrive through the same queue the keyboard thread fills
     char buf[48] = "";
@@ -136,15 +136,7 @@ int main() {
     };
     for (int tab = 0; tab < MENU_TAB_COUNT; tab++) {
         g_MenuTab = tab;
-        if (tab == 3) { //the Names page has four lists of its own
-            for (int sub = 0; sub < 4; sub++) {
-                g_RenameTab = sub; frame([] { DrawMenu(); }); frame([] { DrawMenu(); }); g_RenameTab = -1;
-                char what[48]; std::snprintf(what, sizeof what, "Names, list %d", sub);
-                scan(what);
-            }
-        } else {
-            scan(MENU_TABS[tab]);
-        }
+        scan(MENU_TABS[tab]);
     }
 
     //the player list and an inventory window next to the menu draw without clashing IDs either

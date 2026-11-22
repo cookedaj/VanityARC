@@ -1,6 +1,6 @@
 #ifndef KWINHELPER_MENU_H
 #define KWINHELPER_MENU_H
-//The Insert menu: black and white, tabs on the left (ESP, Players, Radar, Names, Game view, Settings).
+//The Insert menu: black and white, tabs on the left (ESP, Players, Radar, Settings).
 //Settings and your own names are saved in ~/.config/kwin-helper/ (see settings.h and labels.h).
 #include <atomic>
 #include <algorithm>
@@ -23,9 +23,8 @@
 inline bool g_MenuOpen = false;
 inline std::atomic<bool> g_MenuQuit{false}; //the menu's Quit button; the main loop ends the program
 inline int g_MenuTab = 0; //which page is shown
-inline int g_RenameTab = -1; //Names page: -1 = leave the choice to the user, 0..3 = show that list (tests)
-inline const char* const MENU_TABS[] = {"ESP", "Players", "Radar", "Names", "Game view", "Settings"};
-inline constexpr int MENU_TAB_COUNT = 6;
+inline const char* const MENU_TABS[] = {"ESP", "Players", "Radar", "Settings"};
+inline constexpr int MENU_TAB_COUNT = 4;
 
 //Call once per frame before RenderBegin(). Flips the menu on Insert. The overlay is click-through
 //normally; while the menu is open it takes the mouse so the menu can be clicked.
@@ -88,42 +87,6 @@ inline void MenuFeedKeys() {
         }
     }
 }
-
-inline void DrawRenameList(labels::Cat cat) {
-    static std::map<std::string, std::array<char, 48>> bufs; //what is typed in each box
-    const auto seen = labels::seen(cat); //a copy: the tracker thread keeps adding keys
-    ImGui::BeginChild(labels::catName(cat), ImVec2(0, 270), true);
-    if (seen.empty()) ImGui::TextDisabled("Nothing seen yet. Play a bit, then come back.");
-
-    std::vector<std::pair<std::string, std::string>> rows(seen.begin(), seen.end());
-    std::sort(rows.begin(), rows.end(), [](const auto& a, const auto& b) { return a.second < b.second; });
-    for (const auto& r : rows) {
-        const std::string id = std::string(labels::catName(cat)) + "|" + r.first;
-        auto it = bufs.find(id);
-        if (it == bufs.end()) {
-            std::array<char, 48> b{};
-            std::string cur = labels::overrideOf(cat, r.first);
-            std::snprintf(b.data(), b.size(), "%s", cur.c_str());
-            it = bufs.emplace(id, b).first;
-        }
-        ImGui::PushID(id.c_str());
-        if (ImGui::SmallButton("x")) { //back to the built-in name
-            it->second[0] = 0;
-            labels::setOverride(cat, r.first, "");
-            labels::save();
-        }
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Back to the built-in name");
-        ImGui::SameLine();
-        ImGui::SetNextItemWidth(170);
-        if (ImGui::InputTextWithHint("##n", r.second.c_str(), it->second.data(), it->second.size()))
-            labels::setOverride(cat, r.first, it->second.data());
-        if (ImGui::IsItemDeactivatedAfterEdit()) labels::save();
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", r.first.c_str());
-        ImGui::PopID();
-    }
-    ImGui::EndChild();
-}
-
 
 //--- the pages
 inline void PageEsp() {
@@ -202,21 +165,10 @@ inline void PageRadar() {
     Slider("Up / down", &config::radarCenterY, R, std::max(R + 1, (float)config::SCREEN_H - R), "%.0f");
 }
 
-inline void PageNames() {
-    ui::Note("Click a box and type your own name. Enter finishes. x = back to the built-in name.");
-    if (ImGui::BeginTabBar("##rename")) {
-        const auto pick = [](int i) { return g_RenameTab == i ? ImGuiTabItemFlags_SetSelected : ImGuiTabItemFlags_None; };
-        if (ImGui::BeginTabItem("ARC", nullptr, pick(0))) { DrawRenameList(labels::Cat::Arc); ImGui::EndTabItem(); }
-        if (ImGui::BeginTabItem("Containers", nullptr, pick(1))) { DrawRenameList(labels::Cat::Container); ImGui::EndTabItem(); }
-        if (ImGui::BeginTabItem("Items", nullptr, pick(2))) { DrawRenameList(labels::Cat::Item); ImGui::EndTabItem(); }
-        if (ImGui::BeginTabItem("Players", nullptr, pick(3))) { DrawRenameList(labels::Cat::Player); ImGui::EndTabItem(); }
-        ImGui::EndTabBar();
-    }
-}
-
-inline void PageGameView() {
+//The game view part of the Settings tab (stretched resolution, gamescope, calibration)
+inline void DrawGameViewSettings() {
     using namespace ui;
-    Section("STRETCHED RESOLUTION / GAMESCOPE");
+    Section("GAME VIEW: STRETCHED RESOLUTION / GAMESCOPE");
     Switch("Detect automatically", &config::gameViewAuto);
     Note(g_gameView.how.c_str());
     if (!config::gameViewAuto) {
@@ -251,6 +203,7 @@ inline void PageSettings() {
     Section("SPEED");
     SliderD("Update rate", &config::trackerHz, 30, 240, "%.0f Hz");
     Note("Higher follows moving players more closely and uses more CPU.");
+    DrawGameViewSettings();
     Section("OTHER");
     Switch("Status card", &config::showDebugInfo);
     Switch("Hotkeys (F6, F7, F10)", &config::hotkeysEnabled);
@@ -297,8 +250,6 @@ inline void DrawMenu() {
         case 0: PageEsp(); break;
         case 1: PagePlayers(); break;
         case 2: PageRadar(); break;
-        case 3: PageNames(); break;
-        case 4: PageGameView(); break;
         default: PageSettings(); break;
     }
     ImGui::EndChild();

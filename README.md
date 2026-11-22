@@ -37,7 +37,7 @@ Google/ask AI how to set up the build utility inside of CLion (Release build).
 10) Make sure the game is loaded in windowed mode.
 11) When you start the process, right-click the overlay -> More Actions -> Keep Above Others.
 12) Press Insert to open the in-game menu (show/hide players, ARC, items, containers, names, distances, radar). While it is open the overlay takes the mouse; press Insert again to close it. Insert is read from /dev/input, so you need to be in the `input` group once: `sudo usermod -aG input $USER`, then log out and back in. Without that, `pkill -USR1 -x kwin-helper` toggles the menu instead. Menu settings are saved in `~/.config/kwin-helper/settings.txt`.
-13) Names: ARC machines, containers, ground items, players and the guns they carry get a name next to the marker (toggle each under "Names"). Open "Rename" in the menu, click a box and type your own name (US keyboard; Enter finishes). While you type, the keyboard is held by the overlay so the game does not see the keys. Your names are saved in `~/.config/kwin-helper/labels.txt`; delete a line there (or press `x` in the menu) to go back to the built-in name.
+13) Names: ARC machines, containers, ground items, players and the guns they carry get a name next to the marker (toggle each under ESP > Names). The names follow the ARC Raiders wiki. If you want your own name for something, add a line to `~/.config/kwin-helper/labels.txt` by hand; delete the line to go back to the built-in name.
 
 ## Known Issues
 1) ESP gets distorted at the edges.
@@ -125,9 +125,7 @@ Insert opens the menu: black and white, tabs on the left.
 | ESP | master switch, what to show, names, box style / colour / thickness, health and shield bars, monochrome, skeleton (range, dim players behind cover and how faint), ranges |
 | Players | the player list options, teammate marks, and every player in view (click a name for the inventory, TEAM marks a teammate) |
 | Radar | on/off, size, range, position presets |
-| Names | rename ARC, containers, items and players |
-| Game view | gamescope / stretched resolution, calibration (FOV side, zoom, shift, camera roll) |
-| Settings | overlay and menu opacity, text size, update rate (30-240 Hz), status card, hotkeys, stream hide, reset, quit |
+| Settings | overlay and menu opacity, text size, update rate (30-240 Hz), game view (stretched resolution, gamescope, calibration), status card, hotkeys, stream hide, reset, quit |
 
 - **Hotkeys** (read from /dev/input, switch off in Settings): F6 marks or unmarks the player nearest your crosshair as a teammate (only when one player is clearly meant), F7 clears all marks, F10 closes the overlay, F8 turns stream hide on or off. Marks are kept by account id in `~/.config/kwin-helper/teammates.txt`.
 - **Stream hide (F8)**: while on, the overlay draws nothing, so a screen recording or stream shows none of it. F8 works even with Hotkeys off, and while it is on the menu cannot be opened (press F8 first). It is saved, so the overlay starts hidden if you quit while it is on. From a terminal: `pkill -USR2 -x kwin-helper` does the same as F8.

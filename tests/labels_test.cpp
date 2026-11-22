@@ -143,7 +143,7 @@ int main() {
     CHECK(D(Cat::Container, "BP_SocketContainer_CUL_MuseumCrate_01_A_C") == "Museum crate", "container museum crate");
     CHECK(D(Cat::Container, "BP_SocketContainer_Raider_AmmoBox_01_Lid_A_Dynamic_C") == "Ammo box", "container ammo box");
     CHECK(D(Cat::Container, "BP_SocketContainer_Sct_LockerMedical_01_A_C") == "Medical locker", "container medical locker");
-    CHECK(D(Cat::Container, "BP_SocketContainer_Sct_Locker_01_A_C") == "Locker", "container locker");
+    CHECK(D(Cat::Container, "BP_SocketContainer_Sct_Locker_01_A_C") == "Security locker", "container locker (the wiki calls it a Security Locker)");
     CHECK(D(Cat::Container, "BP_SalvageContainer_GreatMullein_C") == "Great mullein", "container fallback");
     CHECK(D(Cat::Item, "BattleRifle_BreachAction_01") == "Ferro", "item Ferro token");
     CHECK(D(Cat::Item, "DA_Item_BattleRifle_BreachAction_01") == "Ferro", "item Ferro full name");
