@@ -47,6 +47,8 @@ set(IMGUI_SOURCES
         utils/names.h
         utils/labels.cpp
         utils/labels.h
+        utils/itemvalues.cpp
+        utils/itemvalues.h
         utils/labeler.cpp
         utils/labeler.h
         utils/gamescope.cpp
@@ -117,12 +119,14 @@ if(KWINHELPER_TESTS)
     target_link_libraries(gamestate_test PRIVATE pthread)
     kwinhelper_test(names_test utils/names.cpp gamestate/Probe.cpp memory/memory.cpp)
     kwinhelper_test(labels_test utils/names.cpp utils/labels.cpp utils/labeler.cpp memory/memory.cpp)
+    kwinhelper_test(itemvalues_test utils/itemvalues.cpp)
+    kwinhelper_test(amp_test)
     kwinhelper_test(fuzz_test utils/names.cpp utils/labels.cpp utils/labeler.cpp memory/memory.cpp)
-    kwinhelper_test(menu_test utils/labels.cpp
+    kwinhelper_test(menu_test utils/labels.cpp utils/itemvalues.cpp
             ${IMGUI_DIR}/imgui.cpp ${IMGUI_DIR}/imgui_draw.cpp ${IMGUI_DIR}/imgui_tables.cpp ${IMGUI_DIR}/imgui_widgets.cpp
             ${IMGUI_DIR}/backends/imgui_impl_glfw.cpp ${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp)
     target_link_libraries(menu_test PRIVATE glfw OpenGL::GL)
-    kwinhelper_test(esp_test utils/labels.cpp
+    kwinhelper_test(esp_test utils/labels.cpp utils/itemvalues.cpp
             ${IMGUI_DIR}/imgui.cpp ${IMGUI_DIR}/imgui_draw.cpp ${IMGUI_DIR}/imgui_tables.cpp ${IMGUI_DIR}/imgui_widgets.cpp
             ${IMGUI_DIR}/backends/imgui_impl_glfw.cpp ${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp)
     target_link_libraries(esp_test PRIVATE glfw OpenGL::GL)

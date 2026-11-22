@@ -15,6 +15,7 @@
 #include "draw/Menu.h"
 #include "draw/OverlayBackend.h"
 #include "utils/labels.h"
+#include "utils/itemvalues.h"
 #include "utils/marks.h"
 #include "utils/obfstr.h"
 #include "utils/offsets.h"
@@ -52,6 +53,7 @@ int main() {
 
     settings::load(); //menu settings and your own names from the last run (every value kept inside its safe range)
     labels::load();
+    itemvalues::load();
     marks::load();    //teammates you marked by hand
     live::load();     //offsets found with the probes (offsets.txt)
     std::thread hotkey = StartHotkey(); //Insert opens the menu

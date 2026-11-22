@@ -10,6 +10,8 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include "../utils/itemvalues.h"
+#include "../utils/amp.h"
 #include <vector>
 
 #include "ESP.h"
@@ -151,19 +153,41 @@ inline void DrawInspectWindows() {
                 std::string line = b;
                 if (e->hasShield) { std::snprintf(b, sizeof b, "   Shield %.0f / %.0f", e->shield, e->shieldMax); line += b; }
                 ImGui::TextUnformatted(line.c_str());
-                ui::Section("EQUIPPED");
-                if (e->sub.empty()) ui::Note("No guns read.");
+                const std::vector<ItemRow>* rows = nullptr;
+                if (g_ui.inv) { auto it = g_ui.inv->find(e->actor); if (it != g_ui.inv->end()) rows = &it->second; }
+                //Amplification: the highest module level in the mod list (MK I..IV, MK V = AMP)
+                int ampLvl = 0;
+                if (rows) for (const ItemRow& r : *rows) if (r.category == "mod") ampLvl = std::max(ampLvl, amp::moduleLevel(r.name));
+                std::vector<std::string> guns;
                 size_t start = 0;
                 while (start < e->sub.size()) {
                     size_t end = e->sub.find(" + ", start);
                     if (end == std::string::npos) end = e->sub.size();
-                    ImGui::TextUnformatted(e->sub.substr(start, end - start).c_str());
+                    guns.push_back(e->sub.substr(start, end - start));
                     start = end + 3;
                 }
+                ui::Section("EQUIPPED");
+                if (guns.empty()) ui::Note("No guns read.");
+                if (guns.size() == 1 && ampLvl > 0) {
+                    ImGui::TextUnformatted(amp::gunLabel(guns[0], ampLvl).c_str()); //one gun: the module is on it
+                } else {
+                    for (const std::string& g : guns) ImGui::TextUnformatted(g.c_str());
+                    if (ampLvl == 5 && guns.size() > 1) ui::Note("AMP module fitted (which gun: not known)");
+                    else if (ampLvl > 0 && guns.size() > 1) ui::Note("Amplification module fitted (which gun: not known)");
+                }
                 ui::Section("CARRYING");
-                const std::vector<ItemRow>* rows = nullptr;
-                if (g_ui.inv) { auto it = g_ui.inv->find(e->actor); if (it != g_ui.inv->end()) rows = &it->second; }
                 if (rows && !rows->empty()) {
+                    long total = 0;
+                    int unpriced = 0;
+                    for (const ItemRow& r : *rows) {
+                        long v = itemvalues::valueOf(r.name);
+                        if (v < 0) unpriced++;
+                        else total += v * r.count;
+                    }
+                    char tb[120];
+                    if (unpriced) std::snprintf(tb, sizeof tb, "Value %ld  (%d item%s with no price)", total, unpriced, unpriced == 1 ? "" : "s");
+                    else std::snprintf(tb, sizeof tb, "Value %ld", total);
+                    ImGui::TextUnformatted(tb);
                     std::string lastCat;
                     for (const ItemRow& r : *rows) {
                         if (r.category != lastCat) { lastCat = r.category; ImGui::TextColored(ImColor(ui::GREY), "%s", r.category.c_str()); }
