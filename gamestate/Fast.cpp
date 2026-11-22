@@ -44,6 +44,14 @@ double shieldNumber(uint64_t raw) {
 }
 
 double ms(clk::time_point a, clk::time_point b) { return std::chrono::duration<double, std::milli>(b - a).count(); }
+
+constexpr auto POSE_FROZEN_AFTER = std::chrono::milliseconds(300); //a drawn, animated player's bones change every game tick
+
+uint64_t fnv1a(const uint8_t* p, size_t n) {
+    uint64_t h = 1469598103934665603ULL;
+    for (size_t i = 0; i < n; i++) { h ^= p[i]; h *= 1099511628211ULL; }
+    return h;
+}
 } // namespace
 
 bool GameState::scan() {
@@ -53,6 +61,7 @@ bool GameState::scan() {
         logThrottled("[-] Invalid Uworld (not in a raid yet?)");
         return false;
     }
+    if (uworld != lastWorld_) clockVal_ = -1; //a new world has a new clock
     lastWorld_ = uworld;
     //PersistentLevel at UWorld+0x170 is encrypted; the plain pointer is in LevelCollections[0] (see config.h)
     ptr levelCollection = ReadMemory<ptr>(uworld + off::LEVEL_COLLECTIONS);
@@ -122,17 +131,86 @@ bool GameState::scan() {
         for (const Tracked& t : dyn_) if (t.ent.actor == it->first) { present = true; break; }
         it = present ? std::next(it) : shieldSeen_.erase(it);
     }
+    for (auto it = poseSeen_.begin(); it != poseSeen_.end();) { //same for the poses
+        bool present = false;
+        for (const Tracked& t : dyn_) if (t.ent.actor == it->first) { present = true; break; }
+        it = present ? std::next(it) : poseSeen_.erase(it);
+    }
     timing_.lastScanMs = ms(t0, clk::now());
     timing_.statics = statics_.size();
     timing_.dynamics = dyn_.size();
     return true;
 }
 
+//One player's stick figure for this step. The bone list is read whole only some of the time (the game rewrites it
+//every frame), the game stops animating players it is not drawing, and nobody far away is animated at all, so:
+//  - a list that cannot be read is replaced by the last good one for a moment (no flicker),
+//  - a frozen player gets the pose of someone the game IS animating in the same stance and speed (drawn faint).
+void GameState::updatePose(Tracked& t, const std::vector<uint8_t>& bones, const skeleton::Xform& mesh) {
+    using namespace std::chrono;
+    const auto now = clk::now();
+    PoseState& ps = poseSeen_[t.ent.actor];
+    if (!ps.init) { ps.init = true; ps.changed = now; }
+
+    //Ground speed, over at least 150 ms so the replication jitter averages out
+    if (!ps.havePos) { ps.havePos = true; ps.lastPos = t.ent.pos; ps.lastPosAt = now; }
+    else {
+        const double dt = duration<double>(now - ps.lastPosAt).count();
+        if (dt >= 0.15) {
+            const double dx = t.ent.pos.x - ps.lastPos.x, dy = t.ent.pos.y - ps.lastPos.y;
+            ps.speed = std::sqrt(dx * dx + dy * dy) / dt;
+            ps.lastPos = t.ent.pos;
+            ps.lastPosAt = now;
+        }
+    }
+    //Stance: the capsule is 92 cm above the mesh standing and 60 cm crouched (readable for every player, animated or not)
+    const bool crouched = t.ent.pos.z - mesh.t.z < 76.0;
+    const bool moving = ps.speed > 120.0;
+    const int cls = (crouched ? 2 : 0) + (moving ? 1 : 0);
+
+    const bool haveBones = bones.size() == (size_t)skeleton::BONES * skeleton::RECORD;
+    bool readOk = false;
+    skeleton::Pose comp;
+    if (haveBones) {
+        const uint64_t h = fnv1a(bones.data(), bones.size());
+        if (h != ps.hash) { ps.hash = h; ps.changed = now; }
+        skeleton::Xform local[skeleton::BONES];
+        skeleton::decode(bones.data(), local);
+        readOk = skeleton::componentPose(local, comp);
+    }
+    const bool animated = now - ps.changed < POSE_FROZEN_AFTER; //a failed read leaves the hash alone: still animated if it was
+    if (readOk) {
+        ps.good = comp; ps.haveGood = true; ps.goodAt = now;
+        //Learn what this stance looks like from a clean, animated, living player
+        const double pelvisZ = comp.j[skeleton::PELVIS].z;
+        const bool idle = ps.speed < 40.0;
+        const bool plausible = crouched ? (pelvisZ > 25.0 && pelvisZ < 60.0) : pelvisZ > 70.0;
+        if (animated && !t.ent.isDead && plausible && (idle || moving)) { tmpl_[cls] = comp; haveTmpl_[cls] = true; }
+    } else if (ps.haveGood && now - ps.goodAt < milliseconds(400)) {
+        comp = ps.good; readOk = true;   //a half-written list: the last whole one, moved with the player
+    }
+    t.ent.poseLive = animated;
+    if (!animated) { //frozen: his own list is old, so a pose that fits what he is doing now
+        for (int c : {cls, cls ^ 1}) if (haveTmpl_[c]) { comp = tmpl_[c]; readOk = true; break; }
+    }
+    if (!readOk) return;
+    auto pose = std::make_shared<skeleton::Pose>();
+    if (skeleton::placePose(comp, mesh, t.ent.pos, *pose)) t.ent.pose = std::move(pose);
+}
+
 void GameState::updateDynamic() {
     const size_t n = dyn_.size();
     if (!n) return;
-    struct Row { ptr vt = 0, root = 0, hc = 0, sc = 0; int team = 0; uint8_t destroyed = 0; Vector3 pos; double hp = 0; uint64_t shRaw = 0, shMaxRaw = 0; };
+    //The mesh's own transform as it sits in memory (rotation, position, scale of the character's mesh)
+    struct MeshXf { double q[4]; double t[3]; double padT; double s[3]; };
+    static_assert(sizeof(MeshXf) == 0x58, "MeshXf must match the game's transform");
+    struct Row {
+        ptr vt = 0, root = 0, hc = 0, sc = 0; int team = 0; uint8_t destroyed = 0; Vector3 pos; double hp = 0; uint64_t shRaw = 0, shMaxRaw = 0;
+        bool wantPose = false; ptr ctrl = 0, mesh = 0, boneData = 0; uint64_t rtRaw = 0; int boneNum = 0; MeshXf mx{}; std::vector<uint8_t> bones;
+    };
     const bool shieldOn = live::shieldValue >= 0;
+    const bool skeletonOn = g_skeletonOn.load(std::memory_order_relaxed);
+    const double skeletonRange = g_skeletonDist.load(std::memory_order_relaxed) * 100.0; //cm
     std::vector<Row> rows(n);
     std::vector<ReadReq> rq;
     rq.reserve(n * 5);
@@ -145,6 +223,9 @@ void GameState::updateDynamic() {
             queue(rq, e.actor + off::HEALTH_COMPONENT, &r.hc);
             queue(rq, e.actor + off::TEAM_ID, &r.team);
             if (shieldOn && live::shieldComponent >= 0) queue(rq, e.actor + (ptr)live::shieldComponent, &r.sc); //the shield lives in another component
+            r.wantPose = skeletonOn && e.pos.Dist(lastCamPos_) <= skeletonRange; //only near players are drawn as a skeleton
+            queue(rq, e.actor + off::CONTROLLER, &r.ctrl);
+            queue(rq, e.actor + off::MESH, &r.mesh); //for the pose and for when the game last drew him
         } else {
             queue(rq, e.actor + off::IS_DESTROYED, &r.destroyed);
         }
@@ -156,6 +237,12 @@ void GameState::updateDynamic() {
         Row& r = rows[i];
         if (r.vt != dyn_[i].ent.vt || !isValidPtr(r.root)) continue;
         queue(rq, r.root + off::POS_PTR, &r.pos);
+        if (dyn_[i].ent.type == Object::PLAYER && isValidPtr(r.mesh)) queue(rq, r.mesh + off::RENDER_TIME, &r.rtRaw);
+        if (r.wantPose && isValidPtr(r.mesh)) {
+            queue(rq, r.mesh + off::MESH_TRANSFORM, &r.mx);
+            queue(rq, r.mesh + off::BONE_ARRAY, &r.boneData);
+            queue(rq, r.mesh + off::BONE_ARRAY + 8, &r.boneNum);
+        }
         if (dyn_[i].ent.type == Object::PLAYER && isValidPtr(r.hc)) queue(rq, r.hc + off::HEALTH_CACHED, &r.hp);
         if (dyn_[i].ent.type == Object::PLAYER && shieldOn) {
             const ptr comp = live::shieldComponent >= 0 ? r.sc : r.hc;
@@ -167,6 +254,24 @@ void GameState::updateDynamic() {
     }
     ReadScatter(rq.data(), rq.size());
 
+    //Third round: the bone list itself, only for players whose mesh and a list of exactly 97 bones were readable
+    rq.clear();
+    for (Row& r : rows) {
+        if (!r.wantPose || r.boneNum != skeleton::BONES || !isValidPtr(r.boneData)) continue;
+        r.bones.resize((size_t)skeleton::BONES * skeleton::RECORD);
+        rq.push_back({r.boneData, r.bones.data(), r.bones.size(), false});
+    }
+    if (!rq.empty()) ReadScatter(rq.data(), rq.size());
+
+    //When did the game last draw each player? The numbers are the game's clock; the newest one seen (yours, or a player
+    //in view) says what the clock reads now, and anyone clearly behind it is not being drawn.
+    auto renderTime = [](const Row& r) { float f[2]; std::memcpy(f, &r.rtRaw, 8); return std::isfinite(f[1]) ? f[1] : -1.0f; }; //LastRenderTimeOnScreen
+    float newest = -1;
+    for (const Row& r : rows) newest = std::max(newest, renderTime(r));
+    const auto clockNow = clk::now();
+    if (newest > clockVal_) { clockVal_ = newest; clockAt_ = clockNow; }
+    const double gameClock = clockVal_ >= 0 ? clockVal_ + std::chrono::duration<double>(clockNow - clockAt_).count() : -1;
+
     for (size_t i = 0; i < n; i++) {
         Tracked& t = dyn_[i];
         const Row& r = rows[i];
@@ -177,7 +282,19 @@ void GameState::updateDynamic() {
         if (t.ent.type == Object::PLAYER) {
             t.ent.playerHealth = isValidPtr(r.hc) ? r.hp : 100; //no health component read: treated as alive, as before
             t.ent.isDead = t.ent.playerHealth < 1;
+            t.ent.isLocal = isValidPtr(r.ctrl);
+            const float drawn = renderTime(r);
+            t.ent.isVisible = !isValidPtr(r.mesh) || gameClock < 0 || (drawn > 0 && gameClock - drawn < 0.25); //no mesh read: unknown, treated as visible
             t.ent.teamID = r.team & 0xFF; //the byte at TeamId only; the bytes after it belong to other fields
+            t.ent.pose.reset();
+            t.ent.poseLive = true;
+            if (r.wantPose) {
+                skeleton::Xform mesh;
+                mesh.q = {r.mx.q[0], r.mx.q[1], r.mx.q[2], r.mx.q[3]};
+                mesh.t = Vector3(r.mx.t[0], r.mx.t[1], r.mx.t[2]);
+                mesh.s = Vector3(r.mx.s[0], r.mx.s[1], r.mx.s[2]);
+                updatePose(t, r.bones, mesh);
+            }
             const ptr comp = live::shieldComponent >= 0 ? r.sc : r.hc;
             t.ent.hasShield = shieldOn && isValidPtr(comp);
             t.ent.shield = t.ent.hasShield ? shieldNumber(r.shRaw) : 0.0;
@@ -193,14 +310,24 @@ void GameState::updateDynamic() {
 }
 
 gsRet GameState::assemble(const FminimalViewInfo& vm) {
+    lastCamPos_ = vm.Location;
     //You are the player closest to the camera (third person puts it about 2 m away). Only that one is you: another
     //player standing right next to the camera (a teammate being revived, an enemy in melee range) must still be drawn.
+    //The pawn with a PlayerController is the one you control. If that is not exactly one player, fall back to proximity.
     const Tracked* me = nullptr;
-    double best = 2 * 100;
-    for (const Tracked& t : dyn_) {
-        if (!t.live || t.ent.type != Object::PLAYER) continue;
-        double d = t.ent.pos.Dist(vm.Location);
-        if (d < best) { best = d; me = &t; }
+    int locals = 0;
+    for (const Tracked& t : dyn_) if (t.live && t.ent.type == Object::PLAYER && t.ent.isLocal) { me = &t; locals++; }
+    if (locals != 1) {
+        me = nullptr;
+        if (locals == 0 && meActor_) { //no controller: you died or are watching someone. You are still who you were.
+            for (const Tracked& t : dyn_) if (t.live && t.ent.type == Object::PLAYER && t.ent.actor == meActor_) me = &t;
+        }
+        double best = 2 * 100;
+        for (const Tracked& t : dyn_) {
+            if (me || !t.live || t.ent.type != Object::PLAYER) continue;
+            double d = t.ent.pos.Dist(vm.Location);
+            if (d < best) { best = d; me = &t; }
+        }
     }
     if (me) lastTeamID = me->ent.teamID;
     meActor_ = me ? me->ent.actor : 0;

@@ -227,6 +227,39 @@ inline void DrawEdgeArrows(const View& v, std::vector<std::pair<const RenderEnti
     }
 }
 
+//The stick figure: dark outline first so it shows on any background, then the colour. A line is drawn only when both of
+//its ends are in front of the camera.
+inline void DrawSkeleton(const View& v, const skeleton::Pose& pose, ImU32 color, float thickness, bool live = true) {
+    if (!live) color = (color & ~IM_COL32_A_MASK) | (110u << IM_COL32_A_SHIFT); //an old pose is drawn fainter
+    Vector2 s[skeleton::JOINT_COUNT];
+    bool ok[skeleton::JOINT_COUNT];
+    for (int k = 0; k < skeleton::JOINT_COUNT; k++) ok[k] = v.project(pose.j[k], s[k]) && std::isfinite(s[k].x + s[k].y);
+    const ImU32 dark = IM_COL32(0, 0, 0, 200);
+    for (int pass = 0; pass < 2; pass++)
+        for (int l = 0; l < skeleton::LINE_COUNT; l++) {
+            const int a = skeleton::LINES[l][0], b = skeleton::LINES[l][1];
+            if (!ok[a] || !ok[b]) continue;
+            if (pass == 0) DrawLine((float)s[a].x, (float)s[a].y, (float)s[b].x, (float)s[b].y, dark, thickness + 2.0f);
+            else DrawLine((float)s[a].x, (float)s[a].y, (float)s[b].x, (float)s[b].y, color, thickness);
+        }
+
+    //The head: a ring around where the skull is, which is a little further up the neck's direction than the head bone
+    const Vector3& head = pose.j[skeleton::HEAD];
+    const Vector3& neck = pose.j[skeleton::NECK2];
+    Vector3 d(head.x - neck.x, head.y - neck.y, head.z - neck.z);
+    double len = std::sqrt(d.x * d.x + d.y * d.y + d.z * d.z);
+    if (!(len > 1e-3) || !std::isfinite(len)) { d = Vector3(0, 0, 1); len = 1; }
+    const double up = 12.0 / len; //the skull's centre is about 12 cm beyond the head bone
+    const Vector3 centre(head.x + d.x * up, head.y + d.y * up, head.z + d.z * up);
+    const Vector3 edge(centre.x + v.right.x * 9.0, centre.y + v.right.y * 9.0, centre.z + v.right.z * 9.0); //a head is about 9 cm in radius
+    Vector2 c, e;
+    if (v.project(centre, c) && v.project(edge, e) && std::isfinite(c.x + c.y + e.x + e.y)) {
+        const float r = std::max(2.0f, (float)std::hypot(e.x - c.x, e.y - c.y));
+        DrawCircleRing((float)c.x, (float)c.y, r, dark, thickness + 2.0f);
+        DrawCircleRing((float)c.x, (float)c.y, r, color, thickness);
+    }
+}
+
 inline void DrawESP(const std::vector<RenderEntity>& entities, FminimalViewInfo vm, int localPlayerTeam) {
     const View v(vm, MakeProjection());
     if (!v.ok) return;
@@ -269,7 +302,8 @@ inline void DrawESP(const std::vector<RenderEntity>& entities, FminimalViewInfo 
             }
 
             //should be rendered from this point on
-            const ImU32 color = mate ? COLOR::mate() : COLOR::enemy();
+            ImU32 color = mate ? COLOR::mate() : COLOR::enemy();
+            if (config::dimHidden && !ent.isVisible) color = COLOR::withAlpha(color, 120); //not drawn by the game right now: behind cover
             Vector3 headPos = ent.pos; headPos.z += 90;
             Vector3 feetPos = ent.pos; feetPos.z -= 90;
             Vector2 sHead, sFeet;
@@ -286,6 +320,8 @@ inline void DrawESP(const std::vector<RenderEntity>& entities, FminimalViewInfo 
             if (style == 1) DrawBoxOutlined(x0, y0, w, h, color, th);
             else if (style == 2) DrawSidesBox(x0, y0, w, h, color, th);
             else DrawCornerBox(x0, y0, w, h, color, th);
+
+            if (config::showSkeleton && ent.pose && dist <= config::skeletonMaxDist) DrawSkeleton(v, *ent.pose, color, th, ent.poseLive);
 
             DrawPlayerBars(x0, y0, w, h, ent); //health, and the shield next to it
 

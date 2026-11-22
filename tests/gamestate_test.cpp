@@ -51,6 +51,30 @@ static void setPos(u64 actor, double x, double y, double z) {
 }
 static void setHp(u64 player, double hp) { put<double>(get<u64>(player + off::HEALTH_COMPONENT) + off::HEALTH_CACHED, hp); }
 
+//A character mesh: its own transform (turned 90 degrees about Z, at the given place) and a list of 97 bone transforms where
+//every bone sits 10 cm above its parent, except bone 8 (a shoulder) which sits 10 cm along the parent's X
+static u64 giveMesh(u64 actor, double x, double y, double z) {
+    u64 mesh = alloc(0xC00);
+    put<u64>(actor + off::MESH, mesh);
+    const double h = 0.70710678118654752;
+    double q[4] = {0, 0, h, h}, t[3] = {x, y, z}, s[3] = {1, 1, 1};
+    std::memcpy((void*)(mesh + off::MESH_TRANSFORM), q, 32);
+    std::memcpy((void*)(mesh + off::MESH_TRANSFORM + 0x20), t, 24);
+    std::memcpy((void*)(mesh + off::MESH_TRANSFORM + 0x40), s, 24);
+    u64 bones = alloc(97 * 0x60);
+    for (int i = 0; i < 97; i++) {
+        double bq[4] = {0, 0, 0, 1}, bt[3] = {0, 0, i == 0 ? 0.0 : 10.0}, bs[3] = {1, 1, 1};
+        if (i == 8) { bt[0] = 10; bt[2] = 0; }
+        std::memcpy((void*)(bones + 0x60 * (u64)i), bq, 32);
+        std::memcpy((void*)(bones + 0x60 * (u64)i + 0x20), bt, 24);
+        std::memcpy((void*)(bones + 0x60 * (u64)i + 0x40), bs, 24);
+    }
+    put<u64>(mesh + off::BONE_ARRAY, bones);
+    put<int>(mesh + off::BONE_ARRAY + 8, 97);
+    put<int>(mesh + off::BONE_ARRAY + 12, 97);
+    return mesh;
+}
+
 static u64 camActor, uworldObj, levelObj, actorArray;
 static std::vector<u64> actorList;
 static void publishActors() {
@@ -171,6 +195,123 @@ int main() {
     bool found = false;
     for (const auto& e : r1.entities) if (e.actor == enemy1) found = e.pos.x == cx + 4100 && e.playerHealth == 20;
     CHECK(found, "the moved player is at his new place with his new health");
+
+    //--- skeleton: a player with a mesh and a 97-bone list gets a stick figure; one without a mesh keeps the box only
+    {
+        giveMesh(enemy1, cx + 4100, cy + 150, cz - 182);
+        auto findPlayer = [&](const gsRet& r, u64 actor) -> const RenderEntity* {
+            for (const auto& e : r.entities) if (e.actor == actor) return &e;
+            return nullptr;
+        };
+        fast.step(); //the first step after the camera moved only learns where the camera is
+        gsRet rs = fast.step();
+        const RenderEntity* e1 = findPlayer(rs, enemy1);
+        const RenderEntity* e2 = findPlayer(rs, mate);
+        CHECK(e1 && e1->pose, "a player with a mesh and 97 bones gets a pose");
+        if (e1 && e1->pose) {
+            const Vector3& head = e1->pose->j[skeleton::HEAD];
+            const Vector3& sh = e1->pose->j[skeleton::SHOULDER_A];
+            CHECK(std::abs(head.x - (cx + 4100)) < 1e-6 && std::abs(head.y - (cy + 150)) < 1e-6 && std::abs(head.z - (cz - 112)) < 1e-6, "head is 70 cm above the mesh");
+            CHECK(std::abs(sh.x - (cx + 4100)) < 1e-6 && std::abs(sh.y - (cy + 160)) < 1e-6 && std::abs(sh.z - (cz - 142)) < 1e-6, "the shoulder follows its parent and the mesh's turn");
+        }
+        CHECK(e2 && !e2->pose, "a player without a mesh has no pose");
+        g_skeletonOn = false;
+        fast.step();
+        gsRet roff = fast.step();
+        const RenderEntity* e1off = findPlayer(roff, enemy1);
+        CHECK(e1off && !e1off->pose, "with the setting off no pose is read");
+        g_skeletonOn = true;
+        put<int>(get<u64>(enemy1 + off::MESH) + off::BONE_ARRAY + 8, 50); //a list of another length is not the skeleton
+        fast.step();
+        gsRet rlen = fast.step();
+        const RenderEntity* e1len = findPlayer(rlen, enemy1);
+        CHECK(e1len && e1len->pose, "a bone list that cannot be read keeps the last whole pose for a moment");
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        fast.step();
+        gsRet rlen2 = fast.step();
+        const RenderEntity* e1len2 = findPlayer(rlen2, enemy1);
+        CHECK(e1len2 && !e1len2->pose, "but not for long: then there is no pose");
+        put<int>(get<u64>(enemy1 + off::MESH) + off::BONE_ARRAY + 8, 97);
+
+        //The game stops animating a player it is not drawing: bones that stop changing are not drawn as a live skeleton
+        fast.step();
+        std::this_thread::sleep_for(std::chrono::milliseconds(400));
+        fast.step();
+        gsRet rfrozen = fast.step();
+        const RenderEntity* e1frozen = findPlayer(rfrozen, enemy1);
+        CHECK(e1frozen && e1frozen->pose && !e1frozen->poseLive, "bones unchanged for a while: the skeleton is kept but marked as not live");
+        const u64 bones = get<u64>(get<u64>(enemy1 + off::MESH) + off::BONE_ARRAY);
+        put<double>(bones + 0x60 * 1 + 0x20 + 8, 3.0); //the pelvis moves: the animation is running again
+        fast.step();
+        gsRet rmoving = fast.step();
+        const RenderEntity* e1moving = findPlayer(rmoving, enemy1);
+        CHECK(e1moving && e1moving->pose && e1moving->poseLive, "and it is live again as soon as the bones change");
+    }
+
+    //--- a frozen player is drawn like the animated players in his stance
+    {
+        auto findPlayer = [&](const gsRet& r, u64 actor) -> const RenderEntity* {
+            for (const auto& e : r.entities) if (e.actor == actor) return &e;
+            return nullptr;
+        };
+        const u64 bones1 = get<u64>(get<u64>(enemy1 + off::MESH) + off::BONE_ARRAY);
+        put<double>(bones1 + 0x60 * 1 + 0x20 + 16, 85.0); //an animated, standing player: the pelvis is high, so this is a standing pose to learn
+        fast.step();
+        fast.step();
+        giveMesh(mate, cx + 2500, cy + 2500, cz - 182);   //a frozen player of the same stance: his own list never changes
+        fast.step();                                      //its list is seen for the first time
+        std::this_thread::sleep_for(std::chrono::milliseconds(400));
+        fast.step();
+        gsRet rm = fast.step();
+        const RenderEntity* m = findPlayer(rm, mate);
+        const RenderEntity* e = findPlayer(rm, enemy1);
+        CHECK(m && m->pose && !m->poseLive, "the frozen player has a pose, drawn as not live");
+        if (m && m->pose && e && e->pose) {
+            const double mh = m->pose->j[skeleton::HEAD].z - m->pose->j[skeleton::PELVIS].z;
+            const double eh = e->pose->j[skeleton::HEAD].z - e->pose->j[skeleton::PELVIS].z;
+            CHECK(std::abs(mh - eh) < 1e-6, "and it is the shape the game animates for that stance, not his own old list");
+            CHECK(std::abs(m->pose->j[skeleton::PELVIS].z - (cz - 182 + 85)) < 1e-6, "placed on him, at his own place");
+        }
+    }
+
+    //--- visibility: the game's clock at the last draw; behind the newest by a while means not drawn right now
+    {
+        auto findPlayer = [&](const gsRet& r, u64 actor) -> const RenderEntity* {
+            for (const auto& e : r.entities) if (e.actor == actor) return &e;
+            return nullptr;
+        };
+        const u64 m1 = get<u64>(enemy1 + off::MESH), m2 = get<u64>(mate + off::MESH);
+        put<float>(m1 + off::RENDER_TIME, 100.0f); put<float>(m1 + off::RENDER_TIME + 4, 100.0f);
+        put<float>(m2 + off::RENDER_TIME, 90.0f);  put<float>(m2 + off::RENDER_TIME + 4, 90.0f);
+        fast.step();
+        gsRet rv = fast.step();
+        const RenderEntity* a = findPlayer(rv, enemy1);
+        const RenderEntity* b = findPlayer(rv, mate);
+        CHECK(a && a->isVisible, "a player drawn at the newest time is visible");
+        CHECK(b && !b->isVisible, "a player last drawn 10 s ago is not");
+        put<float>(m2 + off::RENDER_TIME, 100.0f); put<float>(m2 + off::RENDER_TIME + 4, 100.0f);
+        fast.step();
+        gsRet rv2 = fast.step();
+        const RenderEntity* b2 = findPlayer(rv2, mate);
+        CHECK(b2 && b2->isVisible, "and visible again once he is drawn");
+    }
+
+    //--- the pawn with a PlayerController is you, wherever the camera is
+    {
+        auto findPlayer = [&](const gsRet& r, u64 actor) -> const RenderEntity* {
+            for (const auto& e : r.entities) if (e.actor == actor) return &e;
+            return nullptr;
+        };
+        put<u64>(mate + off::CONTROLLER, enemy1);   //any valid pointer: this pawn has a controller
+        fast.step();
+        gsRet rl = fast.step();
+        CHECK(!findPlayer(rl, mate), "the pawn with a controller is you and is not drawn");
+        CHECK(findPlayer(rl, enemy1), "a player next to nobody else's camera stays drawn");
+        put<u64>(mate + off::CONTROLLER, 0);       //you died: the controller lets go of the pawn, but you are still you
+        fast.step();
+        gsRet rd = fast.step();
+        CHECK(!findPlayer(rd, mate), "without a controller you are still the pawn you were");
+    }
 
     //--- a destroyed actor's memory reused for something else: dropped at once
     put<u64>(arc2, 0x14d123450ULL);

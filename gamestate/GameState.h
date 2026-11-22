@@ -4,12 +4,16 @@
 #include "config.h"
 #include "utils/localUtil.h"
 
+#include <atomic>
 #include <chrono>
 #include <thread>
 #include <unordered_map>
 #include <vector>
 #include "memory/memory.h"
 
+//Set by the drawing thread from the settings, read here: read players' poses only when they will be drawn
+inline std::atomic<bool> g_skeletonOn{true};
+inline std::atomic<int> g_skeletonDist{120}; //m
 
 struct gsRet {
     std::vector<RenderEntity> entities{};
@@ -67,11 +71,35 @@ private:
     ptr camActor_ = 0;
     ptr lastWorld_ = 0;   //UWorld at the last scan: a different one (or none) means a full scan right now
     ptr meActor_ = 0;     //your own pawn at the last step (for the probes)
+    Vector3 lastCamPos_;  //where the camera was at the last step: only players near it get their pose read
     std::unordered_map<ptr, double> shieldSeen_; //highest shield seen per player: the bar's full length when the game keeps no maximum
+    //The game stops animating a player it is not drawing: his bone list then stops changing. Per player: a hash of the
+    //list as last read and when it last differed (a list that has not changed for a while is "frozen"), how fast he
+    //moves, and the last pose that could be read whole (a half-written list is replaced by it for a moment).
+    struct PoseState {
+        bool init = false;
+        uint64_t hash = 0;
+        std::chrono::steady_clock::time_point changed{};
+        bool havePos = false;
+        Vector3 lastPos;
+        std::chrono::steady_clock::time_point lastPosAt{};
+        double speed = 0;                      //cm/s on the ground
+        bool haveGood = false;
+        skeleton::Pose good;                   //mesh space
+        std::chrono::steady_clock::time_point goodAt{};
+    };
+    std::unordered_map<ptr, PoseState> poseSeen_;
+    //What a standing / crouched, idle / moving player looks like, learned from players the game IS animating (you
+    //included). Frozen players are drawn with the one that matches their stance and speed. Index: crouch * 2 + moving.
+    float clockVal_ = -1;                              //the game's clock as the newest render time showed it, and when
+    std::chrono::steady_clock::time_point clockAt_{};
+    skeleton::Pose tmpl_[4];
+    bool haveTmpl_[4] = {false, false, false, false};
     std::chrono::steady_clock::time_point lastScan_{};
     Timing timing_{};
 
     bool scan();            //the whole actor list; false when there is no world yet
+    void updatePose(Tracked& t, const std::vector<uint8_t>& bones, const skeleton::Xform& mesh);
     void updateDynamic();   //position, health, team, dead for players and ARC
     gsRet assemble(const FminimalViewInfo& vm);
     void runLiveProbeIfAsked(const std::vector<RenderEntity>& ents, const FminimalViewInfo& vm); //KWINHELPER_PROBE=shield|inventory

@@ -70,6 +70,8 @@ int main() {
         RenderBegin();
 
         g_trackerHz = (int)config::trackerHz; //the tracker thread reads the update rate from here
+        g_skeletonOn = config::showSkeleton && config::showPlayers && config::espEnabled; //poses are read only when they will be drawn
+        g_skeletonDist = (int)config::skeletonMaxDist;
 
         //Where the game's picture is on screen (differs from the screen with gamescope / a stretched resolution)
         GameViewSettings gvs;

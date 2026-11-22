@@ -34,6 +34,9 @@ namespace config {
     inline double boxColor = 0;            //enemy colour: 0 red, 1 white, 2 yellow, 3 blue, 4 green, 5 violet
     inline float boxThickness = 1.5f;      //px
     inline bool showTurrets = true;        //ARC turrets (separate from the other ARC)
+    inline bool dimHidden = true;          //players the game is not drawing (behind walls, off screen) get a fainter box
+    inline bool showSkeleton = true;       //a stick figure on players (the box stays; players without a readable pose get the box only)
+    inline double skeletonMaxDist = 120;   //m, further players only get the box: the pose is read for nearer ones only
     inline float overlayOpacity = 1.0f;    //everything the overlay draws (menu excluded) is multiplied by this
     inline double trackerHz = 120;         //how often players and ARC are read (30 to 240)
     inline double listMode = 1;            //player list at the bottom: 0 off, 1 always, 2 only while the menu is open
@@ -131,7 +134,11 @@ namespace off {
     inline constexpr uintptr_t TEAM_ID = 0x802; //TeamId
 
     //find under // Class /Script/Engine.Character, "namespace Character"
-    inline constexpr uintptr_t MESH = 0x448;
+    inline constexpr uintptr_t MESH = 0x448; //verified live (v1029): points at "CharacterMesh0"
+    inline constexpr uintptr_t MESH_TRANSFORM = 0x390; //mesh ComponentToWorld: rotation (4 doubles), position at +0x20, scale at +0x40
+    inline constexpr uintptr_t RENDER_TIME = 0x500;    //mesh: two floats, LastRenderTime and LastRenderTimeOnScreen (the game's clock when it last drew him; seen live)
+    inline constexpr uintptr_t CONTROLLER = 0x3F8;     //pawn -> its PlayerController: set only on the pawn you control
+    inline constexpr uintptr_t BONE_ARRAY = 0xBE8;     //mesh -> TArray of 97 bone transforms (0x60 bytes each), each relative to its parent bone
 
     //im just guessing for this one
     // find under "namespace EmbarkCharacterMovementComponentBase" OR "namespace CharacterMovementComponent"

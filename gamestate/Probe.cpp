@@ -4,8 +4,10 @@
 #include "config.h"
 #include "utils/localUtil.h"
 #include "utils/names.h"
+#include "utils/skeleton.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -375,6 +377,289 @@ void shieldProbe(ptr pawn, FILE* out) {
     std::fflush(out);
 }
 
+//Mesh: checks that off::MESH really points at the skeletal mesh of your pawn. Its position should sit next to the
+//pawn's root position (within about 2 m); a wrong pointer shows up as a far-off or missing position.
+void meshProbe(ptr pawn, FILE* out) {
+    static ptr lastPawn = 0;
+    static int cycle = 0;
+    if (pawn != lastPawn) { lastPawn = pawn; cycle = 0; }
+    if (cycle++ % 10) return; //about every 20 s while the same pawn is alive
+
+    const ptr mesh = ReadMemory<ptr>(pawn + off::MESH);
+    std::fprintf(out, "\n=== MESH PROBE: your pawn 0x%lx (%s) ===\n", (unsigned long)pawn, nm(pawn).c_str());
+    std::fprintf(out, "  pawn+0x%lx (mesh pointer) = 0x%lx\n", (unsigned long)off::MESH, (unsigned long)mesh);
+    if (!isValidPtr(mesh)) { std::fprintf(out, "  -> not a pointer: off::MESH is wrong for this build\n"); std::fflush(out); return; }
+    std::fprintf(out, "  mesh has a vtable inside the game image: %s\n", isObject(mesh) ? "yes" : "NO");
+    std::fprintf(out, "  mesh name: %s\n", nm(mesh).c_str());
+
+    const ptr root = ReadMemory<ptr>(pawn + off::ROOT_COMPONENT_PTR);
+    auto meshPos = readBlock(mesh + off::POS_PTR, 24);
+    double m[3] = {0, 0, 0};
+    std::memcpy(m, meshPos.data(), 24);
+    std::fprintf(out, "  mesh position (mesh+0x%lx): %.1f %.1f %.1f\n", (unsigned long)off::POS_PTR, m[0], m[1], m[2]);
+    if (!isValidPtr(root)) { std::fprintf(out, "  root component not readable, cannot compare\n"); std::fflush(out); return; }
+    auto rootBlk = readBlock(root + off::POS_PTR, 24);
+    double r[3] = {0, 0, 0};
+    std::memcpy(r, rootBlk.data(), 24);
+    const double d = std::sqrt((m[0] - r[0]) * (m[0] - r[0]) + (m[1] - r[1]) * (m[1] - r[1]) + (m[2] - r[2]) * (m[2] - r[2]));
+    std::fprintf(out, "  root position: %.1f %.1f %.1f   distance mesh-root: %.1f units (%.2f m)\n", r[0], r[1], r[2], d, d / 100.0);
+    std::fprintf(out, "  -> %s\n", d < 300.0 ? "PLAUSIBLE: the mesh is next to the pawn" : "SUSPECT: the mesh is far from the pawn, off::MESH is probably wrong");
+    std::fflush(out);
+}
+
+//Bones: looks inside the skeletal mesh for lists (TArrays) of transforms: a unit quaternion at the start of each
+//record, then a position. The record size is tried as 0x30 (float), 0x50 and 0x60 (double). The height (z) of
+//every bone is printed too: the head is the highest, the feet the lowest, which labels the bone numbers.
+void bonesProbeOne(ptr pawn, const char* who, FILE* out) {
+    const ptr mesh = ReadMemory<ptr>(pawn + off::MESH);
+    std::fprintf(out, "\n=== BONES PROBE: %s (pawn 0x%lx, mesh 0x%lx) ===\n", who, (unsigned long)pawn, (unsigned long)mesh);
+    if (!isObject(mesh)) { std::fprintf(out, "  mesh pointer is not an object\n"); std::fflush(out); return; }
+    auto blk = readBlock(mesh, 0x1800);
+    int found = 0;
+    uint32_t boneCount = 0;
+    for (size_t o = 0x300; o + 16 <= blk.size() && found < 10; o += 8) {
+        const uint64_t data = q64(blk, o);
+        uint32_t num = 0, mx = 0;
+        std::memcpy(&num, &blk[o + 8], 4);
+        std::memcpy(&mx, &blk[o + 12], 4);
+        if (!ptrLike(data) || num < 10 || num > 300 || mx < num || mx > 1000) continue;
+        bool matched = false;
+        for (int stride : {0x60, 0x50, 0x30}) {
+            const bool isDouble = stride != 0x30;
+            auto el = readBlock((ptr)data, (size_t)stride * num);
+            auto quatNorm = [&](uint32_t i) {
+                double q[4];
+                if (isDouble) std::memcpy(q, &el[(size_t)i * stride], 32);
+                else { float f[4]; std::memcpy(f, &el[(size_t)i * stride], 16); for (int k = 0; k < 4; k++) q[k] = f[k]; }
+                return std::sqrt(q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3]);
+            };
+            auto pos = [&](uint32_t i, double t[3]) {
+                if (isDouble) std::memcpy(t, &el[(size_t)i * stride + 0x20], 24);
+                else { float f[3]; std::memcpy(f, &el[(size_t)i * stride + 0x10], 12); for (int k = 0; k < 3; k++) t[k] = f[k]; }
+            };
+            uint32_t good = 0; //a few unused bones may hold zeros: 9 out of 10 good is enough
+            for (uint32_t i = 0; i < num; i++) {
+                const double n = quatNorm(i);
+                double t[3];
+                pos(i, t);
+                if (std::isfinite(n) && std::fabs(n - 1.0) < 0.02 && std::isfinite(t[2]) && std::fabs(t[0]) < 1e4 && std::fabs(t[1]) < 1e4 && std::fabs(t[2]) < 1e4) good++;
+            }
+            if (good * 10 < num * 9) continue;
+            std::fprintf(out, "  mesh+0x%zx  TArray num %u max %u  record 0x%x (%s)  data 0x%lx\n", o, num, mx, stride, isDouble ? "double" : "float", (unsigned long)data);
+            for (uint32_t i = 0; i < std::min<uint32_t>(num, 3); i++) { double t[3]; pos(i, t); std::fprintf(out, "    bone[%u] position %.1f %.1f %.1f\n", i, t[0], t[1], t[2]); }
+            std::fprintf(out, "    height of each bone (index:z):");
+            for (uint32_t i = 0; i < num; i++) { double t[3]; pos(i, t); std::fprintf(out, " %u:%.0f", i, t[2]); }
+            std::fprintf(out, "\n");
+            if (stride == 0x60 && num == (uint32_t)skeleton::BONES) { //the stick figure the overlay would draw, to check the bone numbers
+                skeleton::Xform local[skeleton::BONES], comp[skeleton::BONES];
+                skeleton::decode(el.data(), local);
+                if (skeleton::chain(local, comp)) {
+                    static const struct { const char* name; int bone; } show[] = {{"pelvis", 1}, {"head", 7}, {"upper arm A", 9}, {"hand A", 11}, {"upper arm B", 43}, {"hand B", 45}, {"ankle A", 67}, {"ankle B", 71}};
+                    std::fprintf(out, "    stick figure, cm from the mesh origin (x y z):");
+                    for (const auto& s : show) std::fprintf(out, "  %s(%.0f %.0f %.0f)", s.name, comp[s.bone].t.x, comp[s.bone].t.y, comp[s.bone].t.z);
+                    std::fprintf(out, "\n");
+                }
+            }
+            found++;
+            matched = true;
+            if (!boneCount) boneCount = num;
+            break;
+        }
+        if (!matched && num >= 90 && num <= 110) { //same length as the bone list but not a transform list: a sibling worth a look
+            auto raw = readBlock((ptr)data, 64);
+            std::fprintf(out, "  mesh+0x%zx  TArray num %u max %u  data 0x%lx  (not a transform list) first 8 doubles:", o, num, mx, (unsigned long)data);
+            for (int k = 0; k < 8; k++) { double d; std::memcpy(&d, &raw[(size_t)k * 8], 8); std::fprintf(out, " %.3g", d); }
+            std::fprintf(out, "\n");
+        }
+    }
+    //The transforms above are relative to each bone's parent. The skeleton asset keeps {name, parent index} records of
+    //12 bytes; the first parent is -1 and every other parent comes before its child. Looking for that pattern in every
+    //object the mesh points to finds the parent of each bone, which is what turns these into mesh-relative positions.
+    if (boneCount) {
+        std::set<uint64_t> seen;
+        int parentLists = 0;
+        //Records of 12 to 32 bytes with an int32 parent somewhere inside: first parent -1, every other parent before its child
+        auto searchObject = [&](ptr obj) {
+            auto ab = readBlock(obj, 0x1000);
+            for (size_t ao = 0x28; ao + 16 <= ab.size() && parentLists < 2; ao += 8) {
+                const uint64_t d = q64(ab, ao);
+                uint32_t n2 = 0, m2 = 0;
+                std::memcpy(&n2, &ab[ao + 8], 4);
+                std::memcpy(&m2, &ab[ao + 12], 4);
+                if (!ptrLike(d) || n2 != boneCount || m2 < n2 || m2 > 1000) continue;
+                for (int stride : {12, 16, 20, 24, 32}) {
+                    auto rec = readBlock((ptr)d, (size_t)stride * n2);
+                    for (int poff = 0; poff + 4 <= stride; poff += 4) {
+                        int32_t p = 0;
+                        std::memcpy(&p, &rec[(size_t)poff], 4);
+                        bool okp = p == -1;
+                        for (uint32_t i = 1; i < n2 && okp; i++) { std::memcpy(&p, &rec[(size_t)i * stride + poff], 4); okp = p >= 0 && p < (int32_t)i; }
+                        if (!okp) continue;
+                        std::fprintf(out, "  PARENTS: %s (0x%lx) +0x%zx  %u records of %d bytes, parent at +%d\n    parent of each bone (bone:parent):", nm(obj).c_str(), (unsigned long)obj, ao, n2, stride, poff);
+                        for (uint32_t i = 0; i < n2; i++) { std::memcpy(&p, &rec[(size_t)i * stride + poff], 4); std::fprintf(out, " %u:%d", i, (int)p); }
+                        std::fprintf(out, "\n");
+                        parentLists++;
+                        return;
+                    }
+                }
+            }
+        };
+        std::vector<std::pair<size_t, ptr>> level1; //objects the mesh points to
+        for (size_t po = 0x300; po + 8 <= blk.size(); po += 8) {
+            const uint64_t ap = q64(blk, po);
+            if (ptrLike(ap) && (ptr)ap != mesh && isObject((ptr)ap) && seen.insert(ap).second) level1.push_back({po, (ptr)ap});
+        }
+        std::fprintf(out, "  the mesh points to %zu objects; first ones:", level1.size());
+        for (size_t i = 0; i < level1.size() && i < 24; i++) std::fprintf(out, " +0x%zx=%s", level1[i].first, nm(level1[i].second).c_str());
+        std::fprintf(out, "\n");
+        for (const auto& l : level1) { if (parentLists >= 2) break; searchObject(l.second); }
+        int scanned = 0;
+        for (const auto& l : level1) { //one level deeper: the skeleton asset may sit behind another object
+            if (parentLists >= 2 || scanned >= 800) break;
+            auto ob = readBlock(l.second, 0x800);
+            for (size_t k = 0x28; k + 8 <= ob.size() && parentLists < 2 && scanned < 800; k += 8) {
+                const uint64_t v = q64(ob, k);
+                if (!ptrLike(v) || !isObject((ptr)v) || !seen.insert(v).second) continue;
+                scanned++;
+                searchObject((ptr)v);
+            }
+        }
+        if (!parentLists) std::fprintf(out, "  no parent list found (searched %zu objects and %d behind them)\n", level1.size(), scanned);
+    }
+    if (!found) std::fprintf(out, "  no list of bone transforms found in the first 0x1800 bytes of the mesh\n");
+    std::fflush(out);
+}
+
+//Stance: for you and the nearest players, once per call: how far the mesh sits below the capsule (changes when a player
+//crouches or goes prone), how fast he moves, the pelvis height in his bone list, and whether the game is still
+//animating him (his bone list changed since the last call). Stand, crouch, go prone, walk, run: a few seconds each.
+void stanceProbeOne(ptr pawn, const char* who, FILE* out) {
+    struct Last { Vector3 pos; std::chrono::steady_clock::time_point t; uint64_t hash = 0; bool have = false; };
+    static std::unordered_map<ptr, Last> last;
+    const ptr root = ReadMemory<ptr>(pawn + off::ROOT_COMPONENT_PTR), mesh = ReadMemory<ptr>(pawn + off::MESH);
+    if (!isValidPtr(root) || !isValidPtr(mesh)) { std::fprintf(out, "  %-14s root or mesh not readable\n", who); return; }
+    const Vector3 rp(ReadMemory<double>(root + off::POS_PTR), ReadMemory<double>(root + off::POS_PTR + 8), ReadMemory<double>(root + off::POS_PTR + 16));
+    const Vector3 mp(ReadMemory<double>(mesh + off::POS_PTR), ReadMemory<double>(mesh + off::POS_PTR + 8), ReadMemory<double>(mesh + off::POS_PTR + 16));
+    double q[4];
+    auto qb = readBlock(mesh + off::MESH_TRANSFORM, 32);
+    std::memcpy(q, qb.data(), 32);
+    const double yaw = std::atan2(2 * (q[3] * q[2] + q[0] * q[1]), 1 - 2 * (q[1] * q[1] + q[2] * q[2])) * 180.0 / 3.14159265358979;
+    const double pitchSin = 2 * (q[3] * q[1] - q[2] * q[0]); //how far the mesh is tipped forward or back (prone / diving)
+
+    const ptr bonesPtr = ReadMemory<ptr>(mesh + off::BONE_ARRAY);
+    uint64_t hash = 0;
+    double pelvisZ = 0;
+    if (isValidPtr(bonesPtr)) {
+        auto b = readBlock(bonesPtr, (size_t)skeleton::BONES * skeleton::RECORD);
+        hash = 1469598103934665603ULL;
+        for (uint8_t c : b) { hash ^= c; hash *= 1099511628211ULL; }
+        std::memcpy(&pelvisZ, &b[(size_t)skeleton::RECORD + 0x20 + 16], 8);
+    }
+    const auto now = std::chrono::steady_clock::now();
+    Last& l = last[pawn];
+    double speed = 0;
+    if (l.have) { const double dt = std::chrono::duration<double>(now - l.t).count(); if (dt > 0.2) speed = std::sqrt((rp.x - l.pos.x) * (rp.x - l.pos.x) + (rp.y - l.pos.y) * (rp.y - l.pos.y)) / dt; }
+    const bool animated = l.have && l.hash != hash;
+    std::fprintf(out, "  %-14s mesh below capsule %6.1f cm | speed %5.0f cm/s | pelvis height %5.1f | mesh tilt %5.2f | bones %s\n", who, rp.z - mp.z, speed, pelvisZ, pitchSin,
+                 !l.have ? "(first look)" : animated ? "ANIMATED" : "FROZEN");
+    (void)yaw;
+    l.pos = rp; l.t = now; l.hash = hash; l.have = true;
+}
+
+void stanceProbe(ptr localPawn, const std::vector<RenderEntity>& ents, const FminimalViewInfo& vm, FILE* out) {
+    std::fprintf(out, "\n=== STANCE PROBE (stand, crouch, go prone, walk, run: a few seconds each) ===\n");
+    if (localPawn) stanceProbeOne(localPawn, "you", out);
+    std::vector<std::pair<double, ptr>> near;
+    for (const RenderEntity& e : ents) if (e.type == Object::PLAYER && !e.isDead) near.push_back({e.pos.Dist(vm.Location), e.actor});
+    std::sort(near.begin(), near.end());
+    for (size_t i = 0; i < near.size() && i < 5; i++) { char who[32]; std::snprintf(who, sizeof who, "%.0f m away", near[i].first / 100.0); stanceProbeOne(near[i].second, who, out); }
+    std::fflush(out);
+}
+
+//Flags: every byte of your pawn, its components, your mesh and your animation objects is watched; one that flips between
+//0 and 1 (crouching, going prone, sprinting, aiming) is printed with the time. Do those things a few seconds apart.
+void flagProbe(ptr pawn, FILE* out) {
+    struct B { uint8_t last; int flips; };
+    static std::unordered_map<uint64_t, B> st;
+    static ptr lastPawn = 0;
+    static std::chrono::steady_clock::time_point t0;
+    const auto now = std::chrono::steady_clock::now();
+    if (pawn != lastPawn) { st.clear(); lastPawn = pawn; t0 = now; std::fprintf(out, "\n=== FLAG PROBE: watching 0/1 bytes of your pawn 0x%lx. Crouch, go prone, sprint, aim: a few seconds apart ===\n", (unsigned long)pawn); }
+    const double t = std::chrono::duration<double>(now - t0).count();
+    auto scan = [&](uint64_t tag, const char* label, ptr obj, size_t n) {
+        if (!isValidPtr(obj)) return;
+        auto blk = readBlock(obj, n);
+        for (size_t o = 0x28; o < n; o++) {
+            const uint64_t key = (tag << 32) | o;
+            auto it = st.find(key);
+            if (it == st.end()) { st[key] = {blk[o], 0}; continue; }
+            B& b = it->second;
+            if (blk[o] == b.last) continue;
+            const uint8_t from = b.last;
+            b.last = blk[o];
+            b.flips++;
+            if (from <= 1 && blk[o] <= 1 && b.flips <= 4) std::fprintf(out, "  [%6.1f s] %s+0x%zx  %u -> %u\n", t, label, o, from, blk[o]);
+        }
+    };
+    scan(1, "pawn", pawn, 0x1400);
+    char lab[40];
+    for (const Comp& c : componentsOf(pawn)) { std::snprintf(lab, sizeof lab, "pawn+0x%x", c.pawnOff); scan(0x100 + (uint64_t)c.pawnOff, lab, c.obj, 0x600); }
+    const ptr mesh = ReadMemory<ptr>(pawn + off::MESH);
+    if (isValidPtr(mesh)) {
+        scan(2, "mesh", mesh, 0x1000);
+        scan(0x10BB0, "anim(mesh+0xbb0)", ReadMemory<ptr>(mesh + 0xBB0), 0x800);
+        scan(0x10BB8, "anim(mesh+0xbb8)", ReadMemory<ptr>(mesh + 0xBB8), 0x800);
+    }
+    std::fflush(out);
+}
+
+//Render time: a number in your mesh that grows with the game clock is probably "when this mesh was last drawn". The same
+//place in other players' meshes then shows how long ago they were drawn: near 0 means on screen, growing means hidden.
+void renderTimeProbe(ptr localPawn, const std::vector<RenderEntity>& ents, const FminimalViewInfo& vm, FILE* out) {
+    static std::unordered_map<uint32_t, double> prev;
+    static std::set<uint32_t> good;
+    static ptr lastPawn = 0;
+    if (localPawn != lastPawn) { prev.clear(); good.clear(); lastPawn = localPawn; std::fprintf(out, "\n=== RENDER TIME PROBE: looking for numbers in your mesh that follow the game clock ===\n"); }
+    const ptr mesh = ReadMemory<ptr>(localPawn + off::MESH);
+    if (!isValidPtr(mesh)) return;
+    auto valueAt = [](const std::vector<uint8_t>& b, uint32_t key) {
+        const size_t o = key >> 1;
+        double v;
+        if (key & 1) { float f; std::memcpy(&f, &b[o], 4); v = f; } else std::memcpy(&v, &b[o], 8);
+        return v;
+    };
+    auto mine = readBlock(mesh, 0x1000);
+    for (size_t o = 0x300; o + 8 <= mine.size(); o += 4)
+        for (int isFloat = 0; isFloat < 2; isFloat++) {
+            if (!isFloat && (o & 7)) continue;
+            const uint32_t key = (uint32_t)(o << 1) | (uint32_t)isFloat;
+            const double v = valueAt(mine, key);
+            if (!std::isfinite(v) || v < 1.0 || v > 1e7) continue;
+            auto it = prev.find(key);
+            if (it != prev.end() && v - it->second > 1.0 && v - it->second < 4.0) good.insert(key); //grew by about the 2 s between calls
+            prev[key] = v;
+        }
+    if (good.empty()) { std::fprintf(out, "  (warming up: needs two looks)\n"); std::fflush(out); return; }
+
+    struct Other { double dist; std::vector<uint8_t> blk; };
+    std::vector<std::pair<double, ptr>> near;
+    for (const RenderEntity& e : ents) if (e.type == Object::PLAYER && !e.isDead) near.push_back({e.pos.Dist(vm.Location), e.actor});
+    std::sort(near.begin(), near.end());
+    std::vector<Other> others;
+    for (size_t i = 0; i < near.size() && i < 4; i++) {
+        const ptr m = ReadMemory<ptr>(near[i].second + off::MESH);
+        if (isValidPtr(m)) others.push_back({near[i].first / 100.0, readBlock(m, 0x1000)});
+    }
+    int shown = 0;
+    for (uint32_t key : good) {
+        if (shown++ >= 8) break;
+        std::fprintf(out, "  mesh+0x%x %s  you %.2f", key >> 1, (key & 1) ? "float " : "double", valueAt(mine, key));
+        for (const Other& ot : others) std::fprintf(out, " | %.0f m: %.2f (%.1f s behind)", ot.dist, valueAt(ot.blk, key), valueAt(mine, key) - valueAt(ot.blk, key));
+        std::fprintf(out, "\n");
+    }
+    std::fflush(out);
+}
+
 //Inventory: find the lists (TArrays) of item data assets (DA_*) inside the pawn's components. For each candidate the
 //record size (stride) and where the asset pointer sits in a record are worked out from the names found.
 void inventoryProbeOne(ptr pawn, const char* who, FILE* out) {
@@ -425,12 +710,58 @@ void inventoryProbeOne(ptr pawn, const char* who, FILE* out) {
 
 } // namespace
 
+//Team and local player: for you and the nearest players, the team byte, the pointers that should only be set on the pawn you
+//control (class names), and the PlayerState with the offsets in it that hold the same number as the team byte.
+void teamProbeOne(ptr pawn, const char* who, FILE* out) {
+    const int team = ReadMemory<uint8_t>(pawn + off::TEAM_ID);
+    auto nameAt = [&](int o) {
+        const ptr p = ReadMemory<ptr>(pawn + o);
+        if (!p) return std::string("null");
+        if (!isValidPtr(p)) return std::string("junk");
+        const std::string n = names::name(p);
+        return n.empty() ? std::string("?") : n;
+    };
+    std::fprintf(out, "  %-14s team %3d | +3f8 %-28s +400 %-28s +878 %s\n", who, team, nameAt(0x3F8).c_str(), nameAt(0x400).c_str(), nameAt(0x878).c_str());
+    const ptr state = ReadMemory<ptr>(pawn + 0x3E8);
+    if (!isValidPtr(state)) return;
+    auto b = readBlock(state + 0x2C0, 0x400);
+    std::string hits;
+    int n = 0;
+    for (size_t i = 0; i < b.size() && n < 10; i++) if (b[i] == team && team != 0) { char t[32]; std::snprintf(t, sizeof t, " +%zx", (size_t)0x2C0 + i); hits += t; n++; }
+    std::fprintf(out, "      PlayerState %s: bytes equal to the team at:%s\n", names::name(state).c_str(), hits.empty() ? " (none)" : hits.c_str());
+}
+
+void teamProbe(ptr localPawn, const std::vector<RenderEntity>& ents, const FminimalViewInfo& vm, FILE* out) {
+    std::fprintf(out, "\n=== TEAM PROBE (stand near a teammate or another player if you can) ===\n");
+    if (localPawn) teamProbeOne(localPawn, "you (guess)", out);
+    std::vector<std::pair<double, ptr>> near;
+    for (const RenderEntity& e : ents) if (e.type == Object::PLAYER) near.push_back({e.pos.Dist(vm.Location), e.actor});
+    std::sort(near.begin(), near.end());
+    for (size_t i = 0; i < near.size() && i < 6; i++) { char who[32]; std::snprintf(who, sizeof who, "%.0f m away", near[i].first / 100.0); teamProbeOne(near[i].second, who, out); }
+    std::fflush(out);
+}
+
 void runLiveProbe(const std::string& mode, ptr localPawn, const std::vector<RenderEntity>& ents, const FminimalViewInfo& vm, FILE* out) {
-    //mode: "shield", "inventory" or both, e.g. "shield,inventory": one raid can find everything
+    //mode: "shield", "inventory", "mesh" or several, e.g. "shield,inventory": one raid can find everything
+    if (mode.find("mesh") != std::string::npos && localPawn) meshProbe(localPawn, out);
     if (mode.find("shield") != std::string::npos) {
         if (!localPawn) { std::fprintf(out, "[probe shield] your own player was not found (stand still, third person, in a raid)\n"); std::fflush(out); }
         else shieldProbe(localPawn, out);
     }
+    if (mode.find("bones") != std::string::npos && localPawn) {
+        static int boneRound = 0;
+        if (boneRound++ % 5 == 0) { //every 10 s; yours first, then the nearest other player to confirm the same offset
+            bonesProbeOne(localPawn, "you", out);
+            std::vector<std::pair<double, ptr>> near;
+            for (const RenderEntity& e : ents) if (e.type == Object::PLAYER && !e.isDead) near.push_back({e.pos.Dist(vm.Location), e.actor});
+            std::sort(near.begin(), near.end());
+            if (!near.empty()) { char who[48]; std::snprintf(who, sizeof who, "player %.0f m away", near[0].first / 100.0); bonesProbeOne(near[0].second, who, out); }
+        }
+    }
+    if (mode.find("flags") != std::string::npos && localPawn) flagProbe(localPawn, out);
+    if (mode.find("rendertime") != std::string::npos && localPawn) renderTimeProbe(localPawn, ents, vm, out);
+    if (mode.find("stance") != std::string::npos) stanceProbe(localPawn, ents, vm, out);
+    if (mode.find("team") != std::string::npos) teamProbe(localPawn, ents, vm, out);
     if (mode.find("inventory") != std::string::npos) {
         static int round = 0;
         if (round++ % 4) return; //every 8 s: the report is long

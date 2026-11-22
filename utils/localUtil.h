@@ -6,11 +6,13 @@
 #include <cstdint>
 #include <deque>
 #include <fstream>
+#include <memory>
 #include <string>
 
 #include "config.h"
 #include "../memory/memory.h"
 #include "gameUtil.h"
+#include "skeleton.h"
 
 inline bool isValidPtr(ptr addr) {
     if (addr < 0x10000 || addr > 0x800000000000) return false;
@@ -43,12 +45,15 @@ struct RenderEntity {
     ptr vt;
     enum Object type = Object::NONE; //vt enum
     bool isDead = false; //Is dead, may not be accurate until "filterEntities(...)"
-    bool isVisible = true; //Only for players
+    bool isVisible = true; //Only for players: the game drew him a moment ago (on screen, not behind cover)
+    bool isLocal = false;  //Only for players: the pawn you control (it has a PlayerController)
     int teamID = -1; //some random value
     std::string label;   //name shown on screen ("Tick", "Trash can", "Ferro", a player name); filled by labeler::fill
     std::string sub;     //second line: the guns a player carries
     std::string account; //players: the account id as hex text (stable between games), "" when unknown
     bool isTurret = false; //ARC: a turret
+    std::shared_ptr<const skeleton::Pose> pose; //players: the stick figure in world space, null when it could not be read
+    bool poseLive = true; //false: the game has stopped animating this player (not drawn / out of range), so the pose is old
 
     void Print() {
         pos.Print();

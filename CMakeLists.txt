@@ -102,6 +102,7 @@ if(KWINHELPER_TESTS)
     kwinhelper_test(draw_test)
     kwinhelper_test(settings_test)
     kwinhelper_test(offsets_test)
+    kwinhelper_test(skeleton_test)
     kwinhelper_test(gamescope_test utils/gamescope.cpp)
     kwinhelper_test(gamestate_test gamestate/GameState.cpp gamestate/Fast.cpp gamestate/Tracker.cpp gamestate/Probe.cpp utils/gamescope.cpp
             utils/names.cpp utils/labels.cpp utils/labeler.cpp memory/memory.cpp)

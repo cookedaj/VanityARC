@@ -140,6 +140,29 @@ int main() {
         CHECK(usedUp == unknown, "and it is gone when the shield is used up (same as when it cannot be read)");
     }
 
+    //---- skeleton: drawn on a player with a pose, absent without one, off with the setting, and only inside its range
+    {
+        std::vector<RenderEntity> sk = {ent(Object::PLAYER, 3000, 200, 0)};
+        auto pose = std::make_shared<skeleton::Pose>();
+        for (int k = 0; k < skeleton::JOINT_COUNT; k++) pose->j[k] = Vector3(3000, 200 + k * 3, -80 + k * 7);
+        sk[0].pose = pose;
+        config::showSkeleton = true; config::skeletonMaxDist = 120;
+        const int with = draw([&] { DrawESP(sk, cam, 3); });
+        config::showSkeleton = false;
+        const int off = draw([&] { DrawESP(sk, cam, 3); });
+        config::showSkeleton = true;
+        std::vector<RenderEntity> bare = {ent(Object::PLAYER, 3000, 200, 0)};
+        const int noPose = draw([&] { DrawESP(bare, cam, 3); });
+        config::skeletonMaxDist = 20;
+        const int tooFar = draw([&] { DrawESP(sk, cam, 3); });
+        config::skeletonMaxDist = 120;
+        CHECK(with > off, "a skeleton is drawn when the player has a pose");
+        CHECK(off == noPose && noPose == tooFar, "no pose, the setting off, or out of range: the box alone");
+        pose->j[3].x = std::nan("");
+        draw([&] { DrawESP(sk, cam, 3); });
+        CHECK(g_finite, "a pose with a missing number never produces a broken line");
+    }
+
     //---- overlay opacity scales everything the ESP draws
     {
         config::overlayOpacity = 0.5f;

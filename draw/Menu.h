@@ -155,6 +155,10 @@ inline void PageEsp() {
     Choice("Box colour", &config::boxColor, {"Red", "White", "Yellow", "Blue", "Green", "Violet"});
     Switch("Monochrome (white and grey)", &config::monochrome);
     Slider("Line thickness", &config::boxThickness, 1.0f, 4.0f, "%.1f px");
+    Section("SKELETON");
+    Switch("Skeleton on players", &config::showSkeleton);
+    Switch("Dim players behind cover", &config::dimHidden);
+    SliderD("Skeleton range", &config::skeletonMaxDist, 20, 300, "%.0f m");
     Section("DISTANCE");
     SliderD("Players range", &config::maxPlayerDist, 50, 800, "%.0f m");
     SliderD("ARC range", &config::maxArcDist, 20, 500, "%.0f m");
