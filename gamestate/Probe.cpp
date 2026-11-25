@@ -94,7 +94,7 @@ void diffScan(FILE* out, const char* title, const std::vector<ptr>& actors, int 
             if (v) vals[i][v]++;
         }
     }
-    struct Row { int off; size_t distinct; int covered; std::vector<std::pair<uint64_t, int>> top; };
+    struct Row { int off; size_t distinct; int covered; std::vector<std::pair<uint64_t, int>> top; bool named = false; };
     std::vector<Row> rows;
     for (size_t i = 0; i < nOff; i++) {
         int covered = 0;
@@ -104,11 +104,12 @@ void diffScan(FILE* out, const char* title, const std::vector<ptr>& actors, int 
         r.top.assign(vals[i].begin(), vals[i].end());
         std::sort(r.top.begin(), r.top.end(), [](const auto& a, const auto& b) { return a.second > b.second; });
         if (r.top.size() > 4) r.top.resize(4);
+        //Rows whose values have readable object names are the interesting ones: shown first. Read once here so the
+        //sort below never touches game memory
+        r.named = !nm((ptr)r.top[0].first).empty();
         rows.push_back(r);
     }
-    //Rows whose values have readable object names are the interesting ones: show them first
-    auto named = [](const Row& r) { return !nm((ptr)r.top[0].first).empty(); };
-    std::stable_sort(rows.begin(), rows.end(), [&](const Row& a, const Row& b) { return named(a) > named(b); });
+    std::stable_sort(rows.begin(), rows.end(), [](const Row& a, const Row& b) { return a.named > b.named; });
     std::fprintf(out, "%s: %zu instances, fields with 2..48 distinct values (+offset, distinct, set in, top values)\n", title, actors.size());
     for (size_t i = 0; i < rows.size() && i < maxRows; i++) {
         std::fprintf(out, "  +0x%x  distinct %2zu  set %3d/%zu  top:", rows[i].off, rows[i].distinct, rows[i].covered, actors.size());
