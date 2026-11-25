@@ -152,7 +152,8 @@ int main() {
     setCamera(100000, 200000, 30000, -5, 90, 70.0f);
     const double cx = 100000, cy = 200000, cz = 30000;
 
-    u64 me = makePlayer(cx + 80, cy + 120, cz - 90, 3, 100);       //about 1.4 m from the camera: that is you
+    u64 me = makePlayer(cx + 80, cy + 120, cz - 90, 3, 100);       //about 1.7 m from the camera, listed first, but not the nearest
+    u64 closer = makePlayer(cx + 40, cy + 50, cz - 60, 3, 100);    //about 0.9 m, listed after 'me': the nearest one is you, not the first
     u64 enemy1 = makePlayer(cx + 4000, cy + 100, cz - 90, 7, 80);
     u64 enemy2 = makePlayer(cx - 9000, cy + 3000, cz - 90, 9, 42.5);
     u64 corpse = makePlayer(cx + 1500, cy - 2500, cz - 90, 7, 0);
@@ -167,7 +168,7 @@ int main() {
     std::vector<u64> containers;
     for (int i = 0; i < 25; i++) containers.push_back(makeActor(vtabels::SEARCH, cx + 500 + 700 * i, cy - 3000 + 90 * i, cz - 100));
 
-    actorList = {me, enemy1, enemy2, corpse, mate, arc1, arc2, noRoot, nanPos, tooNear, pickupVt, camActor, 0, 0x1234, 0xFFFF000000000000ULL};
+    actorList = {me, closer, enemy1, enemy2, corpse, mate, arc1, arc2, noRoot, nanPos, tooNear, pickupVt, camActor, 0, 0x1234, 0xFFFF000000000000ULL};
     for (u64 c : containers) actorList.push_back(c);
     for (int i = 0; i < 30; i++) actorList.push_back(makeActor(0x14d000000ULL + 0x10000ULL * i, cx + 100 * i, cy, cz)); //other kinds of actor
     actorArray = alloc(8 * 20000);
@@ -189,7 +190,10 @@ int main() {
     gsRet r0 = compare("start: step() shows what tick() shows");
     int players = 0, arcs = 0, statics = 0;
     for (const auto& e : r0.entities) { players += e.type == Object::PLAYER; arcs += e.type == Object::ARC; statics += e.type == Object::SEARCH; }
-    CHECK(players == 4 && arcs == 2 && statics == 25, "4 other players (you are left out), 2 ARC, 25 containers");
+    CHECK(players == 5 && arcs == 2 && statics == 25, "5 other players (you are left out), 2 ARC, 25 containers");
+    bool closerHidden = true, meDrawn = false;
+    for (const auto& e : r0.entities) { closerHidden &= e.actor != closer; meDrawn |= e.actor == me; }
+    CHECK(closerHidden && meDrawn, "you are the player nearest the camera, not the first one listed near it");
     CHECK(r0.localPlayerTeam == 3, "your team is the team of the player next to the camera");
     CHECK(r0.valid && std::abs(r0.vm.FOV - 70.0) < 1e-6 && r0.vm.Location.x == cx, "camera read");
 
