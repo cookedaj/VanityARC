@@ -287,10 +287,13 @@ int main() {
         std::filesystem::remove(settings::path(), ec); //$HOME is the test folder (set above)
         ApplyHighVisibility();
         CHECK(config::labelSize == 28.0f && config::boxThickness >= 4.0f && config::labelCards && config::boxStyle == 1 &&
-              config::overlayOpacity == 1.0f && config::menuOpacity == 1.0f && config::hiddenAlpha == 200, "High visibility sets the readable values");
+              config::overlayOpacity == 1.0f && config::menuOpacity == 1.0f && config::hiddenAlpha >= 200, "High visibility sets the readable values");
         settings::clampAll();
-        CHECK(config::labelSize == 28.0f && config::boxThickness >= 4.0f && config::hiddenAlpha == 200, "High visibility values are inside their safe ranges");
+        CHECK(config::labelSize == 28.0f && config::boxThickness >= 4.0f && config::hiddenAlpha >= 200, "High visibility values are inside their safe ranges");
         CHECK(std::filesystem::exists(settings::path()), "High visibility is saved at once");
+        config::boxThickness = 8.0f; config::hiddenAlpha = 255;
+        ApplyHighVisibility();
+        CHECK(config::boxThickness == 8.0f && config::hiddenAlpha == 255, "High visibility never makes thicker lines thinner or solid hidden players fainter");
         settings::resetAll();
     }
 
