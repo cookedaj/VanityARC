@@ -113,6 +113,7 @@ inline void DrawPlayerRows(int maxRows) {
 
 //The list at the bottom of the screen. menuOpen: clickable; otherwise it is only shown.
 inline void DrawPlayerListWindow(bool menuOpen) {
+    g_listRect = {}; //not shown: the edge arrows need not avoid it
     const int mode = (int)config::listMode;
     if (mode == 0 || (mode == 2 && !menuOpen) || !g_ui.ents) return;
     if (PlayersByDistance().empty()) return;
@@ -123,6 +124,8 @@ inline void DrawPlayerListWindow(bool menuOpen) {
                          ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoBringToFrontOnFocus;
     if (!menuOpen) f |= ImGuiWindowFlags_NoInputs;
     if (ImGui::Begin("##playerlist", nullptr, f)) DrawPlayerRows(std::max(1, (int)config::listRows));
+    const ImVec2 wp = ImGui::GetWindowPos(), ws = ImGui::GetWindowSize();
+    g_listRect = {wp.x, wp.y, wp.x + ws.x, wp.y + ws.y}; //the edge arrows and labels keep off it (see ESP.h)
     ImGui::End();
     ui::PopTheme();
 }

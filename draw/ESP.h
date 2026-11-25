@@ -216,6 +216,9 @@ inline void DrawPlayerBars(float x0, float y0, float w, float h, const RenderEnt
     }
 }
 
+//Where the player list at the bottom was drawn (set by DrawPlayerListWindow, one frame old; all zero when it is not shown)
+inline LabelRect g_listRect;
+
 //Arrows at the screen edge for enemy players who are not on screen (to the side, or behind you). The arrows keep
 //other labels away from them; their distance labels only appear where there is room.
 inline void DrawEdgeArrows(const View& v, std::vector<std::pair<const RenderEntity*, double>>& edge) {
@@ -234,7 +237,10 @@ inline void DrawEdgeArrows(const View& v, std::vector<std::pair<const RenderEnti
         if (len < 1e-6) { ux = 0; uy = 1; len = 1; }
         ux /= len; uy /= len;
         const float t = std::min(hx / (float)std::max(std::abs(ux), 1e-6), hy / (float)std::max(std::abs(uy), 1e-6));
-        const float px = (float)v.cx + (float)ux * t, py = (float)v.cy + (float)uy * t;
+        const float px = (float)v.cx + (float)ux * t;
+        float py = (float)v.cy + (float)uy * t;
+        const LabelRect& L = g_listRect;
+        if (L.x1 > L.x0 && px > L.x0 - 20 && px < L.x1 + 20 && py > L.y0 - 20 && py < L.y1 + 20) py = L.y0 - 20; //not under the player list: just above it
         DrawArrow(px, py, (float)ux, (float)uy, 15.0f, COLOR::enemy());
         QueueReserve({px - 14, py - 14, px + 14, py + 14});
         std::snprintf(buf, sizeof buf, "%.0fm", e.second);
@@ -390,6 +396,7 @@ inline void DrawESP(const std::vector<RenderEntity>& entities, FminimalViewInfo 
             QueueMarkerLabel((float)sp.x, (float)sp.y, (float)radius, text, ls2, prio, dist);
         }
     }
+    if (g_listRect.x1 > g_listRect.x0) QueueReserve(g_listRect); //labels stay off the player list
     DrawEdgeArrows(v, edge);
     FlushLabels();
 }
