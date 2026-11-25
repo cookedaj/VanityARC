@@ -213,7 +213,7 @@ inline void PageSettings() {
     Note("Settings, names, offsets and marks are in ~/.config/kwin-helper/");
     static bool armed = false;
     if (ImGui::Button(armed ? "Click again to reset everything" : "Reset all settings")) {
-        if (armed) { settings::resetAll(); armed = false; Toast("Settings reset"); }
+        if (armed) { settings::resetAll(); ImGui::SetWindowPos("kwin-helper", ImVec2(120, 110)); armed = false; Toast("Settings reset"); }
         else armed = true;
     }
     if (armed) { ImGui::SameLine(); if (ImGui::Button("Cancel")) armed = false; }
@@ -230,6 +230,12 @@ inline void DrawMenu() {
     ImGui::SetNextWindowPos(ImVec2(120, 110), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(ImVec2(820, 640), ImGuiCond_Always);
     ImGui::Begin("kwin-helper", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoScrollbar);
+    {   //keep the whole menu on screen (a drag or a position saved on a bigger monitor can leave only a sliver showing)
+        const ImVec2 p = ImGui::GetWindowPos(), s = ImGui::GetWindowSize();
+        const ImVec2 c(std::clamp(p.x, 0.0f, std::max(0.0f, (float)config::SCREEN_W - s.x)),
+                       std::clamp(p.y, 0.0f, std::max(0.0f, (float)config::SCREEN_H - s.y)));
+        if (c.x != p.x || c.y != p.y) ImGui::SetWindowPos(c);
+    }
 
     ImGui::PushFont(OverlayFont(), 20.0f);
     ImGui::TextUnformatted("Overlay");
