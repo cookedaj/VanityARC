@@ -52,12 +52,28 @@ inline void ToggleInspect(const std::string& key) {
     auto it = std::find(g_inspect.begin(), g_inspect.end(), key);
     if (it != g_inspect.end()) g_inspect.erase(it);
     else if (g_inspect.size() < 6) g_inspect.push_back(key);
+    else Toast("At most 6 inventory windows: close one first");
+}
+
+//A window opened while the account was unknown is keyed "@<actor>": switch it to the account once that is read
+inline void RemapInspectKeys() {
+    if (!g_ui.ents) return;
+    for (const RenderEntity& e : *g_ui.ents) {
+        if (e.type != Object::PLAYER || e.account.empty()) continue;
+        char b[32];
+        std::snprintf(b, sizeof b, "@%llx", (unsigned long long)e.actor);
+        auto it = std::find(g_inspect.begin(), g_inspect.end(), std::string(b));
+        if (it == g_inspect.end()) continue;
+        if (IsInspected(e.account)) g_inspect.erase(it); //already open under the account
+        else *it = e.account;
+    }
 }
 
 //The actors whose inventory the tracker should read
 inline std::vector<ptr> InspectedActors() {
     std::vector<ptr> a;
     if (!g_ui.ents) return a;
+    RemapInspectKeys();
     for (const RenderEntity& e : *g_ui.ents) if (e.type == Object::PLAYER && IsInspected(PlayerKey(e))) a.push_back(e.actor);
     return a;
 }
@@ -156,6 +172,7 @@ inline void DrawPlayerListWindow(bool menuOpen) {
 //One window per player you clicked: who they are and everything we can read of what they carry
 inline void DrawInspectWindows() {
     if (g_inspect.empty() || !g_ui.ents) return;
+    RemapInspectKeys();
     ui::PushTheme(std::min(0.96f, config::menuOpacity + 0.04f));
     std::vector<std::string> close;
     int n = 0;
