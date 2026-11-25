@@ -210,11 +210,12 @@ inline void QueueMarkerLabel(float cx, float cy, float radius, const std::string
     for (const ImVec2& c : alts) { p.centers.push_back(c); p.box.alts.push_back(LabelAt(c.x, c.y, ts)); }
 }
 
-//Keeps labels away from this area (an arrow, a panel) without drawing anything
-inline void QueueReserve(const LabelRect& r) {
+//Keeps labels away from this area (an arrow, a panel) without drawing anything. body: an enemy's box, which only
+//moves loot, ARC and dead-body labels (players' names, distances and guns stay where they are)
+inline void QueueReserve(const LabelRect& r, bool body = false) {
     PendingLabel p;
     p.box.x0 = r.x0; p.box.y0 = r.y0; p.box.x1 = r.x1; p.box.y1 = r.y1;
-    p.box.prio = -1; p.box.force = true;
+    p.box.prio = -1; p.box.force = true; p.box.body = body;
     PendingLabels().push_back(std::move(p));
 }
 
@@ -250,8 +251,8 @@ inline void PlayerBoxZ(const RenderEntity& ent, double& top, double& bottom) {
 }
 
 //The two bars on the right of a player box: health (red to green) and, next to it, the shield. The shield bar is gone
-//when the shield is used up (or when the shield cannot be read).
-inline void DrawPlayerBars(float x0, float y0, float w, float h, const RenderEntity& ent) {
+//when the shield is used up (or when the shield cannot be read). Returns the right edge of what it drew.
+inline float DrawPlayerBars(float x0, float y0, float w, float h, const RenderEntity& ent) {
     const float bw = std::min(5.0f, std::max(2.0f, h * 0.05f));
     auto bar = [&](float bx, float frac, ImU32 col) {
         DrawRectFilled(bx - 1, y0 - 1, bx + bw + 1, y0 + h + 1, IM_COL32(0, 0, 0, 200));
@@ -262,8 +263,10 @@ inline void DrawPlayerBars(float x0, float y0, float w, float h, const RenderEnt
     bar(bx, hp, COLOR::health(hp));
     if (ent.hasShield && ent.shield >= 1.0 && ent.shieldMax > 0) {
         const float sh = (float)std::min(1.0, std::max(0.0, ent.shield / ent.shieldMax));
-        bar(bx + bw + 3.0f, sh, COLOR::shieldBar());
+        bx += bw + 3.0f;
+        bar(bx, sh, COLOR::shieldBar());
     }
+    return bx + bw + 1;
 }
 
 //Where the player list at the bottom was drawn (set by DrawPlayerListWindow, one frame old; all zero when it is not shown)
@@ -430,7 +433,10 @@ inline void DrawESP(const std::vector<RenderEntity>& entities, FminimalViewInfo 
 
             if (config::showSkeleton && ent.pose && dist <= config::skeletonMaxDist) DrawSkeleton(v, *ent.pose, color, th);
 
-            if (config::showBars) DrawPlayerBars(x0, y0, w, h, ent); //health, and the shield next to it
+            float right = x0 + w;
+            if (config::showBars) right = DrawPlayerBars(x0, y0, w, h, ent); //health, and the shield next to it
+            //loot, ARC and dead-body labels move off an enemy's box and bars, or drop; 3 px covers the thickest outline
+            if (!mate) QueueReserve({x0 - 3, y0 - 3, right + 3, y0 + h + 3}, true);
 
             //name above, distance and guns below, 3 px clear of the box and 2 px apart (cards included). With no room
             //below the box the distance and guns go above the name; the lines are kept on the screen. Players are always
