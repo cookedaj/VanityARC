@@ -159,10 +159,11 @@ int main() {
         CHECK(MarkNearestAtCrosshair(noId, v4, 7).kind == MarkResult::NoId, "a player without an account id cannot be marked");
         std::vector<RenderEntity> squad = {player(2000, 40, "ffff", 7), player(2000, 300, "gggg")};
         auto r3 = MarkNearestAtCrosshair(squad, v4, 7);
-        CHECK(r3.kind == MarkResult::Marked && marks::isMarked("gggg") && !marks::isMarked("ffff"), "your squad is skipped (it is not marked by hand)");
+        CHECK(r3.kind == MarkResult::NotMarkable && !r3.down && !marks::isMarked("gggg") && !marks::isMarked("ffff"), "aiming at your squad mate marks nobody (not the player behind them)");
         std::vector<RenderEntity> dead = {player(2000, 40, "hhhh")};
         dead[0].isDead = true;
-        CHECK(MarkNearestAtCrosshair(dead, v4, 7).kind == MarkResult::NoneNearby, "a down player is skipped");
+        auto r4 = MarkNearestAtCrosshair(dead, v4, 7);
+        CHECK(r4.kind == MarkResult::NotMarkable && r4.down && !marks::isMarked("hhhh"), "a down player is not marked");
         std::vector<RenderEntity> behind = {player(-2000, 0, "iiii")};
         CHECK(MarkNearestAtCrosshair(behind, v4, 7).kind == MarkResult::NoneNearby, "someone behind you is not at the crosshair");
         marks::clear();
