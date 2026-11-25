@@ -106,6 +106,16 @@ void ReadMemoryBuffer(uintptr_t address, void* buffer, size_t size)
     ReadMemoryBuffer(ProcessId, address, buffer, size);
 }
 
+size_t ReadMemoryPrefix(uintptr_t address, void* buffer, size_t size)
+{
+    //process_vm_readv copies page by page and stops at the first page it cannot read, reporting what came before it
+    struct iovec local = {buffer, size}, remote = {(void*)address, size};
+    ssize_t got = process_vm_readv(ProcessId, &local, 1, &remote, 1, 0);
+    if (got < 0) got = 0;
+    if ((size_t)got < size) std::memset((char*)buffer + got, 0, size - (size_t)got);
+    return (size_t)got;
+}
+
 size_t ReadScatter(pid_t pid, ReadReq* r, size_t n)
 {
     //process_vm_readv stops at the first read it cannot do and reports how many bytes came before it. So: find which
