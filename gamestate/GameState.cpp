@@ -15,7 +15,7 @@
 //Forward declaration for debug functions
 void getViewMatrix(ptr actor);
 void printVtableSummary(const std::vector<RenderEntity>& ents, const FminimalViewInfo& vm);
-void printStatusLine(const std::vector<RenderEntity>& ents, const FminimalViewInfo& vm);
+void printStatusLine(const std::vector<RenderEntity>& others, const RenderEntity* me);
 void runNameProbe(const std::vector<RenderEntity>& ents, const std::vector<RenderEntity>& unknown,
                   const FminimalViewInfo& vm, ptr uworld, FILE* out = stdout); //Probe.cpp
 void getPosPtr(ptr actor);
@@ -73,7 +73,7 @@ gsRet GameState::tick() {
         if (now - lastStatus >= std::chrono::seconds(probeNames ? 8 : 2)) {
             lastStatus = now;
             if (probeNames) runNameProbe(raw.rawEnt, raw.unknown, raw.VM, uworld);
-            else printStatusLine(raw.rawEnt, raw.VM);
+            else printStatusLine(filt.filtEnt, nullptr);
         }
     }
 
@@ -380,19 +380,13 @@ void printVtableSummary(const std::vector<RenderEntity>& ents, const FminimalVie
 }
 
 //One line for normal (non-debug) runs, so a pasted console can be checked without scrolling.
-//"me" is the PLAYER-typed actor within 2 m of the camera (the code treats that as you). Health is read
-//straight from memory here, so a wrong PLAYER vtable shows up as NO HEALTH instead of a fake 100.
-void printStatusLine(const std::vector<RenderEntity>& ents, const FminimalViewInfo& vm) {
+//"others" is everything except you; "me" is the pawn the caller already picked as you (nullptr: not known). Health is
+//read straight from memory here, so a wrong PLAYER vtable shows up as NO HEALTH instead of a fake 100.
+void printStatusLine(const std::vector<RenderEntity>& others, const RenderEntity* me) {
     int players = 0, playersDead = 0, arcs = 0, arcsDead = 0, pickups = 0, searches = 0;
-    const RenderEntity* me = nullptr;
-    double meDist = 1e18;
-    for (const auto& e : ents) {
-        double d = e.pos.Dist(vm.Location);
+    for (const auto& e : others) {
         switch (e.type) {
-            case Object::PLAYER:
-                if (d < 200 && d < meDist) { me = &e; meDist = d; }
-                else { players++; if (e.isDead) playersDead++; }
-                break;
+            case Object::PLAYER: players++; if (e.isDead) playersDead++; break;
             case Object::ARC:    arcs++; if (e.isDead) arcsDead++; break;
             case Object::PICKUP: pickups++; break;
             case Object::SEARCH: searches++; break;
@@ -400,7 +394,7 @@ void printStatusLine(const std::vector<RenderEntity>& ents, const FminimalViewIn
         }
     }
 
-    char meBuf[96] = "me: NOT FOUND (no PLAYER within 2 m)";
+    char meBuf[96] = "me: NOT FOUND";
     if (me) {
         ptr hc = ReadMemory<ptr>(me->actor + off::HEALTH_COMPONENT);
         double maxHp = isValidPtr(hc) ? ReadMemory<double>(hc + off::HEALTH_MAX) : 0;

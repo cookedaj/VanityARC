@@ -14,7 +14,7 @@
 #include "utils/log.h"
 #include "utils/offsets.h"
 
-void printStatusLine(const std::vector<RenderEntity>& ents, const FminimalViewInfo& vm); //GameState.cpp
+void printStatusLine(const std::vector<RenderEntity>& others, const RenderEntity* me); //GameState.cpp
 #ifdef KWINHELPER_PROBES
 void runLiveProbe(const std::string& mode, ptr localPawn, const std::vector<RenderEntity>& ents, const FminimalViewInfo& vm, FILE* out = stdout); //Probe.cpp
 #endif
@@ -418,11 +418,9 @@ gsRet GameState::step() {
     static auto lastStatus = clk::now() - std::chrono::seconds(10);
     if (t0 - lastStatus >= std::chrono::seconds(2)) {
         lastStatus = t0;
-        std::vector<RenderEntity> all;
-        all.reserve(statics_.size() + dyn_.size());
-        for (const Tracked& t : statics_) all.push_back(t.ent);
-        for (const Tracked& t : dyn_) if (t.live) all.push_back(t.ent);
-        printStatusLine(all, vm);
+        const RenderEntity* meEnt = nullptr; //the pawn assemble() chose as you; out.entities already holds everything else
+        for (const Tracked& t : dyn_) if (t.live && t.ent.actor == meActor_) meEnt = &t.ent;
+        printStatusLine(out.entities, meEnt);
     }
     timing_.lastStepMs = ms(t0, clk::now());
     return out;
