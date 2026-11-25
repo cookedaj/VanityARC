@@ -111,6 +111,7 @@ int main() {
         if (!OverlayReady()) { //the overlay surface is gone and is being made again; the tracker keeps running
             g_TextGrab = false; //no text box to type into: the keyboard stays with the game
             if (config::hotkeysEnabled && g_KeyQuit.exchange(false)) g_Running = false; //F10 still quits
+            g_KeyMark = false; g_KeyClear = false; //no stale F6/F7 when the surface comes back
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
             continue;
         }
