@@ -644,8 +644,14 @@ void GameState::selfCheckIfAsked(const FminimalViewInfo& vm) {
          say("-> 0x%lx%s", (unsigned long)level, levelOk ? " (an object)" : " is not an object"), "LEVEL_COLLECTIONS failed");
     line(levelOk, isValidPtr(arr) && count >= 1000 && count <= 30000, hex("ACTORS_PTR", off::ACTORS_PTR),
          say("%d actors (a raid has 1000 to 30000)", count), "PERSISTENT_LEVEL failed");
+    //The camera in use came from the CAMMANAGER vtable, or (that vtable stale) through the PlayerController fallback
+    const ptr camVt = ReadMemory<ptr>(camActor_);
+    const bool camByVt = camVt == vtabels::CAMMANAGER;
+    line(true, camByVt, hex("CAMMANAGER vtable", vtabels::CAMMANAGER),
+         camByVt ? std::string("the camera has it")
+                 : say("stale: the camera was found only through the PlayerController; its vtable is 0x%lx: put that in config.h", (unsigned long)camVt), "");
     line(true, true, hex("VIEW_MATRIX", off::VIEW_MATRIX),
-         say("camera found (CAMMANAGER vtable 0x%lx), FOV %.0f", (unsigned long)vtabels::CAMMANAGER, (double)vm.FOV), "");
+         say("camera found (%s), FOV %.0f", camByVt ? "by the CAMMANAGER vtable" : "through off::PC_CAMERA_MANAGER", (double)vm.FOV), "");
 
     const char* noMe = "you were not found";
     line(true, byController, hex("CONTROLLER", off::CONTROLLER),
