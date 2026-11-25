@@ -241,11 +241,13 @@ uint32_t pickNameSlot(uintptr_t actor) { return slotFor(actor); }
 
 std::string playerName(uintptr_t fstringAddr) {
     if (!fstringAddr) return "";
-    uintptr_t data = ReadMemory<uintptr_t>(fstringAddr);
-    int count = ReadMemory<int>(fstringAddr + 8);
-    if (!memValid(data) || count <= 1 || count > 64) return "";
+    struct { uintptr_t data; int num, max; } hdr{};
+    ReadMemoryBuffer(fstringAddr, &hdr, sizeof hdr);
+    //TArray invariant num <= max catches most stale-offset reads; the character checks below catch a neighbouring TArray
+    if (!memValid(hdr.data) || hdr.num < 2 || hdr.num > 64 || hdr.max < hdr.num || hdr.max > 1024) return "";
+    uintptr_t data = hdr.data;
 
-    int len = count - 1;
+    int len = hdr.num - 1;
     std::vector<u16> ch((size_t)len);
     ReadMemoryBuffer(data, ch.data(), ch.size() * 2);
 
@@ -254,8 +256,10 @@ std::string playerName(uintptr_t fstringAddr) {
     std::string out;
     for (int i = 0; i < len && ch[(size_t)i] != 0; i++) {
         state = 16777619u * (state + rol32(16777619u * state + PLAYER_NAME_ADD, 16));
+        if (ch[(size_t)i] > 0xFF) return ""; //the & 0xFF decode cannot show these: it would only be letter salad
         u16 c = sub[(ch[(size_t)i] ^ (int)(state & 0x1Fu)) & 0xFF];
-        out.push_back(c >= 32 && c <= 126 ? (char)c : '?'); //never let a wrong decode put control characters on screen
+        if (c < 32 || c > 126) return ""; //wrong offset or key: no name rather than a believable wrong one
+        out.push_back((char)c);
     }
     return out;
 }
