@@ -22,6 +22,10 @@ int main() {
     CHECK(amp::gunLabel("Il Toro", 3) == "Il Toro  MK III", "MK III shows the level after the name");
     CHECK(amp::gunLabel("Il Toro", 1) == "Il Toro  MK I", "MK I shows the level");
 
+    CHECK(std::string(amp::levelText(3)) == "MK III", "level text for MK III");
+    CHECK(std::string(amp::levelText(5)) == "AMP", "level text for MK V is AMP");
+    CHECK(std::string(amp::levelText(0)) == "", "no module has no level text");
+
     std::printf(fails ? "SOME TESTS FAILED\n" : "ALL TESTS PASSED\n");
     return fails ? 1 : 0;
 }
