@@ -84,6 +84,11 @@ private:
     };
     std::vector<Tracked> statics_; //containers and ground items: position read at each scan
     std::vector<Tracked> dyn_;     //players and ARC: re-read every step
+    //Each slot of the actor list as the last scan saw it: the actor, its vtable and its RootComponent (0: read it again).
+    //A scan reads the vtable only for slots that changed plus a rotating 1/20 of the rest (all within about 2 s).
+    struct Slot { ptr actor = 0, vt = 0, root = 0; };
+    std::vector<Slot> slots_;
+    size_t recheck_ = 0;           //first slot of the next scan's rotating re-check
     ptr camActor_ = 0;
     FminimalViewInfo goodVm_{};                          //the last usable view, and when it was read: one bad read reuses it
     std::chrono::steady_clock::time_point goodVmAt_{};

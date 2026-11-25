@@ -399,6 +399,23 @@ int main() {
     int st2 = 0; for (const auto& e : r3.entities) st2 += e.type == Object::SEARCH;
     CHECK(st2 == 26, "26 containers now");
 
+    //--- a scan reads the vtable only of slots that changed; an address reused in the same slot (same pointer, another
+    //kind of actor) is caught by the rotating re-check within about 2 s
+    {
+        const u64 reused = actorList[actorList.size() - 2]; //the last of the "other kinds of actor"
+        const u64 reusedVt = get<u64>(reused);
+        put<u64>(reused, vtabels::SEARCH);
+        bool seen = false;
+        for (auto until = std::chrono::steady_clock::now() + std::chrono::seconds(3); !seen && std::chrono::steady_clock::now() < until;) {
+            gsRet r = fast.step();
+            for (const auto& e : r.entities) seen = seen || e.actor == reused;
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        }
+        CHECK(seen, "a slot that kept its pointer but now holds a container is seen within about 2 s");
+        compare("and then both paths agree again");
+        put<u64>(reused, reusedVt); //back to what it was: the later checks count 26 containers (the world break below re-reads every slot)
+    }
+
     //--- the world goes away (loading screen) and comes back
     breakWorld();
     std::this_thread::sleep_for(std::chrono::milliseconds(40)); //the world is checked about 30 times a second, not on every step
