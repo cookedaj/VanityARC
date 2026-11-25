@@ -249,7 +249,8 @@ void RenderEnd(void (*extra)()) {
     g_drawnSize = sz;
 }
 
-bool OverlayNeedsFrame() { return sizeNow() != g_drawnSize; }
+//no surface (stream hide): nothing to draw on, so no new size either; remap() clears g_drawnSize for the next one
+bool OverlayNeedsFrame() { return !(g_kind == Kind::Layer && !g_layer->mapped()) && sizeNow() != g_drawnSize; }
 
 void OverlayIdle() {
     if (g_kind == Kind::Glfw) glfwWaitEventsTimeout(0.002); //the window's events, as RenderBegin would handle them
