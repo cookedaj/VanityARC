@@ -112,16 +112,33 @@ void diffScan(FILE* out, const char* title, const std::vector<ptr>& actors, int 
 //----------------------------------------------------------------------------------------------
 // Players
 //----------------------------------------------------------------------------------------------
-//The PlayerState: pawn+0x3E8 in v1029. If that is stale, look for any pointer in the pawn that leads to a
-//plausible player name.
+//The PlayerState: pawn+0x3E8 in v1029. The pawn holds other objects next to it (controller, class pointers), so a
+//slot counts only when its object is named like a PlayerState: 0x3E8 first, then 0x380..0x470. If none is (object
+//names unreadable, or the class is named differently), a slot whose +0x460 decodes to a player name is taken.
 ptr playerStateOf(ptr pawn, int* offOut = nullptr) {
-    ptr ps = ReadMemory<ptr>(pawn + 0x3E8);
-    if (isObject(ps)) { if (offOut) *offOut = 0x3E8; return ps; }
-    for (int off = 0x380; off < 0x470; off += 8) {
-        ptr p = ReadMemory<ptr>(pawn + off);
-        if (isObject(p) && !names::playerName(p + 0x460).empty()) { if (offOut) *offOut = off; return p; }
+    auto accept = [](ptr p, bool byClass) {
+        return byClass ? nm(p).find("PlayerState") != std::string::npos : isObject(p) && !names::playerName(p + 0x460).empty();
+    };
+    for (bool byClass : {true, false}) {
+        ptr ps = ReadMemory<ptr>(pawn + 0x3E8);
+        if (accept(ps, byClass)) { if (offOut) *offOut = 0x3E8; return ps; }
+        for (int off = 0x380; off < 0x470; off += 8) {
+            ptr p = ReadMemory<ptr>(pawn + off);
+            if (accept(p, byClass)) { if (offOut) *offOut = off; return p; }
+        }
     }
     return 0;
+}
+
+//The player name FString in the PlayerState: +0x460 in v1029. If that reads nothing, the first FString in
+//+0x400..+0x500 that decodes to plain text.
+int nameOffOf(ptr ps) {
+    if (!names::playerName(ps + 0x460).empty()) return 0x460;
+    for (int off = 0x400; off < 0x500; off += 8) {
+        const std::string n = names::playerName(ps + off);
+        if (!n.empty() && n.find('?') == std::string::npos) return off;
+    }
+    return 0x460;
 }
 
 //The account id is held through PlayerState+0x3E0 -> object, id qword at object+0x18
@@ -131,7 +148,7 @@ ptr accountId(ptr ps) {
 }
 
 void probePlayers(FILE* out, const std::vector<std::pair<double, const RenderEntity*>>& players, ptr localPawn) {
-    std::fprintf(out, "PLAYERS (name = PlayerState+0x460 decoded, account id = PlayerState+0x3E0 -> +0x18)\n");
+    std::fprintf(out, "PLAYERS (PS = PlayerState @pawn+0x3E8, name = PS+0x460 decoded, account id = PS+0x3E0 -> +0x18)\n");
     int shown = 0;
     for (const auto& pl : players) {
         ptr pawn = pl.second->actor;
@@ -139,9 +156,11 @@ void probePlayers(FILE* out, const std::vector<std::pair<double, const RenderEnt
         ptr ps = playerStateOf(pawn, &off);
         std::fprintf(out, "  %6.1f m%s", pl.first, pawn == localPawn ? " (you)" : "      ");
         if (!ps) { std::fprintf(out, "  no PlayerState\n"); continue; }
-        std::string n = names::playerName(ps + 0x460);
-        std::fprintf(out, "  name '%s'  id %016lx  pawn: %s  team %d\n", n.c_str(), (unsigned long)accountId(ps),
-                     nm(pawn).c_str(), ReadMemory<int>(pawn + 0x802) & 0xFF);
+        const int nameOff = nameOffOf(ps);
+        std::string n = names::playerName(ps + nameOff);
+        std::fprintf(out, "  PS @pawn+0x%x%s  name '%s' (PS+0x%x%s)  id %016lx  pawn: %s  team %d\n", off,
+                     off != 0x3E8 ? " MOVED: set PAWN_PLAYERSTATE" : "", n.c_str(), nameOff, nameOff != 0x460 ? " MOVED: set PS_NAME" : "",
+                     (unsigned long)accountId(ps), nm(pawn).c_str(), ReadMemory<int>(pawn + 0x802) & 0xFF);
         if (++shown >= 16) break;
     }
 }

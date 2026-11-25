@@ -97,8 +97,8 @@ static u64 makeObject(size_t size, u32 ci, u32 number) {
 }
 template <typename T> static void put(u64 o, size_t off, T v) { std::memcpy((void*)(o + off), &v, sizeof v); }
 
-static u64 makePS(const char* hexchars, int n, u64 id) {
-    u64 ps = makeObject(0x800, 0x2000, 0);
+static u64 makePS(const char* hexchars, int n, u64 id, u32 ci = 0x2000) {
+    u64 ps = makeObject(0x800, ci, 0);
     u64 buf = alloc(64);
     for (int i = 0; i < n; i++) put<u16>(buf, i * 2, (u8)hexchars[i]);
     put<u64>(ps, 0x460, buf); put<int>(ps, 0x468, n + 1); put<int>(ps, 0x46C, 16);
@@ -131,6 +131,7 @@ int main() {
     addPoolName(0x2000, "BP_PioneerCharacter_C");
     addPoolName(0x2040, "BP_Hornet_C");
     addPoolName(0x2080, "DA_Enemy_Hornet");
+    addPoolName(0x20C0, "BP_PioneerPlayerState_C");
     addPoolName(0x3000, "BP_Pickup_Item_C");
 
     u64 a = makeObject(0x1400, 0x1240, 5);
@@ -159,6 +160,14 @@ int main() {
     u64 arr = alloc(0x40); put<u64>(arr, 0x10, da); put<u64>(inv, 0x530, arr); put<int>(inv, 0x538, 1); put<int>(inv, 0x53C, 1);
     ents.push_back(ent(Object::PLAYER, 1.5, mePawn));
 
+    //after a patch: another object at pawn+0x3E8, the PlayerState at +0x3F0, its name at +0x478
+    u64 movedPS = makePS("\x76\x6e\x6b\x7e\x64\x46", 6, 0x1122334455667788ULL, 0x20C0);
+    std::memcpy((void*)(movedPS + 0x478), (void*)(movedPS + 0x460), 16); std::memset((void*)(movedPS + 0x460), 0, 16);
+    u64 movedPawn = makeObject(0x1400, 0x2000, 2);
+    put<u64>(movedPawn, 0x3E8, makeObject(0x400, 0x2040, 0));
+    put<u64>(movedPawn, 0x3F0, movedPS);
+    ents.push_back(ent(Object::PLAYER, 3.0, movedPawn));
+
     u64 type = makeObject(0x300, 0x2080, 0);
     for (int i = 0; i < 3; i++) { u64 h = makeObject(0x1400, 0x2040, i + 1); put<u64>(h, 0x11C0, type); ents.push_back(ent(Object::ARC, 20 + i, h)); }
     for (int i = 0; i < 6; i++) { u64 c = makeObject(0x1400, 0x1240, i + 1); put<u64>(c, 0x500, i % 2 ? da : type); ents.push_back(ent(Object::SEARCH, 5 + i, c)); }
@@ -175,6 +184,7 @@ int main() {
     auto has = [&](const char* s) { return rep.find(s) != std::string::npos; };
     CHECK(has("object-name decoder: ready"), "report: decoder ready");
     CHECK(has("name 'cooked'") && has("793381ba5d093c9f"), "report: player name and account id");
+    CHECK(has("PS @pawn+0x3f0 MOVED: set PAWN_PLAYERSTATE  name 'cooked' (PS+0x478 MOVED: set PS_NAME)"), "report: a moved PlayerState and name offset are found and reported");
     CHECK(has("asset 0x") && has("<DA_Enemy_Hornet>"), "report: ARC type asset named");
     CHECK(has("sample actor BP_Hornet_C_"), "report: ARC actor named");
     CHECK(has("DA_Item_BattleRifle_BreachAction_01"), "report: gun asset named");
