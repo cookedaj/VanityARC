@@ -57,6 +57,7 @@ void Tracker::fail(const char* what, const char* fault) noexcept {
         cam_ = 0;
         auto s = std::make_shared<Snapshot>();
         s->gameFound = true; //so main.cpp shows the fault in big letters, not "Waiting for ARC Raiders"
+        s->gameUpdated = updated_; //stale offsets are the likely cause of the error: the update banner must stay up
         s->fault = fault;
         publish(std::move(s));
     } catch (...) {} //not even memory for that: the last snapshot stays and main.cpp ages it out
@@ -128,11 +129,11 @@ void Tracker::run() {
     int rateCount = 0;
     double hz = 0;
     auto next = clk::now(); //when the next step is due, in full clock precision so the set rate is the rate that runs
-    bool updated = false;   //the running build differs from the one config.h is for (an unknown build never counts)
     auto findImage = [&] {
         if (!lookup_.image(ProcessId)) std::cout << "[-] The game's .exe was not found in its memory map: using the usual address" << std::endl;
         const unsigned run = ImageStamp, rec = GAME_PE_STAMP;
-        updated = run != 0 && rec != 0 && run != rec;
+        const bool updated = run != 0 && rec != 0 && run != rec; //an unknown build never counts
+        updated_ = updated;
         char line[200];
         if (run == 0) std::snprintf(line, sizeof line, "[-] Game build stamp: not readable (no update check)");
         else if (rec == 0) std::snprintf(line, sizeof line, "[+] Game build stamp 0x%08X (config.h GAME_PE_STAMP not recorded: no update check)", run);
@@ -236,7 +237,7 @@ void Tracker::run() {
         s->valid = r.valid;
         if (!r.valid) s->fault = readDenied(ProcessId) ? "no permission to read the game: start the overlay with start.sh" : r.fault;
         s->gameFound = true;
-        s->gameUpdated = updated;
+        s->gameUpdated = updated_;
         s->seq = ++seq;
         s->capturedNs = std::chrono::duration_cast<std::chrono::nanoseconds>(clk::now().time_since_epoch()).count();
         s->inventories = inventories;

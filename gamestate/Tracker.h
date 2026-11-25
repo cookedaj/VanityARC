@@ -95,6 +95,7 @@ private:
     mutable std::mutex mu_;
     std::shared_ptr<const Snapshot> snap_ = std::make_shared<const Snapshot>();
     std::atomic<ptr> cam_{0};
+    std::atomic<bool> updated_{false}; //the running build differs from the one config.h is for (kept across run() restarts, so fail() shows it too)
     mutable std::mutex gsMu_;
     gamescope::Info gs_{};
     mutable std::mutex statMu_;
