@@ -35,8 +35,11 @@ typedef uint64_t u64; typedef uint32_t u32; typedef uint16_t u16; typedef uint8_
 static u32 rol32(u32 v, int n) { return (v << n) | (v >> (32 - n)); }
 static u64 rol64(u64 v, int n) { return (v << n) | (v >> (64 - n)); }
 
+//this test's own fake layout (names::setRvasForTest), not the game's RVAs in names.cpp: a patch update there does not
+//touch it. They differ from the real ones on purpose, so the test also proves the override works.
+static const u64 NAMES_RVA = 0x02000000, TEXT_RVA = 0x01000000, ANCHOR_RVA = 0x01800000;
 //constants duplicated on purpose from names.cpp
-static const u64 NAMES_RVA = 0x105726C0, TEXT_RVA = 0x1043A2A4, ANCHOR_RVA = 0x104F48B0, ANCHOR_XOR = 0x25FAB87EA2567D68ULL;
+static const u64 ANCHOR_XOR = 0x25FAB87EA2567D68ULL;
 static const u32 HP = 0x01000193;
 static const u64 FNV_PRIME = 0x100000001B3ULL, FNV_ADD = 0x2790CE36A33B0E0AULL;
 static const u64 SLOT_KEY_ADD = 0x902552F3625ADD06ULL, SLOT_A = 0xA15809052DCA75EDULL, SLOT_B = 0xBDEF271E65265A09ULL;
@@ -129,6 +132,7 @@ int main() {
     std::memcpy((void*)(base + TEXT_RVA), textTable, sizeof textTable);
     anchor = base + ANCHOR_RVA; keyAll = anchor * ((anchor ^ ANCHOR_XOR) | 1);
     slotXor = keyAll + SLOT_KEY_ADD; blockKey = keyAll + BLOCK_KEY_ADD;
+    names::setRvasForTest(NAMES_RVA, TEXT_RVA, ANCHOR_RVA);
     names::setBase(base);
 
     using labels::Cat;

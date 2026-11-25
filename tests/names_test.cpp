@@ -23,8 +23,11 @@ typedef uint64_t u64; typedef uint32_t u32; typedef uint16_t u16; typedef uint8_
 static u32 rol32(u32 v, int n) { return (v << n) | (v >> (32 - n)); }
 static u64 rol64(u64 v, int n) { return (v << n) | (v >> (64 - n)); }
 
+//this test's own fake layout (names::setRvasForTest), not the game's RVAs in names.cpp: a patch update there does not
+//touch it. They differ from the real ones on purpose, so the test also proves the override works.
+static const u64 NAMES_RVA = 0x02000000, TEXT_RVA = 0x01000000, ANCHOR_RVA = 0x01800000;
 //constants duplicated on purpose from names.cpp
-static const u64 NAMES_RVA = 0x105726C0, TEXT_RVA = 0x1043A2A4, ANCHOR_RVA = 0x104F48B0, ANCHOR_XOR = 0x25FAB87EA2567D68ULL;
+static const u64 ANCHOR_XOR = 0x25FAB87EA2567D68ULL;
 static const u32 HP = 0x01000193;
 static const u64 FNV_PRIME = 0x100000001B3ULL, FNV_ADD = 0x2790CE36A33B0E0AULL;
 static const u64 SLOT_KEY_ADD = 0x902552F3625ADD06ULL, SLOT_A = 0xA15809052DCA75EDULL, SLOT_B = 0xBDEF271E65265A09ULL;
@@ -113,6 +116,7 @@ int main() {
     region = (uint8_t*)mmap(nullptr, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
     base = (u64)region;
     bump = base + 0x10600000;
+    names::setRvasForTest(NAMES_RVA, TEXT_RVA, ANCHOR_RVA);
     names::setBase(base);
 
     //not ready before the table exists
@@ -213,8 +217,11 @@ int main() {
     {
         u64 pawn = makeObject(0x1400, 0x2000, 9);
         u64 health = makeObject(0x900, 0x2000, 0);
-        put<u64>(pawn, 0xD98, health);                                   //HealthComponent
-        put<double>(health, 0x380, 100.0); put<double>(health, 0x708, 100.0); put<double>(health, 0x710, 60.0); //max, health, and a "shield" next to them
+        //the real health offsets from config.h, so updating them after a patch does not break this test
+        const size_t shieldOff = off::HEALTH_CACHED + 8;
+        auto sv = [](size_t o) { char b[40]; std::snprintf(b, sizeof b, "shield_value 0x%zx", o); return std::string(b); };
+        put<u64>(pawn, off::HEALTH_COMPONENT, health);
+        put<double>(health, off::HEALTH_MAX, 100.0); put<double>(health, off::HEALTH_CACHED, 100.0); put<double>(health, shieldOff, 60.0); //max, health, and a "shield" next to them
         u64 other = makeObject(0x900, 0x2000, 0);
         put<u64>(pawn, 0x500, other);                                    //another component with a float
         put<float>(other, 0x100, 40.0f);
@@ -233,18 +240,18 @@ int main() {
         std::string warm;
         for (int i = 1; i <= 3; i++) { put<float>(other, 0x300, (float)i); warm += run("shield"); } //warm-up: a clock ticks by itself
         CHECK(warm.find("NOW take a hit") != std::string::npos && warm.find("shield_value") == std::string::npos, "shield probe: the warm-up prints nothing, then asks for the hit");
-        put<double>(health, 0x708, 90.0); put<double>(health, 0x710, 45.0); put<float>(other, 0x100, 35.0f); put<float>(other, 0x300, 4.0f);
+        put<double>(health, off::HEALTH_CACHED, 90.0); put<double>(health, shieldOff, 45.0); put<float>(other, 0x100, 35.0f); put<float>(other, 0x300, 4.0f);
         std::string second = run("shield");
         CHECK(second.find("shield_value 0x300  ") == std::string::npos, "shield probe: a number that changed by itself during the warm-up is never printed");
         std::printf("%s", second.c_str());
         CHECK(second.find("known: health") != std::string::npos, "shield probe: the known health number is marked");
-        CHECK(second.find("60.000 -> 45.000") != std::string::npos && second.find("shield_component -1  shield_value 0x710  shield_is_float 0") != std::string::npos,
+        CHECK(second.find("60.000 -> 45.000") != std::string::npos && second.find("shield_component -1  " + sv(shieldOff) + "  shield_is_float 0") != std::string::npos,
               "shield probe: a changed number next to health comes with the offsets.txt line (health component = -1)");
         CHECK(second.find("shield_component 0x500  shield_value 0x100  shield_is_float 1") != std::string::npos, "shield probe: a float in another component is listed with its component offset");
-        CHECK(second.find("shield_value 0x70c") == std::string::npos && second.find("shield_value 0x714") == std::string::npos,
+        CHECK(second.find(sv(off::HEALTH_CACHED + 4)) == std::string::npos && second.find(sv(shieldOff + 4)) == std::string::npos,
               "shield probe: the 4-byte halves of a changed double are not listed as separate numbers");
         std::string third = run("shield");
-        CHECK(third.find("shield_value 0x710") == std::string::npos, "shield probe: nothing is repeated while nothing changes");
+        CHECK(third.find(sv(shieldOff)) == std::string::npos, "shield probe: nothing is repeated while nothing changes");
         std::string none = run("shield", {});
         (void)none;
 
