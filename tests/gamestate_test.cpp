@@ -631,7 +631,7 @@ int main() {
         live::reset(); //the built-in offsets: HealthComponent +0x1d0 current, +0x1d8 maximum
         put<double>(hc1 + 0x1D0, 15.0);
         put<double>(hc1 + 0x1D8, 40.0);
-        put<double>(get<u64>(me + off::HEALTH_COMPONENT) + 0x1D0, 22.0);
+        put<double>(get<u64>(mate + off::HEALTH_COMPONENT) + 0x1D0, 22.0); //mate is "you" here (see above)
         const gsRet sd = fast.step();
         const RenderEntity* d1 = findIn(sd, enemy1);
         CHECK(d1 && d1->hasShield && d1->shield == 15.0 && d1->shieldMax == 40.0, "the built-in shield offsets read current and maximum");
