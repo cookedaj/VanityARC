@@ -251,7 +251,8 @@ inline void PageRadar() {
     const float R = config::radarRadius;
     if (ImGui::Button("Top left")) { config::radarCenterX = R + 40; config::radarCenterY = R + 50; }
     ImGui::SameLine();
-    if (ImGui::Button("Left, above health")) { config::radarCenterX = R + 40; config::radarCenterY = (float)config::SCREEN_H - 330 - R; }
+    //panel bottom (centre + R + 14) 6 px above the HP/SH readout's card, which grows with Text size
+    if (ImGui::Button("Left, above health")) { config::radarCenterX = R + 40; config::radarCenterY = SelfHealthRect().y0 - 6 - R - 14; }
     ImGui::SameLine();
     if (ImGui::Button("Top right")) { config::radarCenterX = (float)config::SCREEN_W - R - 40; config::radarCenterY = R + 50; }
     Slider("Left / right", &config::radarCenterX, R, std::max(R + 1, (float)config::SCREEN_W - R), "%.0f");
