@@ -464,6 +464,7 @@ inline void DrawRadar(const std::vector<RenderEntity>& entities, FminimalViewInf
         double tanH = std::tan(cameraInfo.FOV * 3.14159265358979 / 360.0);
         const Projection pr = MakeProjection(); //the game's own picture shape, not the screen's
         if (!config::fovIsHorizontal) tanH *= (double)pr.width / std::max(1, pr.height);
+        tanH /= std::max(0.01, pr.scale); //the Zoom calibration narrows or widens the view, as in View
         const float a = (float)std::atan(tanH);
         DrawLine(cx, cy, cx - R * std::sin(a), cy - R * std::cos(a), IM_COL32(255, 255, 255, 70), 1);
         DrawLine(cx, cy, cx + R * std::sin(a), cy - R * std::cos(a), IM_COL32(255, 255, 255, 70), 1);
