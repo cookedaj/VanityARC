@@ -45,7 +45,6 @@ inline void load(const std::string& dir = "") {
         if (hash != std::string::npos) line.erase(hash);
         std::istringstream in(line);
         std::string name;
-        if (!(in >> name)) continue;
         auto num = [&](int64_t& out) {
             std::string s;
             if (!(in >> s)) return false;
@@ -55,19 +54,24 @@ inline void load(const std::string& dir = "") {
             out = v;
             return true;
         };
-        int64_t v;
-        if (name == "shield_component" && num(v)) shieldComponent = v;
-        else if (name == "shield_value" && num(v)) shieldValue = v;
-        else if (name == "shield_max" && num(v)) shieldMax = v;
-        else if (name == "shield_is_float" && num(v)) shieldIsFloat = v != 0;
-        else if (name == "inv_array" || name == "inv_array_in") { //inv_array <offset> <stride> <asset offset in the record> [category]
-            InvArray a;                                             //inv_array_in <component> <offset> <stride> <asset offset> [category]: a list in another component of the pawn
-            const bool other = name == "inv_array_in";
-            if ((!other || (num(a.comp) && a.comp >= 0x300 && a.comp < 0x1400)) &&
-                num(a.off) && num(a.stride) && num(a.asset) && a.off >= 0 && a.stride >= 8 && a.stride <= 0x200 && a.asset >= 0 && a.asset < a.stride) {
-                std::string c;
-                if (in >> c) a.category = c;
-                if (invArrays.size() < 16) invArrays.push_back(a);
+        //every word of the line: a probe's ready line ("if this is the shield:  shield_component -1  shield_value 0x710 ...",
+        //"offsets.txt:  inv_array ...") can be pasted as it is; words that are not keys are skipped
+        while (in >> name) {
+            int64_t v;
+            if (name == "shield_component" && num(v)) shieldComponent = v;
+            else if (name == "shield_value" && num(v)) shieldValue = v;
+            else if (name == "shield_max" && num(v)) shieldMax = v;
+            else if (name == "shield_is_float" && num(v)) shieldIsFloat = v != 0;
+            else if (name == "inv_array" || name == "inv_array_in") { //inv_array <offset> <stride> <asset offset in the record> [category]
+                InvArray a;                                             //inv_array_in <component> <offset> <stride> <asset offset> [category]: a list in another component of the pawn
+                const bool other = name == "inv_array_in";
+                if ((!other || (num(a.comp) && a.comp >= 0x300 && a.comp < 0x1400)) &&
+                    num(a.off) && num(a.stride) && num(a.asset) && a.off >= 0 && a.stride >= 8 && a.stride <= 0x200 && a.asset >= 0 && a.asset < a.stride) {
+                    std::string c;
+                    if (in >> c) a.category = c;
+                    if (invArrays.size() < 16) invArrays.push_back(a);
+                }
+                break; //the rest of the line belongs to the list (its category)
             }
         }
     }
