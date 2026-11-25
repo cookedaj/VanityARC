@@ -2,6 +2,7 @@
 #include "draw/Menu.h"
 #include "imgui_internal.h"
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <filesystem>
 //A throw-away folder under the system temp directory (tests never touch your real ~/.config/kwin-helper)
@@ -158,6 +159,30 @@ int main() {
         io.AddMousePosEvent(-1000, -1000); frame(both); frame(both);
         CHECK(hits == 0, "no conflicting IDs in the player list and the inventory windows");
         CHECK(ImGui::FindWindowByName("##playerlist") != nullptr, "the player list is drawn");
+    }
+
+    //the 'mark' button sits on top of a row: it must take the click itself, not the row (which opens the inventory)
+    {
+        setenv("HOME", testDir("menuhome").c_str(), 1); //marks::save() writes under $HOME/.config/kwin-helper
+        io.DisplaySize = ImVec2(2600, 1700);            //the whole player list on screen
+        g_inspect.clear();
+        auto list = [] { DrawPlayerListWindow(true); };
+        for (int i = 0; i < 4; i++) frame(list);
+        ImGuiWindow* pw = ImGui::FindWindowByName("##playerlist");
+        const ImGuiID markId = ImGui::GetIDWithSeed("mark", nullptr, ImGui::GetIDWithSeed("793381ba5d093c9f", nullptr, pw->ID));
+        bool over = false;
+        for (float y = pw->Pos.y + 2; y < pw->Pos.y + pw->Size.y && !over; y += 3)
+            for (float x = pw->Pos.x + 4; x < pw->Pos.x + pw->Size.x && !over; x += 6) {
+                io.AddMousePosEvent(x, y);
+                frame(list); frame(list);
+                over = G->HoveredId == markId;
+            }
+        CHECK(over, "the mouse can hover the 'mark' button in the player list");
+        io.AddMouseButtonEvent(ImGuiMouseButton_Left, true); frame(list);
+        io.AddMouseButtonEvent(ImGuiMouseButton_Left, false); frame(list); frame(list);
+        CHECK(marks::isMarked("793381ba5d093c9f"), "clicking 'mark' marks the player as a teammate");
+        CHECK(g_inspect.empty(), "clicking 'mark' does not open the inventory window");
+        io.AddMousePosEvent(-1000, -1000); frame(list); frame(list);
     }
 
     ImGui::DestroyContext();

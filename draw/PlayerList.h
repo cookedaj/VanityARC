@@ -83,6 +83,7 @@ inline void DrawPlayerRows(int maxRows) {
         const ImU32 col = e->isDead ? ui::DIM : (mate ? ui::GREY : ui::WHITE);
         ImGui::PushID(key.c_str());
         const std::string name = !e->label.empty() ? e->label : (e->account.empty() ? "Unknown" : e->account.substr(0, 8));
+        ImGui::SetNextItemAllowOverlap(); //the TEAM button on top of the row takes its own clicks (and hides the row tooltip)
         if (ImGui::Selectable("##row", IsInspected(key), 0, ImVec2(rowW, 20))) ToggleInspect(key);
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Click for the inventory");
         ImGui::SameLine(6);
