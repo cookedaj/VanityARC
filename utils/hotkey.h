@@ -109,6 +109,17 @@ inline bool HandleKeyEvents(int fd, bool queue) {
 
 //Keyboards the hotkey thread has open right now; -1 until the first scan. main.cpp shows a message when it changes.
 inline std::atomic<int> g_KeyboardCount{-1};
+//Event devices the last scan was not allowed to read (not in group "input"). Set before g_KeyboardCount.
+inline std::atomic<int> g_KeyboardDenied{0};
+
+//Why Insert and the F-keys cannot work right now (why == nullptr while they can, or before the first scan).
+//hadKeyboard: a keyboard was open earlier in this run. main.cpp shows this on screen until it is fixed.
+struct HotkeyHelp { const char* why = nullptr; const char* fix = nullptr; };
+inline HotkeyHelp HotkeyProblem(int keyboards, int denied, bool hadKeyboard) {
+    if (keyboards != 0) return {};
+    if (!hadKeyboard && denied) return {"no permission to read the keyboard", "Fix: sudo usermod -aG input $USER   then log out and back in"};
+    return {hadKeyboard ? "keyboard lost" : "no keyboard found", "Plug in or wake the keyboard: it is found again by itself"};
+}
 
 //Opens every event device that has an Insert key (= keyboards) and is not in paths yet, and appends it to
 //fds and paths (same order). denied counts devices we may not read.
@@ -139,6 +150,7 @@ inline void HotkeyThread() {
     std::vector<int> fds;
     std::vector<std::string> paths; //same order as fds
     OpenKeyboards(fds, paths, &denied);
+    g_KeyboardDenied = denied;
     g_KeyboardCount = (int)fds.size();
     if (fds.empty()) {
         if (denied) {
@@ -174,6 +186,7 @@ inline void HotkeyThread() {
             lastScan = NowMs();
             const size_t before = fds.size();
             OpenKeyboards(fds, paths, &denied);
+            g_KeyboardDenied = denied;
             if (grabbed) for (size_t i = before; i < fds.size(); i++) ioctl(fds[i], EVIOCGRAB, 1);
         }
         std::vector<pollfd> p;

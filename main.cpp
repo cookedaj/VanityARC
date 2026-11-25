@@ -94,6 +94,7 @@ int main() {
     NearCue nearCue;        //the spoken warning when an enemy comes close
     //A message at the top of the screen that is also said out loud (when spoken cues are on)
     auto tell = [](const std::string& text, double seconds = 3.0) { Toast(text, seconds); cue::say(text); };
+    bool hadKeyboard = false; //a keyboard was open at some point in this run
     while (g_Running && !OverlayShouldClose()) {
         MenuPollToggle();
         //Stream-hide (F8, SIGUSR2 or the menu switch): while on, the overlay draws nothing and takes no mouse, so a screen
@@ -186,11 +187,13 @@ int main() {
         } else {
             g_KeyQuit = g_KeyClear = g_KeyMark = false;
         }
-        //Insert and the F-keys need a keyboard: say so when the last one goes away (Bluetooth sleep, unplugged) and when one is back
+        //Insert and the F-keys need a keyboard: say so when one is back (no keyboard at all: the card further down)
         const int keyboards = g_KeyboardCount;
         if (keyboards != lastKeyboards) {
-            if (keyboards == 0 && lastKeyboards > 0) tell("Keyboard lost: Insert will not work", 5.0);
+            //no keyboard: the card further down shows it for as long as it lasts; also said once out loud
+            if (keyboards == 0 && lastKeyboards > 0) cue::say("Keyboard lost: Insert will not work");
             else if (keyboards > 0 && lastKeyboards == 0) tell("Keyboard found");
+            if (keyboards > 0) hadKeyboard = true;
             lastKeyboards = keyboards;
         }
         //Said out loud when an enemy first comes close. Quiet while stream hide is on (the overlay then gives nothing
@@ -230,6 +233,18 @@ int main() {
             std::snprintf(l2, sizeof l2, "%.0f fps   step %.2f ms   scan %.1f ms   %zu moving, %zu fixed",
                           (double)ImGui::GetIO().Framerate, st.stepMs, st.scanMs, st.dynamics, st.statics);
             below = DrawStatusCard(l1, l2);
+        }
+        //Insert cannot open the menu: say why and how to fix it, big, for as long as it lasts (from the start, too)
+        if (const HotkeyHelp kh = HotkeyProblem(keyboards, g_KeyboardDenied, hadKeyboard); kh.why) {
+            const float x = (float)config::SCREEN_W * 0.5f, ls = config::labelSize, big = ls * 1.3f;
+            const std::string title = std::string("INSERT AND F-KEYS OFF: ") + kh.why;
+            float y = below + (big - ls) / 2;
+            DrawLabelCentered(x, y, title.c_str(), big, COLOR::white, true);
+            y += big / 2 + 8 + ls / 2;
+            DrawLabelCentered(x, y, kh.fix, ls, COLOR::white, true);
+            y += ls + 8;
+            DrawLabelCentered(x, y, "Open the menu meanwhile with:  pkill -USR1 -x kwin-helper", ls, COLOR::white, true);
+            below = y + ls + 10;
         }
         DrawToast(below);
 
