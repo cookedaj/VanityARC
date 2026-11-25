@@ -32,11 +32,11 @@ int main() {
     CHECK(itemvalues::valueOf("No Separator") == -1, "a line without | is skipped");
     CHECK(itemvalues::count() == 4, "count is the number of usable price lines");
     CHECK(ignored == 3, "the bad lines are counted as ignored (comments and blank lines are not)");
-    CHECK(itemvalues::parse("Light Ammo | 1,234\n| 5\nName |\n") == 3, "thousands commas, no name, no number: each line counted");
 
     CHECK(itemvalues::parse("Snap Hook | 1") == 0, "a good file ignores nothing");
     CHECK(itemvalues::valueOf("Snap Hook") == 1, "parse replaces the table");
     CHECK(itemvalues::valueOf("Light Ammo") == -1, "old entries are gone after parse");
+    CHECK(itemvalues::parse("Light Ammo | 1,234\n| 5\nName |\n") == 3, "thousands commas, no name, no number: each line counted");
 
     itemvalues::clear();
     CHECK(itemvalues::valueOf("Snap Hook") == -1, "clear empties the table");
