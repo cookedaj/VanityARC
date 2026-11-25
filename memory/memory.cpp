@@ -210,11 +210,17 @@ template uint8_t ReadMemory<uint8_t>(uintptr_t address);
 template char ReadMemory<char>(uintptr_t address);
 template bool ReadMemory<bool>(uintptr_t address);
 
+#include <cctype>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 namespace fs = std::filesystem;
 
 pid_t FindGamePID() {
+    //Every Unreal game under Proton has a GameThread. Prefer the one whose command line names ARC Raiders; the first
+    //other one is only used when none does (so a wrong guess at the name never stops the overlay from attaching).
+    pid_t other = 0;
+    std::string otherLine;
     std::error_code ec; //error_code overloads: a process that exits while we scan must not throw
     for (fs::directory_iterator it("/proc", ec), end; !ec && it != end; it.increment(ec)) {
         const std::string pid_str = it->path().filename().string();
@@ -235,14 +241,27 @@ pid_t FindGamePID() {
         // Unreal Engine games run well over 100 threads
         if (thread_count > 100) {
             pid_t pid = (pid_t)std::strtol(pid_str.c_str(), nullptr, 10);
-            std::cout << "[+] Found game process: PID " << pid
-                      << " (" << comm_name << ") with "
-                      << thread_count << " threads" << std::endl;
-            return pid;
+            std::ifstream cmd_file("/proc/" + pid_str + "/cmdline", std::ios::binary);
+            std::string cmdline((std::istreambuf_iterator<char>(cmd_file)), std::istreambuf_iterator<char>());
+            std::replace(cmdline.begin(), cmdline.end(), '\0', ' ');
+            std::string lower = cmdline;
+            std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) { return (char)std::tolower(c); });
+            const bool arc = lower.find(OBF("pioneer")) != std::string::npos || lower.find(OBF("raiders")) != std::string::npos;
+            const std::string line = "[+] Found game process: PID " + std::to_string(pid) + " (" + comm_name + ") with " +
+                                     std::to_string(thread_count) + " threads: " + cmdline;
+            if (arc) {
+                std::cout << line << std::endl;
+                return pid;
+            }
+            if (other == 0) {
+                other = pid;
+                otherLine = line + OBF(" (does not look like ARC Raiders)");
+            }
         }
     }
 
-    return 0; //not running (yet); the caller decides whether to say so and retry
+    if (other != 0) std::cout << otherLine << std::endl;
+    return other; //0: not running (yet); the caller decides whether to say so and retry
 }
 
 bool FindGameImage(pid_t pid) {

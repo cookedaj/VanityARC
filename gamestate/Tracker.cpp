@@ -92,6 +92,7 @@ void Tracker::run() {
     auto lastFind = clk::now() - std::chrono::seconds(10);
     auto lastData = clk::now();
     auto lastValid = clk::now() - std::chrono::seconds(10);
+    auto lastWorld = clk::now(); //last valid world (or attach / re-lookup): a minute without one looks again
     bool announced = false;
     uint64_t seq = 0;
     auto lastGamescope = clk::now() - std::chrono::seconds(10);
@@ -122,9 +123,26 @@ void Tracker::run() {
                 names::setBase(ImageBase); //also empties the name cache
                 labeler::reset();
                 lastData = t0;
+                lastWorld = t0;
             } else if (!announced) {
                 std::cout << OBF("[-] ARC Raiders is not running. Waiting for it...") << std::endl;
                 announced = true;
+            }
+        }
+        //A minute attached without a valid world: another Unreal game may have been picked. Look again and switch
+        //if the lookup now gives a different process.
+        if (!fixedPid_ && ProcessId != 0 && t0 - lastWorld >= std::chrono::seconds(60)) {
+            lastWorld = t0;
+            const pid_t p = FindGamePID();
+            if (p != 0 && p != ProcessId) {
+                std::cout << "[*] Switching from PID " << ProcessId.load() << " to PID " << p << std::endl;
+                cam_ = 0;
+                ProcessId = p;
+                if (!FindGameImage(ProcessId)) std::cout << "[-] The game's .exe was not found in its memory map: using the usual address" << std::endl;
+                gs = GameState(ImageBase);
+                names::setBase(ImageBase); //also empties the name cache
+                labeler::reset();
+                lastData = t0;
             }
         }
         if (ProcessId == 0) {
@@ -169,7 +187,7 @@ void Tracker::run() {
         //the camera stay (main.cpp ages them out) and the next step comes at the normal rate. Only a failure that lasts
         //is the main menu or a loading screen.
         const bool hiccup = !r.valid && t0 - lastValid < std::chrono::milliseconds(KEEP_MS);
-        if (r.valid) lastValid = t0;
+        if (r.valid) lastValid = lastWorld = t0;
         if (!hiccup) cam_ = r.valid ? gs.cameraActor() : 0;
 
         auto s = std::make_shared<Snapshot>();
