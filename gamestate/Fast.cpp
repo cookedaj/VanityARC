@@ -64,7 +64,7 @@ bool GameState::scan() {
         logThrottled("[-] Invalid Uworld (not in a raid yet?)");
         return false;
     }
-    if (uworld != lastWorld_) clockVal_ = -1; //a new world has a new clock
+    if (uworld != lastWorld_) { clockVal_ = -1; shieldSeen_.clear(); } //a new world has a new clock and new players
     lastWorld_ = uworld;
     //PersistentLevel at UWorld+0x170 is encrypted; the plain pointer is in LevelCollections[0] (see config.h)
     ptr levelCollection = ReadMemory<ptr>(uworld + off::LEVEL_COLLECTIONS);
@@ -319,12 +319,16 @@ void GameState::updateDynamic() {
                 updatePose(t, r.view ? *r.view : none, mesh, r.freshBones);
             }
             const ptr comp = live::shieldComponent >= 0 ? r.sc : r.hc;
+            const double lastShield = t.ent.shield; //his shield at the last step (0 right after a scan)
             t.ent.hasShield = shieldOn && isValidPtr(comp);
             t.ent.shield = t.ent.hasShield ? shieldNumber(r.shRaw) : 0.0;
             if (t.ent.hasShield) {
                 double& seen = shieldSeen_[t.ent.actor]; //the longest the bar has been
                 seen = std::max(seen, t.ent.shield);
-                t.ent.shieldMax = live::shieldMax >= 0 ? std::max(shieldNumber(r.shMaxRaw), t.ent.shield) : seen;
+                //The same number on two steps in a row is a real reading, not one bad read: it may raise the session's cap,
+                //so a player first seen with a damaged shield is not drawn as full
+                if (t.ent.shield == lastShield && t.ent.shield < 1000.0) shieldCap_ = std::max(shieldCap_, t.ent.shield);
+                t.ent.shieldMax = live::shieldMax >= 0 ? std::max(shieldNumber(r.shMaxRaw), t.ent.shield) : std::max(seen, shieldCap_);
             }
         } else {
             t.ent.isDead = r.destroyed != 0;
