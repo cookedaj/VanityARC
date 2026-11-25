@@ -305,9 +305,10 @@ void runNameProbe(const std::vector<RenderEntity>& ents, const std::vector<Rende
         }
     }
     std::sort(players.begin(), players.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
+    const size_t seen = players.size(); //before the cut to 16, so a stale PLAYER vtable matching many actors shows
     if (players.size() > 16) players.resize(16);
     const RenderEntity* me = (!players.empty() && players[0].first < 2.0) ? players[0].second : nullptr;
-    std::fprintf(out, "players seen %zu, you: %s, ground items (PICKUP class) in view: %d\n", players.size(),
+    std::fprintf(out, "players seen %zu, you: %s, ground items (PICKUP class) in view: %d\n", seen,
                  me ? "found" : "NOT FOUND (no PLAYER within 2 m)", pickups);
 
     probePlayers(out, players, me ? me->actor : 0);
