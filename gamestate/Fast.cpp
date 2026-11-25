@@ -365,11 +365,13 @@ gsRet GameState::assemble(const FminimalViewInfo& vm) {
         if (locals == 0 && meActor_) { //no controller: you died or are watching someone. You are still who you were.
             for (const Tracked& t : dyn_) if (t.live && t.ent.type == Object::PLAYER && t.ent.actor == meActor_) me = &t;
         }
-        double best = 2 * 100;
-        for (const Tracked& t : dyn_) {
-            if (me || !t.live || t.ent.type != Object::PLAYER) continue;
-            double d = t.ent.pos.Dist(vm.Location);
-            if (d < best) { best = d; me = &t; }
+        if (!me) {
+            double best = 2 * 100;
+            for (const Tracked& t : dyn_) {
+                if (!t.live || t.ent.type != Object::PLAYER) continue;
+                double d = t.ent.pos.Dist(vm.Location);
+                if (d < best) { best = d; me = &t; }
+            }
         }
     }
     if (me && me->ent.teamID >= 0) lastTeamID = me->ent.teamID; //set only by a read that worked (a failed one is not team 0)
