@@ -23,15 +23,20 @@ int main() {
     auto g2 = parseArgs({"gamescope", "--nested-width=1280", "--nested-height", "720", "--output-width=2560", "--output-height=1440", "--scaler", "fit"});
     CHECK(g2.nestedW == 1280 && g2.nestedH == 720 && g2.outW == 2560 && g2.outH == 1440 && g2.scaler == "fit", "long options, with = or a space");
     auto g3 = parseArgs({"gamescope", "-w1440", "-h1080"});
-    CHECK(g3.nestedW == 1440 && g3.nestedH == 1080 && g3.outW == 1440 && g3.outH == 1080, "-w1440 style, and an unset output follows the game");
+    CHECK(g3.nestedW == 1440 && g3.nestedH == 1080 && g3.outW == 1280 && g3.outH == 720, "-w1440 style, and an unset output is gamescope's 1280x720");
     auto g4 = parseArgs({"gamescope", "-W", "1920", "-H", "1080", "--", "-w", "640", "-h", "480"});
     CHECK(g4.renderW() == 1920 && g4.renderH() == 1080 && g4.nestedW == 1920, "the game's own arguments after -- are ignored");
     auto g5 = parseArgs({"gamescope", "-w", "abc", "-h", "-5", "-W", "99999"});
-    CHECK(g5.found && g5.renderW() == 0 && g5.renderH() == 0, "nonsense sizes are ignored, not trusted");
+    CHECK(g5.found && g5.renderW() == 1280 && g5.renderH() == 720, "nonsense sizes are ignored, not trusted: gamescope's defaults");
     auto g6 = parseArgs({"gamescope"});
-    CHECK(g6.found && g6.renderW() == 0, "no options: found, sizes unknown");
+    CHECK(g6.found && g6.renderW() == 1280 && g6.renderH() == 720 && g6.outW == 1280 && g6.outH == 720, "no options: gamescope's default 1280x720");
     auto g7 = parseArgs({"gamescope", "-w"});
     CHECK(g7.found, "an option without its value does not crash");
+    auto g8 = parseArgs({"gamescope", "-h", "1080", "-W", "2560", "-H", "1440"});
+    CHECK(g8.nestedW == 1920 && g8.nestedH == 1080 && g8.outW == 2560 && g8.outH == 1440, "-h alone: a 16:9 game width, not -W");
+    auto g9 = parseArgs({"gamescope", "-H", "1440"});
+    CHECK(g9.outW == 2560 && g9.outH == 1440 && g9.renderW() == 2560 && g9.renderH() == 1440, "-H alone: a 16:9 output width, the game follows it");
+    CHECK(parseArgs({"gamescope", "-S", "fit", "-i"}).scaler == "integer" && parseArgs({"gamescope", "--integer-scale"}).scaler == "integer", "-i / --integer-scale mean integer scaling");
 
     //find(): a process whose name is gamescope
     CHECK(!gamescope::find().found || gamescope::find().pid > 0, "find() works while nothing is running");
@@ -53,8 +58,13 @@ int main() {
 
     auto fit = parseArgs({"gamescope", "-w", "1440", "-h", "1080", "-W", "1920", "-H", "1080", "-S", "fit", "-f"});
     v = ComputeGameView(2560, 1440, fit, st);
-    //4:3 picture inside 16:9: 1440x1080 fills the height, bars left and right: (1920-1440)/2 = 240 of 1920 -> 320 px of 2560
+    //4:3 picture inside the 16:9 screen (fullscreen: the output is the screen): 1440x1080 fills the height -> 1920 wide, bars (2560-1920)/2 = 320
     CHECK(near(v.dx, 320) && near(v.dy, 0) && near(v.dw, 1920) && near(v.dh, 1440), "gamescope -S fit: keeps the shape, bars at the sides");
+    //fullscreen, no -W -H: the output is the screen, not the 1280x720 default and not the game's 4:3 size
+    v = ComputeGameView(2560, 1440, parseArgs({"gamescope", "-w", "1440", "-h", "1080", "-f"}), st);
+    CHECK(near(v.dx, 320) && near(v.dy, 0) && near(v.dw, 1920) && near(v.dh, 1440), "fullscreen auto: 4:3 kept in shape on the screen, not stretched");
+    v = ComputeGameView(2560, 1600, parseArgs({"gamescope", "-f"}), st);
+    CHECK(v.renderW == 1280 && v.renderH == 720 && near(v.dx, 0) && near(v.dy, 80) && near(v.dw, 2560) && near(v.dh, 1440), "fullscreen with no sizes: 1280x720 fitted to a 16:10 screen, bars top and bottom");
     auto fill = parseArgs({"gamescope", "-w", "1440", "-h", "1080", "-W", "1920", "-H", "1080", "-S", "fill"});
     v = ComputeGameView(2560, 1440, fill, st);
     CHECK(near(v.dw, 2560) && v.dh > 1440 && v.dy < 0, "gamescope -S fill: covers the screen, the top and bottom are cut off");
