@@ -130,6 +130,7 @@ bool GameState::scan() {
             statics_.push_back(std::move(t));
         }
     }
+    cam = cameraViaController(cam); //no CAMMANAGER-vtable actor (stale after a patch): the camera through the PlayerController
     //The camera is picked only with a FOV in the usual range (far from it: VIEW_MATRIX is not a view). A scan that did
     //not see one, or saw one zoomed in by a scope, keeps the camera it has; step() then takes any usable view from it.
     if (cam) {
