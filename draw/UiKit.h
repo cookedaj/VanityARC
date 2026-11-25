@@ -88,7 +88,8 @@ inline bool Switch(const char* label, bool* v) {
     ImGui::PushID(label);
     const float h = 16.0f, w = 32.0f, row = h + 6.0f;
     const ImVec2 p = ImGui::GetCursorScreenPos();
-    const bool pressed = ImGui::InvisibleButton("##sw", ImVec2(std::max(60.0f, ImGui::GetContentRegionAvail().x), row));
+    //EnableNav: ImGui leaves invisible buttons out of Tab and the arrows unless asked
+    const bool pressed = ImGui::InvisibleButton("##sw", ImVec2(std::max(60.0f, ImGui::GetContentRegionAvail().x), row), ImGuiButtonFlags_EnableNav);
     if (pressed) *v = !*v;
     const bool hov = ImGui::IsItemHovered();
     ImDrawList* dl = ImGui::GetWindowDrawList();
@@ -150,7 +151,7 @@ inline bool Choice(const char* label, double* v, std::initializer_list<const cha
 inline bool Tab(const char* label, bool selected, float w) {
     ImGui::PushID(label);
     const ImVec2 p = ImGui::GetCursorScreenPos();
-    const bool pressed = ImGui::InvisibleButton("##t", ImVec2(w, 32));
+    const bool pressed = ImGui::InvisibleButton("##t", ImVec2(w, 32), ImGuiButtonFlags_EnableNav);
     const bool hov = ImGui::IsItemHovered();
     ImDrawList* dl = ImGui::GetWindowDrawList();
     if (selected) dl->AddRectFilled(p, ImVec2(p.x + w, p.y + 32), IM_COL32(72, 72, 72, 255));
