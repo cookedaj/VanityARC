@@ -101,12 +101,13 @@ gsRet GameState::tick() {
 }
 
 uintptr_t GameState::getUworld() {
-    //v1029 4-step chain. In the main menu (no spawned PlayerController) any
-    //link can read 0, which tick() handles as "Invalid Uworld".
+    //v1029 4-step chain. In the main menu (no spawned PlayerController) any link can read 0: the chain stops there
+    //(no more reads from a bad address) and 0 comes back, which the callers handle as "Invalid Uworld".
     ptr p = ReadMemory<ptr>(this->baseAddr + off::UWORLD_RVA);
-    p = ReadMemory<ptr>(p + off::UWORLD_CHAIN_1);
-    p = ReadMemory<ptr>(p + off::UWORLD_CHAIN_2);
-    p = ReadMemory<ptr>(p + off::UWORLD_CHAIN_3);
+    for (ptr o : {off::UWORLD_CHAIN_1, off::UWORLD_CHAIN_2, off::UWORLD_CHAIN_3}) {
+        if (!isValidPtr(p)) return 0;
+        p = ReadMemory<ptr>(p + o);
+    }
     return p;
 }
 

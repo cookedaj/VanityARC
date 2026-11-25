@@ -87,7 +87,8 @@ private:
     ptr camActor_ = 0;
     FminimalViewInfo goodVm_{};                          //the last usable view, and when it was read: one bad read reuses it
     std::chrono::steady_clock::time_point goodVmAt_{};
-    ptr lastWorld_ = 0;   //UWorld at the last scan: a different one (or none) means a full scan right now
+    ptr lastWorld_ = 0;   //UWorld at the last scan: a different one (or none) at a world check means a full scan right now
+    std::chrono::steady_clock::time_point worldAt_{}; //when the UWorld chain was last read (see step())
     ptr meActor_ = 0;     //your own pawn at the last step (for the probes)
     FminimalViewInfo lastView_{}; //the camera at the last step: only players near it and in front of it get their pose read
     std::unordered_map<ptr, double> shieldSeen_; //highest shield seen per player: the bar's full length when the game keeps no maximum
@@ -134,10 +135,10 @@ private:
     struct SelfCheck { int stage = 0; int looks = 0; ptr me = 0; float rt = 0; std::chrono::steady_clock::time_point at{}; };
     SelfCheck self_;
 
-    bool scan();            //the whole actor list; false when there is no world yet
+    bool scan(ptr uworld);  //the whole actor list of this world (just read by step()); false when there is no world yet
     void learnKinds(const std::unordered_map<ptr, std::pair<int, ptr>>& unsure, std::chrono::steady_clock::time_point now);
     const char* updatePose(Tracked& t, const std::vector<uint8_t>& bones, const skeleton::Xform& mesh, bool freshBones); //nullptr: posed, else why not
-    void updateDynamic();   //position, health, team, dead for players and ARC
+    void updateDynamic(FminimalViewInfo& vm); //position, health, team, dead for players and ARC; also the camera's view into vm (left as is without a camera)
     gsRet assemble(const FminimalViewInfo& vm);
     void runLiveProbeIfAsked(const std::vector<RenderEntity>& ents, const FminimalViewInfo& vm); //KWINHELPER_PROBE=shield|inventory
     void selfCheckIfAsked(const FminimalViewInfo& vm); //KWINHELPER_SELFCHECK=1: PASS / FAIL per game number, once in a raid
