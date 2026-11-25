@@ -22,8 +22,10 @@
 #include <poll.h>
 #include <string>
 #include <sys/ioctl.h>
+#include <sys/stat.h>
 #include <thread>
 #include <unistd.h>
+#include <utility>
 #include <vector>
 
 //Set by the Insert key or SIGUSR1; the main loop clears it
@@ -124,15 +126,25 @@ inline HotkeyHelp HotkeyProblem(int keyboards, int denied, bool hadKeyboard) {
 
 //Opens every event device that has an Insert key (= keyboards) and is not in paths yet, and appends it to
 //fds and paths (same order). denied counts devices we may not read.
-inline void OpenKeyboards(std::vector<int>& fds, std::vector<std::string>& paths, int* denied) {
+//checked: (path, inode) of devices already opened and found not to be keyboards. They are skipped after a stat()
+//(which never wakes the device, unlike open()). A replugged device gets a new inode, so it is looked at again.
+inline void OpenKeyboards(std::vector<int>& fds, std::vector<std::string>& paths, int* denied,
+                          std::vector<std::pair<std::string, ino_t>>& checked) {
     *denied = 0;
     DIR* dir = opendir("/dev/input");
     if (!dir) return;
+    std::vector<std::pair<std::string, ino_t>> seen; //non-keyboards still present in this scan; replaces checked
     constexpr size_t BITS = 8 * sizeof(unsigned long);
     while (dirent* e = readdir(dir)) {
         if (std::strncmp(e->d_name, "event", 5) != 0) continue;
         std::string path = std::string("/dev/input/") + e->d_name;
         if (std::find(paths.begin(), paths.end(), path) != paths.end()) continue; //already open
+        struct stat st {};
+        const bool statOk = stat(path.c_str(), &st) == 0;
+        if (statOk && std::find(checked.begin(), checked.end(), std::make_pair(path, st.st_ino)) != checked.end()) {
+            seen.emplace_back(path, st.st_ino); //known non-keyboard: not opened again
+            continue;
+        }
         int fd = open(path.c_str(), O_RDONLY | O_NONBLOCK | O_CLOEXEC);
         if (fd < 0) {
             if (errno == EACCES) (*denied)++;
@@ -141,18 +153,24 @@ inline void OpenKeyboards(std::vector<int>& fds, std::vector<std::string>& paths
         unsigned long keys[KEY_MAX / BITS + 1] = {};
         bool hasKey = ioctl(fd, EVIOCGBIT(EV_KEY, sizeof keys), keys) >= 0 &&
                       ((keys[MENU_KEY / BITS] >> (MENU_KEY % BITS)) & 1UL);
-        if (hasKey) { fds.push_back(fd); paths.push_back(path); } else close(fd);
+        if (hasKey) { fds.push_back(fd); paths.push_back(path); }
+        else {
+            close(fd);
+            if (statOk) seen.emplace_back(path, st.st_ino);
+        }
     }
     closedir(dir);
+    checked.swap(seen);
 }
 
 inline void HotkeyRun() {
     int denied = 0;
     std::vector<int> fds;
     std::vector<std::string> paths; //same order as fds
+    std::vector<std::pair<std::string, ino_t>> checked; //devices already found not to be keyboards
     //On the way out, also when an error leaves early: let go of the keyboards, so the game always gets them back
     struct Release { std::vector<int>& fds; ~Release() { for (int fd : fds) { ioctl(fd, EVIOCGRAB, 0); close(fd); } } } release{fds};
-    OpenKeyboards(fds, paths, &denied);
+    OpenKeyboards(fds, paths, &denied, checked);
     g_KeyboardDenied = denied;
     g_KeyboardCount = (int)fds.size();
     if (fds.empty()) {
@@ -188,7 +206,7 @@ inline void HotkeyRun() {
         if (NowMs() - lastScan >= 2000) {
             lastScan = NowMs();
             const size_t before = fds.size();
-            OpenKeyboards(fds, paths, &denied);
+            OpenKeyboards(fds, paths, &denied, checked);
             g_KeyboardDenied = denied;
             if (grabbed) for (size_t i = before; i < fds.size(); i++) ioctl(fds[i], EVIOCGRAB, 1);
         }
