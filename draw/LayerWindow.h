@@ -33,7 +33,8 @@ public:
 
     bool shouldClose() const;
     int width() const;
-    int height() const;
+    int height() const;                  //width and height are in surface (logical) pixels
+    int scale() const;                   //buffer pixels per surface pixel (the output's scale)
     const std::string& monitorName() const;
     std::vector<LayerInput> takeInput(); //pointer events since the last call (only arrive while interactive)
 
