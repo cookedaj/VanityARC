@@ -30,6 +30,7 @@ struct LayerWindow::Impl {
     struct Out { wl_output* o; std::string name; int scale = 1; };
     std::vector<Out> outs;
     wl_output* on = nullptr; //the output the overlay is on
+    wl_output* target = nullptr; //the output asked for (nullptr: the compositor chooses)
     int scale = 1;           //buffer pixels per surface pixel (that output's wl_output.scale)
 
     wl_surface* surf = nullptr;
@@ -38,6 +39,8 @@ struct LayerWindow::Impl {
     EGLDisplay edpy = EGL_NO_DISPLAY;
     EGLContext ectx = EGL_NO_CONTEXT;
     EGLSurface esurf = EGL_NO_SURFACE;
+    EGLConfig ecfg = nullptr;
+    bool surfaceless = false; //the context can stay current without a surface (needed to take the surface away while hidden)
 
     int w = 0, h = 0;
     bool configured = false, closed = false, interactive = false;
@@ -169,6 +172,66 @@ struct LayerWindow::Impl {
         wl_surface_set_input_region(surf, r);
         wl_region_destroy(r);
     }
+
+    //The full-screen surface and its EGL window surface, made at the start and again when stream hide ends. The Wayland
+    //connection and the OpenGL context (with the menu's shaders and font) live on in between. nullptr, or why it failed.
+    const char* makeSurface() {
+        w = h = 0;
+        configured = closed = inside = false;
+        surf = wl_compositor_create_surface(comp);
+        static const wl_surface_listener sl = {onSurfEnter, onSurfLeave};
+        wl_surface_add_listener(surf, &sl, this);
+        on = target; //nullptr: learned from the surface's enter event
+        scale = 1;   //a new surface starts at scale 1
+        applyScale();
+        ls = zwlr_layer_shell_v1_get_layer_surface(shell, surf, target, ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY, "kwin-helper");
+        static const zwlr_layer_surface_v1_listener ll = {onConfigure, onClosed};
+        zwlr_layer_surface_v1_add_listener(ls, &ll, this);
+        zwlr_layer_surface_v1_set_size(ls, 0, 0); //0 + all four edges anchored = the whole output
+        zwlr_layer_surface_v1_set_anchor(ls, ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP | ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM |
+                                             ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT | ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT);
+        zwlr_layer_surface_v1_set_exclusive_zone(ls, -1); //cover panels too
+        zwlr_layer_surface_v1_set_keyboard_interactivity(ls, ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_NONE); //never take the keyboard from the game
+        setRegion(false); //no input at all: every click goes to the game (onConfigure widens it while the menu is open)
+        wl_surface_commit(surf);
+
+        const auto t0 = std::chrono::steady_clock::now();
+        while (!configured && !closed) {
+            if (wl_display_roundtrip(dpy) < 0) return "lost the connection to the compositor";
+            if (std::chrono::steady_clock::now() - t0 > std::chrono::seconds(3)) return "the compositor never sized the overlay";
+        }
+        if (closed || w <= 0 || h <= 0) return "the compositor refused the overlay surface";
+
+        ew = wl_egl_window_create(surf, w * scale, h * scale);
+        if (!ew) return "could not create the Wayland EGL window";
+        esurf = eglCreateWindowSurface(edpy, ecfg, (EGLNativeWindowType)ew, nullptr);
+        if (esurf == EGL_NO_SURFACE) return "EGL could not create the window surface";
+        if (!eglMakeCurrent(edpy, esurf, esurf, ectx)) return "EGL could not make the context current";
+        //0: eglSwapBuffers never waits (with 1 it can wait forever while the screen is locked or asleep, and then F10 and
+        //SIGTERM are never seen). Frames are paced on the frame callback in pump() instead, with a time limit.
+        eglSwapInterval(edpy, 0);
+        return nullptr;
+    }
+
+    //Takes the surface off the screen. The context stays current without one where the driver allows it.
+    void dropSurface() {
+        if (edpy != EGL_NO_DISPLAY) {
+            if (!surfaceless || !eglMakeCurrent(edpy, EGL_NO_SURFACE, EGL_NO_SURFACE, ectx))
+                eglMakeCurrent(edpy, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+            if (esurf != EGL_NO_SURFACE) eglDestroySurface(edpy, esurf);
+        }
+        esurf = EGL_NO_SURFACE;
+        if (frameCb) wl_callback_destroy(frameCb);
+        frameCb = nullptr;
+        if (ew) wl_egl_window_destroy(ew);
+        ew = nullptr;
+        if (ls) zwlr_layer_surface_v1_destroy(ls);
+        ls = nullptr;
+        if (surf) wl_surface_destroy(surf);
+        surf = nullptr;
+        inside = false;
+        input.clear();
+    }
 };
 
 LayerWindow::LayerWindow() : p_(new Impl) {}
@@ -213,31 +276,7 @@ bool LayerWindow::create(const std::string& monitor, std::string* error) {
         if (!monitor.empty() && o.name == monitor) { out = o.o; d.monitor = o.name; }
     }
     if (!monitor.empty() && !out) std::fprintf(stderr, "[!] Monitor '%s' not found (have: %s). The compositor will choose.\n", monitor.c_str(), have.c_str());
-
-    d.surf = wl_compositor_create_surface(d.comp);
-    static const wl_surface_listener sl = {Impl::onSurfEnter, Impl::onSurfLeave};
-    wl_surface_add_listener(d.surf, &sl, &d);
-    d.on = out; //nullptr: learned from the surface's enter event
-    d.applyScale();
-    d.ls = zwlr_layer_shell_v1_get_layer_surface(d.shell, d.surf, out, ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY, "kwin-helper");
-    static const zwlr_layer_surface_v1_listener ll = {Impl::onConfigure, Impl::onClosed};
-    zwlr_layer_surface_v1_add_listener(d.ls, &ll, &d);
-    zwlr_layer_surface_v1_set_size(d.ls, 0, 0); //0 + all four edges anchored = the whole output
-    zwlr_layer_surface_v1_set_anchor(d.ls, ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP | ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM |
-                                           ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT | ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT);
-    zwlr_layer_surface_v1_set_exclusive_zone(d.ls, -1); //cover panels too
-    zwlr_layer_surface_v1_set_keyboard_interactivity(d.ls, ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_NONE); //never take the keyboard from the game
-    wl_region* empty = wl_compositor_create_region(d.comp); //no input at all: every click goes to the game
-    wl_surface_set_input_region(d.surf, empty);
-    wl_region_destroy(empty);
-    wl_surface_commit(d.surf);
-
-    const auto t0 = std::chrono::steady_clock::now();
-    while (!d.configured && !d.closed) {
-        if (wl_display_roundtrip(d.dpy) < 0) return fail("lost the connection to the compositor");
-        if (std::chrono::steady_clock::now() - t0 > std::chrono::seconds(3)) return fail("the compositor never sized the overlay");
-    }
-    if (d.closed || d.w <= 0 || d.h <= 0) return fail("the compositor refused the overlay surface");
+    d.target = out;
 
     //EGL (OpenGL 3.0 with an alpha channel, so the overlay can be see-through)
     d.edpy = eglGetPlatformDisplay(EGL_PLATFORM_WAYLAND_KHR, d.dpy, nullptr);
@@ -246,40 +285,26 @@ bool LayerWindow::create(const std::string& monitor, std::string* error) {
     if (!eglBindAPI(EGL_OPENGL_API)) return fail("EGL has no desktop OpenGL");
     const EGLint cfgAttr[] = {EGL_SURFACE_TYPE, EGL_WINDOW_BIT, EGL_RENDERABLE_TYPE, EGL_OPENGL_BIT,
                               EGL_RED_SIZE, 8, EGL_GREEN_SIZE, 8, EGL_BLUE_SIZE, 8, EGL_ALPHA_SIZE, 8, EGL_NONE};
-    EGLConfig cfg = nullptr;
     EGLint n = 0;
-    if (!eglChooseConfig(d.edpy, cfgAttr, &cfg, 1, &n) || n < 1) return fail("EGL has no 8-bit RGBA configuration");
+    if (!eglChooseConfig(d.edpy, cfgAttr, &d.ecfg, 1, &n) || n < 1) return fail("EGL has no 8-bit RGBA configuration");
     const EGLint ctxAttr[] = {EGL_CONTEXT_MAJOR_VERSION, 3, EGL_CONTEXT_MINOR_VERSION, 0, EGL_NONE};
-    d.ectx = eglCreateContext(d.edpy, cfg, EGL_NO_CONTEXT, ctxAttr);
+    d.ectx = eglCreateContext(d.edpy, d.ecfg, EGL_NO_CONTEXT, ctxAttr);
     if (d.ectx == EGL_NO_CONTEXT) return fail("EGL could not create an OpenGL 3.0 context");
-    d.ew = wl_egl_window_create(d.surf, d.w * d.scale, d.h * d.scale);
-    if (!d.ew) return fail("could not create the Wayland EGL window");
-    d.esurf = eglCreateWindowSurface(d.edpy, cfg, (EGLNativeWindowType)d.ew, nullptr);
-    if (d.esurf == EGL_NO_SURFACE) return fail("EGL could not create the window surface");
-    if (!eglMakeCurrent(d.edpy, d.esurf, d.esurf, d.ectx)) return fail("EGL could not make the context current");
-    //0: eglSwapBuffers never waits (with 1 it can wait forever while the screen is locked or asleep, and then F10 and
-    //SIGTERM are never seen). Frames are paced on the frame callback in pump() instead, with a time limit.
-    eglSwapInterval(d.edpy, 0);
+    const char* ext = eglQueryString(d.edpy, EGL_EXTENSIONS);
+    d.surfaceless = ext && std::strstr(ext, "EGL_KHR_surfaceless_context");
+    if (const char* why = d.makeSurface()) return fail(why);
     return true;
 }
 
 void LayerWindow::destroy() {
     Impl& d = *p_;
+    d.dropSurface();
     if (d.edpy != EGL_NO_DISPLAY) {
         eglMakeCurrent(d.edpy, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
-        if (d.esurf != EGL_NO_SURFACE) eglDestroySurface(d.edpy, d.esurf);
         if (d.ectx != EGL_NO_CONTEXT) eglDestroyContext(d.edpy, d.ectx);
         eglTerminate(d.edpy);
     }
-    d.esurf = EGL_NO_SURFACE; d.ectx = EGL_NO_CONTEXT; d.edpy = EGL_NO_DISPLAY;
-    if (d.frameCb) wl_callback_destroy(d.frameCb);
-    d.frameCb = nullptr;
-    if (d.ew) wl_egl_window_destroy(d.ew);
-    d.ew = nullptr;
-    if (d.ls) zwlr_layer_surface_v1_destroy(d.ls);
-    d.ls = nullptr;
-    if (d.surf) wl_surface_destroy(d.surf);
-    d.surf = nullptr;
+    d.ectx = EGL_NO_CONTEXT; d.edpy = EGL_NO_DISPLAY; d.ecfg = nullptr; d.surfaceless = false;
     if (d.pointer) wl_pointer_release(d.pointer);
     d.pointer = nullptr;
     if (d.cursorSurf) wl_surface_destroy(d.cursorSurf);
@@ -288,7 +313,7 @@ void LayerWindow::destroy() {
     if (d.dpy) { wl_display_flush(d.dpy); wl_display_disconnect(d.dpy); }
     d.dpy = nullptr; d.reg = nullptr; d.comp = nullptr; d.shell = nullptr; d.seat = nullptr; d.shm = nullptr;
     d.outs.clear();
-    d.on = nullptr; d.scale = 1;
+    d.on = nullptr; d.target = nullptr; d.scale = 1;
 }
 
 bool LayerWindow::pump() {
@@ -303,6 +328,7 @@ bool LayerWindow::pump() {
         wl_display_flush(d.dpy);
         int wait = 0;
         if (d.frameCb) wait = (int)std::max<long long>(0, std::chrono::duration_cast<std::chrono::milliseconds>(until - std::chrono::steady_clock::now()).count());
+        else if (!d.surf) wait = 33; //no surface (stream hide), so no frame callback paces the loop: about 30 times a second
         pollfd pfd{wl_display_get_fd(d.dpy), POLLIN, 0};
         if (poll(&pfd, 1, wait) > 0) wl_display_read_events(d.dpy);
         else wl_display_cancel_read(d.dpy);
@@ -314,7 +340,7 @@ bool LayerWindow::pump() {
 
 void LayerWindow::swap() {
     Impl& d = *p_;
-    if (d.edpy == EGL_NO_DISPLAY) return;
+    if (d.esurf == EGL_NO_SURFACE) return; //no display, or no surface while hidden
     if (!d.frameCb) { //goes out with the commit eglSwapBuffers makes
         static const wl_callback_listener fl = {Impl::onFrameDone};
         d.frameCb = wl_surface_frame(d.surf);
@@ -325,11 +351,37 @@ void LayerWindow::swap() {
 
 void LayerWindow::setInteractive(bool on) {
     Impl& d = *p_;
-    if (!d.surf || d.interactive == on) return;
-    d.interactive = on;
-    d.setRegion(on); //takes effect with the next frame
+    if (d.interactive == on) return;
+    d.interactive = on; //also while there is no surface: remap() gives the new one this click area
+    if (d.surf) d.setRegion(on); //takes effect with the next frame
     if (!on) d.input.clear();
 }
+
+void LayerWindow::unmap() {
+    Impl& d = *p_;
+    if (!d.surf || !d.surfaceless) return;
+    //The context (the menu's shaders and font) must stay current without a surface. Where the driver refuses, the
+    //surface stays and shows empty frames, as before.
+    if (!eglMakeCurrent(d.edpy, EGL_NO_SURFACE, EGL_NO_SURFACE, d.ectx)) {
+        eglMakeCurrent(d.edpy, d.esurf, d.esurf, d.ectx);
+        d.surfaceless = false;
+        return;
+    }
+    d.dropSurface();
+}
+
+bool LayerWindow::remap(std::string* error) {
+    Impl& d = *p_;
+    if (d.surf) return true;
+    if (!d.dpy) { if (error) *error = "no connection to the compositor"; return false; }
+    const char* why = d.makeSurface();
+    if (!why) return true;
+    if (error) *error = why;
+    d.dropSurface();
+    return false;
+}
+
+bool LayerWindow::mapped() const { return p_->surf != nullptr; }
 
 bool LayerWindow::shouldClose() const { return p_->closed || (p_->dpy && wl_display_get_error(p_->dpy) != 0); } //also a connection lost during swap()
 bool LayerWindow::hasCursor() const { return p_->cursorSurf != nullptr; }

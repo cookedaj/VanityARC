@@ -10,7 +10,8 @@
 bool InitOverlay();
 void RenderBegin();                          //events, new ImGui frame, the full-screen host window for the ESP
 void RenderEnd(void (*extra)() = nullptr);   //extra: more UI on top (the Insert menu); then draws and shows the frame
-void SetOverlayHidden(bool on);             //stream-hide: while on, every frame is empty (transparent), so nothing is shown
+void SetOverlayHidden(bool on);             //stream-hide: while on, nothing is shown. The layer surface is taken off the screen
+                                             //(OverlayReady) and made again when it goes off; the normal window draws empty frames
 bool OverlayReady();                         //once per frame before RenderBegin(): the layer surface's events. False while the surface
                                              //is gone (monitor unplugged / off, compositor restart) and being made again: skip the frame
 bool OverlayShouldClose();
