@@ -222,7 +222,8 @@ void GameState::learnKinds(const std::unordered_map<ptr, std::pair<int, ptr>>& u
 //One player's stick figure for this step. The bone list is read whole only some of the time (the game rewrites it
 //every frame), the game stops animating players it is not drawing, and nobody far away is animated at all, so:
 //  - a list that cannot be read is replaced by the last good one for a moment (no flicker),
-//  - a frozen player gets the pose of someone the game IS animating in the same stance and speed (drawn faint).
+//  - a frozen player gets the pose of someone the game IS animating in the same stance and speed (drawn at full
+//    strength like a live pose; only Dim players behind cover can fade him).
 //Returns nullptr when he got a pose, otherwise why not (for the console).
 const char* GameState::updatePose(Tracked& t, const std::vector<uint8_t>& bones, const skeleton::Xform& mesh, bool freshBones) {
     using namespace std::chrono;
@@ -534,7 +535,7 @@ gsRet GameState::assemble(const FminimalViewInfo& vm) {
     return out;
 }
 
-//KWINHELPER_PROBE=shield or inventory (set before starting): prints discovery reports every 2 s, reading memory only
+//KWINHELPER_PROBE=<names>, see announceLiveProbe (set before starting): prints discovery reports every 2 s, reading memory only
 void GameState::runLiveProbeIfAsked(const std::vector<RenderEntity>& ents, const FminimalViewInfo& vm) {
 #ifdef KWINHELPER_PROBES
     static const std::string mode = [] { //read once; lower-case so "Shield" works too; says once what runs
@@ -768,7 +769,9 @@ gsRet GameState::step() {
         //changed the skeleton or moved an offset would otherwise turn every stick figure off without a word)
         if (poseWanted_ && !posed_ && t0 - poseOkAt_ >= std::chrono::seconds(5))
             logThrottled(("[-] Stick figures: none drawn for 5 s: " + poseWhy_ +
-                          ". Run the bones probe (KWINHELPER_PROBE=bones with the probe build, see the README)").c_str());
+                          ". Run the bones probe: build the probe version (README, probes section), then "
+                          "KWINHELPER_BIN=./cmake-build-probe/kwin-helper KWINHELPER_PROBE=bones bash start.sh, "
+                          "and copy the === BONES PROBE lines").c_str());
     }
     timing_.lastStepMs = ms(t0, clk::now());
     return out;

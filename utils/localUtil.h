@@ -63,7 +63,8 @@ struct RenderEntity {
     std::string account; //players: the account id as hex text (stable between games), "" when unknown
     bool isTurret = false; //ARC: a turret
     std::shared_ptr<const skeleton::Pose> pose; //players: the stick figure in world space, null when it could not be read
-    bool poseLive = true; //false: the game has stopped animating this player (not drawn / out of range), so the pose is old
+    bool poseLive = true; //false: the game has stopped animating this player (not drawn / out of range), so the pose is old.
+                          //Not used for drawing (an old pose is never drawn fainter); kept so tests can check that frozen players are detected.
 };
 
 #endif //KWINHELPER_LOCALUTIL_H

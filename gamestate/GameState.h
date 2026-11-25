@@ -148,7 +148,7 @@ private:
     const char* updatePose(Tracked& t, const std::vector<uint8_t>& bones, const skeleton::Xform& mesh, bool freshBones); //nullptr: posed, else why not
     void updateDynamic(FminimalViewInfo& vm); //position, health, team, dead for players and ARC; also the camera's view into vm (left as is without a camera)
     gsRet assemble(const FminimalViewInfo& vm);
-    void runLiveProbeIfAsked(const std::vector<RenderEntity>& ents, const FminimalViewInfo& vm); //KWINHELPER_PROBE=shield|inventory
+    void runLiveProbeIfAsked(const std::vector<RenderEntity>& ents, const FminimalViewInfo& vm); //KWINHELPER_PROBE=<names>, see announceLiveProbe
     void selfCheckIfAsked(const FminimalViewInfo& vm); //KWINHELPER_SELFCHECK=1: PASS / FAIL per game number, once in a raid
 };
 

@@ -164,6 +164,8 @@ Then start it with the probe build and the probe variable:
 KWINHELPER_BIN=./cmake-build-probe/kwin-helper KWINHELPER_PROBE=shield,inventory bash start.sh
 ```
 
+The same probe build also takes `bones` (stick figures), `mesh`, `flags`, `rendertime`, `stance` and `team` in `KWINHELPER_PROBE`, several at once separated by commas (for example `KWINHELPER_PROBE=bones`); copy their console lines and send them over the same way as in step 4.
+
 1. Start it like that, then start a raid. Stay in third person, so the overlay can tell which player is you.
 2. **Shield:** when `=== SHIELD PROBE ===` appears, move around but keep your shield full and take no damage. About 6 seconds later `=== NOW take a hit ===` appears: now take a hit (or do anything that changes your shield). Lines appear for every number that changed. Health is marked `<- known: health`. The shield is the other number that moves with it. Under each candidate there is a ready line: `if this is the shield: shield_component ... shield_value ...`.
 3. **Inventory:** every 8 seconds `=== INVENTORY PROBE ===` lists your item lists and those of the two nearest players, each with a ready `offsets.txt:  inv_array ...` line. Stand near another player for a moment.

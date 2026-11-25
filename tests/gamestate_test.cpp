@@ -289,7 +289,7 @@ int main() {
         gsRet rm = fast.step();
         const RenderEntity* m = findPlayer(rm, mate);
         const RenderEntity* e = findPlayer(rm, enemy1);
-        CHECK(m && m->pose && !m->poseLive, "the frozen player has a pose, drawn as not live");
+        CHECK(m && m->pose && !m->poseLive, "the frozen player has a pose, marked as not live");
         if (m && m->pose && e && e->pose) {
             const double mh = m->pose->j[skeleton::HEAD].z - m->pose->j[skeleton::PELVIS].z;
             const double eh = e->pose->j[skeleton::HEAD].z - e->pose->j[skeleton::PELVIS].z;
