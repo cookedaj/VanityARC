@@ -234,8 +234,10 @@ inline void DrawMenu() {
     ImGui::PushFont(OverlayFont(), 20.0f);
     ImGui::TextUnformatted("Overlay");
     ImGui::PopFont();
-    ImGui::SameLine(ImGui::GetWindowWidth() - 150);
-    ImGui::TextColored(ImColor(ui::GREY), "Insert closes");
+    const char* closeLabel = "Close menu (Insert)"; //a mouse way out too: Insert and SIGUSR1 need the hotkey thread
+    const ImGuiStyle& st = ImGui::GetStyle();
+    ImGui::SameLine(ImGui::GetWindowWidth() - st.WindowPadding.x - ImGui::CalcTextSize(closeLabel).x - st.FramePadding.x * 2);
+    if (ImGui::Button(closeLabel)) g_MenuToggle = true; //MenuPollToggle closes and saves exactly as Insert does
     ImGui::Separator();
 
     const float footer = 30.0f;
