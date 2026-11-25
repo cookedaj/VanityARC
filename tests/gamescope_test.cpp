@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <string>
 #include <vector>
 #include "utils/gamescope.h"
@@ -38,13 +39,27 @@ int main() {
     CHECK(g9.outW == 2560 && g9.outH == 1440 && g9.renderW() == 2560 && g9.renderH() == 1440, "-H alone: a 16:9 output width, the game follows it");
     CHECK(parseArgs({"gamescope", "-S", "fit", "-i"}).scaler == "integer" && parseArgs({"gamescope", "--integer-scale"}).scaler == "integer", "-i / --integer-scale mean integer scaling");
 
-    //find(): a process whose name is gamescope
-    CHECK(!gamescope::find().found || gamescope::find().pid > 0, "find() works while nothing is running");
+    //find(): the gamescope the game runs in. The "gamescope" is a process of that name; the "game" is its child,
+    //started with the variable gamescope sets for what it runs.
+    const bool testInGamescope = std::getenv("GAMESCOPE_WAYLAND_DISPLAY") != nullptr;
+    CHECK(!gamescope::find(getpid()).found || testInGamescope, "find() works while nothing is running");
+    int fd[2] = {-1, -1};
+    CHECK(pipe(fd) == 0, "pipe for the game's pid");
     pid_t child = fork();
-    if (child == 0) { execl("/bin/bash", "bash", "-c", "exec -a gamescope sleep 20", (char*)nullptr); _exit(1); }
+    if (child == 0) {
+        setenv("GAMESCOPE_WAYLAND_DISPLAY", "gamescope-0", 1);
+        pid_t game = fork();
+        if (game == 0) { execlp("sleep", "sleep", "20", (char*)nullptr); _exit(1); }
+        if (write(fd[1], &game, sizeof game) != (ssize_t)sizeof game) _exit(1);
+        execl("/bin/bash", "bash", "-c", "exec -a gamescope sleep 20", (char*)nullptr); _exit(1);
+    }
+    pid_t game = 0;
+    if (read(fd[0], &game, sizeof game) != (ssize_t)sizeof game) game = 0;
     usleep(300000);
-    gamescope::Info f = gamescope::find();
-    CHECK(f.found && f.pid == child, "find() sees a running process called gamescope");
+    gamescope::Info f = gamescope::find(game);
+    CHECK(game > 0 && f.found && f.pid == child, "find() takes the gamescope the game runs in");
+    if (!testInGamescope) CHECK(!gamescope::find(getpid()).found, "a gamescope the game does not run in is ignored");
+    if (game > 0) kill(game, SIGTERM);
     kill(child, SIGTERM); waitpid(child, nullptr, 0);
 
     //--- the picture on the overlay
