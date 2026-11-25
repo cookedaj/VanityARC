@@ -92,6 +92,8 @@ The tests use a fake in-memory "game", so no game is needed:
 cmake -B cmake-build-tests -DKWINHELPER_TESTS=ON && cmake --build cmake-build-tests && ctest --test-dir cmake-build-tests
 ```
 
+On a machine without the graphics packages (a container, WSL), use `-DKWINHELPER_TESTS_ONLY=ON` instead: it builds only the tests. The tests always run with `HOME` set to `cmake-build-tests/test-home`, so they never touch your real `~/.config/kwin-helper`.
+
 They cover the name decoders, the label tables, the keyboard layout, the Insert menu (typing, hover ID clashes), a fuzz run over garbage memory, the batched memory reads, the projection and label decluttering, the ESP drawing, and the tracker thread against the old read path (`gamestate_test`).
 
 ## How the overlay works now
