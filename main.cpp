@@ -325,7 +325,7 @@ int main() {
 
         //The close-enemy warning goes last so nothing covers it; LOW HEALTH moves below it when both show
         float warnBottom = 0;
-        if (live && config::espEnabled) DrawCloseEnemyWarning(ents, vm, snap->localPlayerTeam, &warnBottom);
+        if (live && config::espEnabled) DrawCloseEnemyWarning(ents, vm, snap->localPlayerTeam, &warnBottom, LowHealthRoom(snap->selfHealth));
         if (live && config::showSelfHealth) DrawSelfHealth(snap->selfHealth, snap->selfShield, warnBottom); //old data: nothing, never an old number
 
         RenderEnd(DrawUi);
