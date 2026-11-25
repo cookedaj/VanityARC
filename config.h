@@ -104,6 +104,10 @@ inline constexpr bool scanForCamera = false;
 //true (with isDebugMode false): every 4 s print a "PROBE" report that checks the name / weapon / ARC-type
 //offsets and finds which fields tell types apart. Read-only; replaces the one-line status while on.
 inline constexpr bool probeNames = false;
+//The game build the offsets below are for: its .exe's PE TimeDateStamp, printed as "Game build stamp 0x..." when the
+//overlay finds the game. 0 = not recorded (no check). When set and the running game's stamp differs, the overlay says
+//"GAME UPDATED" on screen. Copy the printed value in here once the offsets are confirmed for that build.
+inline constexpr uint32_t GAME_PE_STAMP = 0;
 //----------------------------------------------
 
 

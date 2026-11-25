@@ -45,6 +45,8 @@ bool FindGameImage(pid_t pid);
 extern std::atomic<pid_t> ProcessId;
 //The game image is [ImageBase, ImageEnd). Set by FindGameImage on the tracker thread; read only there.
 extern uintptr_t ImageBase, ImageEnd;
+//The image's PE TimeDateStamp (which build of the game runs). 0 = not known (header not found or not readable).
+extern uint32_t ImageStamp;
 
 
 #endif //MEMORY_H
