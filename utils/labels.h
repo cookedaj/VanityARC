@@ -17,7 +17,8 @@ constexpr int CAT_COUNT = 4;
 //Built-in name for a raw key (the table first, then a cleaned-up version of the raw name)
 std::string defaultName(Cat c, const std::string& key);
 
-//The name to show: your own name if you set one, else def, else the built-in name. May be called from any thread.
+//The name to show: your own name if you set one (by raw key, else by the shown name), else def, else the built-in name.
+//May be called from any thread.
 std::string display(Cat c, const std::string& key, const std::string& def = "");
 
 //Item / gun key: the part of a raw name that identifies the item ("BattleRifle_BreachAction_01")

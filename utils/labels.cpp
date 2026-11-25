@@ -14,6 +14,7 @@ namespace labels {
 namespace {
 
 std::map<std::string, std::string> g_override[CAT_COUNT];
+std::unordered_map<std::string, std::string> g_shown; //"Trash Can = Bin" lines, by norm() of the shown name (any category)
 std::string g_dir;
 //The tracker and draw threads ask for names; load() fills them
 std::mutex g_mu;
@@ -259,7 +260,11 @@ std::string display(Cat c, const std::string& key, const std::string& def) {
     std::lock_guard<std::mutex> lk(g_mu);
     std::string base = def.empty() ? defaultName(c, key) : def;
     auto it = g_override[(int)c].find(key);
-    return it != g_override[(int)c].end() ? it->second : base;
+    if (it != g_override[(int)c].end()) return it->second;
+    if (!g_shown.empty())
+        for (const std::string& k : {norm(base), norm(key)}) //the name on screen first, then the raw name
+            if (auto s = g_shown.find(k); s != g_shown.end()) return s->second;
+    return base;
 }
 
 void setDir(const std::string& dir) {
@@ -280,12 +285,21 @@ void load() {
     while (std::getline(f, line)) {
         if (!line.empty() && line.back() == '\r') line.pop_back(); //file edited on another system
         if (line.starts_with("\xEF\xBB\xBF")) line.erase(0, 3); //UTF-8 byte-order mark (some Windows editors add one)
+        if (trim(line).starts_with('#')) continue; //a note
         size_t a = line.find('\t');
         size_t b = a == std::string::npos ? a : line.find('\t', a + 1);
-        if (b == std::string::npos) continue;
-        std::string cat = lower(trim(line.substr(0, a))), key = trim(line.substr(a + 1, b - a - 1)), name = trim(line.substr(b + 1));
-        for (int i = 0; i < CAT_COUNT; i++)
-            if (cat == catName((Cat)i) && !key.empty() && !name.empty()) g_override[i][key] = name;
+        if (b != std::string::npos) { //"category<TAB>raw key<TAB>name"
+            std::string cat = lower(trim(line.substr(0, a))), key = trim(line.substr(a + 1, b - a - 1)), name = trim(line.substr(b + 1));
+            bool tabLine = false;
+            for (int i = 0; i < CAT_COUNT; i++)
+                if (cat == catName((Cat)i)) { tabLine = true; if (!key.empty() && !name.empty()) g_override[i][key] = name; }
+            if (tabLine) continue;
+        }
+        //"Trash Can = Bin": the name you see on screen, then your own (any case, spaces or TABs around '=')
+        const size_t eq = line.find('=');
+        if (eq == std::string::npos) continue;
+        const std::string shown = norm(line.substr(0, eq)), name = trim(line.substr(eq + 1));
+        if (!shown.empty() && !name.empty()) g_shown[shown] = name;
     }
 }
 

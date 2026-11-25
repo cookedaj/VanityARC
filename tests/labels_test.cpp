@@ -171,6 +171,19 @@ int main() {
     CHECK(labels::display(Cat::Arc, "DA_EnemyType_Runner") == "Spider", "own name wins (first line after a UTF-8 mark)");
     CHECK(labels::display(Cat::Container, "BP_SocketContainer_CUL_MuseumCrate_01_A_C") == "Art crate", "category in any case, spaces around the fields dropped");
 
+    //"shown name = your name" lines (names not used further down, so the later checks keep the built-in names)
+    { std::ofstream out(labelsFile, std::ios::binary | std::ios::app);
+      out << "great  MULLEIN = Plant\n" " ESR Analyzer\t=\tScanner\r\n" "# Heavy Drone Laser = Note\n" "Museum Crate = Box\n"
+             "rival = Buddy\n" "AAAABBBBCCCCDDDD = Friend\n" "no separator here\n" " = nameless\n"; }
+    labels::load();
+    CHECK(labels::display(Cat::Container, "BP_SalvageContainer_GreatMullein_C") == "Plant", "shown name: capitals and spaces do not matter");
+    CHECK(labels::display(Cat::Item, "DA_Item_ESRAnalyzer_01") == "Scanner", "shown name: TABs around '=' are fine");
+    CHECK(labels::display(Cat::Arc, "DA_EnemyType_HeavyDrone_Laser") == "Heavy Drone Laser", "a line starting with # is ignored");
+    CHECK(labels::display(Cat::Container, "BP_SocketContainer_CUL_MuseumCrate_01_A_C") == "Art crate", "the TAB line with the raw key wins over a shown-name line");
+    CHECK(labels::display(Cat::Player, "1111222233334444", "Rival") == "Buddy", "shown name: a player's game name");
+    CHECK(labels::display(Cat::Player, "aaaabbbbccccdddd", "Someone") == "Friend", "the raw key works on a '=' line too");
+    CHECK(labels::display(Cat::Arc, "DA_EnemyType_Tick") == "Tick", "an unrelated name is unchanged");
+
     //--- settings file
     config::showArcNames = false; config::labelSize = 19.0f; config::nameMaxLootDist = 33;
     settings::save(dir);

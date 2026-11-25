@@ -25,7 +25,12 @@ Google/ask AI how to set up the build utility inside of CLion (Release build).
 10) Run the game in borderless fullscreen (or fullscreen) at your monitor's own resolution. No window rule and no Keep Above are needed.
 11) Only if the console prints `[!] No layer-shell overlay (...). Using a normal window`: your desktop has no layer-shell, so the old overlay window is used. Run `bash fix-overlay-rule.sh [MONITOR]` once (the monitor the game is on, e.g. `DP-1`; default: your primary monitor), restart kwin-helper, and run the game in windowed mode.
 12) Press Insert to open the in-game menu (show/hide players, ARC, items, containers, names, distances, radar). While it is open the overlay takes the mouse; press Insert again to close it. Insert is read from /dev/input, so you need to be in the `input` group once: `sudo usermod -aG input $USER`, then log out and back in. Without that, `pkill -USR1 -x kwin-helper` toggles the menu instead. Menu settings are saved in `~/.config/kwin-helper/settings.txt`.
-13) Names: ARC machines, containers, ground items, players and the guns they carry get a name next to the marker (toggle each under ESP > Names). The names follow the ARC Raiders wiki. If you want your own name for something, add a line to `~/.config/kwin-helper/labels.txt` by hand; delete the line to go back to the built-in name.
+13) Names: ARC machines, containers, ground items, players and the guns they carry get a name next to the marker (toggle each under ESP > Names). The names follow the ARC Raiders wiki. If you want your own name for something, add a line to `~/.config/kwin-helper/labels.txt` by hand: the name you see on screen, `=`, then your name. Capitals and spaces in the shown name do not matter, and a player's game name works too:
+    ```
+    Trash Can = Bin
+    Ferro = My rifle
+    ```
+    Delete the line to go back to the built-in name. Lines starting with `#` are ignored. The overlay only reads this file, it never changes it. (The older form `category<TAB>internal key<TAB>your name`, for example `item<TAB>BattleRifle_BreachAction_01<TAB>My rifle`, still works and wins over a shown-name line.)
 
 ## Known Issues
 1) ESP gets distorted at the edges.
