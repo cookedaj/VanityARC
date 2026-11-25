@@ -302,9 +302,24 @@ inline void DrawSkeleton(const View& v, const skeleton::Pose& pose, ImU32 color,
     }
 }
 
+//Fit the saved centre to this screen, so a position saved on another monitor or scale stays visible
+inline ImVec2 RadarCenter() {
+    const float R = config::radarRadius;
+    return ImVec2(std::clamp(config::radarCenterX, R + 14, std::max(R + 14, (float)config::SCREEN_W - R - 14)),
+                  std::clamp(config::radarCenterY, R + 26, std::max(R + 26, (float)config::SCREEN_H - R - 14)));
+}
+
+//The radar's dark panel, title included
+inline LabelRect RadarPanel() {
+    const float R = config::radarRadius;
+    const ImVec2 c = RadarCenter();
+    return {c.x - R - 14, c.y - R - 26, c.x + R + 14, c.y + R + 14};
+}
+
 inline void DrawESP(const std::vector<RenderEntity>& entities, FminimalViewInfo vm, int localPlayerTeam) {
     const View v(vm, MakeProjection());
     if (!v.ok) return;
+    if (config::enableRadar) QueueReserve(RadarPanel()); //markers are drawn over the radar; labels move off it
     const float W = (float)config::SCREEN_W, H = (float)config::SCREEN_H;
     const float ls = config::labelSize, ls2 = config::labelSize * 0.9f;
     const float pad = config::labelCards ? 2.0f : 0.0f; //a card reaches 2 px past its text, top and bottom
@@ -474,13 +489,6 @@ inline std::string DrawCloseEnemyWarning(const std::vector<RenderEntity>& entiti
     return buf;
 }
 
-//Fit the saved centre to this screen, so a position saved on another monitor or scale stays visible
-inline ImVec2 RadarCenter() {
-    const float R = config::radarRadius;
-    return ImVec2(std::clamp(config::radarCenterX, R + 14, std::max(R + 14, (float)config::SCREEN_W - R - 14)),
-                  std::clamp(config::radarCenterY, R + 26, std::max(R + 26, (float)config::SCREEN_H - R - 14)));
-}
-
 //The radar: a panel with three rings, your own arrow, and the edges of your view
 inline void DrawRadar(const std::vector<RenderEntity>& entities, FminimalViewInfo cameraInfo, int localPlayerTeam) {
     const float R = config::radarRadius;
@@ -489,8 +497,9 @@ inline void DrawRadar(const std::vector<RenderEntity>& entities, FminimalViewInf
     const double rangeM = R * config::scale / 100.0; //metres from the centre to the edge
 
     //Panel, rings, crosshairs
-    DrawRectFilled(cx - R - 14, cy - R - 26, cx + R + 14, cy + R + 14, IM_COL32(0, 0, 0, 150));
-    DrawRectOutline(cx - R - 14, cy - R - 26, cx + R + 14, cy + R + 14, IM_COL32(255, 255, 255, 70), 1.0f);
+    const LabelRect P = RadarPanel();
+    DrawRectFilled(P.x0, P.y0, P.x1, P.y1, IM_COL32(0, 0, 0, 150));
+    DrawRectOutline(P.x0, P.y0, P.x1, P.y1, IM_COL32(255, 255, 255, 70), 1.0f);
     DrawCircleFilled(cx, cy, R, IM_COL32(0, 0, 0, 110));
     for (int i = 1; i <= 3; i++) DrawCircleRing(cx, cy, R * i / 3.0f, IM_COL32(255, 255, 255, i == 3 ? 90 : 35), 1.0f);
     DrawLine(cx - R, cy, cx + R, cy, IM_COL32(255, 255, 255, 40), 1);

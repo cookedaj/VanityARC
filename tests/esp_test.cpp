@@ -273,6 +273,31 @@ int main() {
         CHECK(cards != plain, "label cards: drawn differently from outlined text (a card behind the text)");
     }
 
+    //---- labels keep off the radar panel (markers are drawn over it, labels are moved away or left out)
+    {
+        const View v(cam, MakeProjection());
+        const double d = 2000; //a container in front, placed so it lands on the radar's middle (150, 150)
+        std::vector<RenderEntity> onRadar = {ent(Object::SEARCH, d, (150 - v.cx) * d / (v.focal * v.sx), (v.cy - 150) * d / (v.focal * v.sy))};
+        onRadar[0].label = "Trash can";
+        auto textOnPanel = [&] {
+            const LabelRect P = RadarPanel();
+            int n = 0;
+            draw([&] {
+                DrawESP(onRadar, cam, 3);
+                const ImVec2 wp = ImGui::GetDrawListSharedData()->TexUvWhitePixel;
+                for (const ImDrawVert& q : ImGui::GetBackgroundDrawList()->VtxBuffer)
+                    if ((std::abs(q.uv.x - wp.x) > 1e-6f || std::abs(q.uv.y - wp.y) > 1e-6f) &&
+                        q.pos.x > P.x0 && q.pos.x < P.x1 && q.pos.y > P.y0 && q.pos.y < P.y1) n++;
+            });
+            return n;
+        };
+        config::enableRadar = false;
+        const int radarOff = textOnPanel();
+        config::enableRadar = true;
+        const int radarOn = textOnPanel();
+        CHECK(radarOff > 0 && radarOn == 0, "radar on: no label is drawn on the radar panel");
+    }
+
     //---- status card and toast
     {
         Toast("Teammate marked: cooked", 5.0);
