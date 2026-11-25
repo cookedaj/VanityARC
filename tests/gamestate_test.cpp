@@ -336,6 +336,7 @@ int main() {
     breakWorld();
     gsRet a = ref.tick(), b = fast.step(); //right after a scan: leaving the world is noticed at once anyway
     CHECK(!a.valid && !b.valid && b.entities.empty(), "no world: both paths report nothing");
+    CHECK(b.fault != nullptr, "no world: step() says why (shown on screen)");
     fixWorld();
     compare("world back: both are back");
 
@@ -343,6 +344,7 @@ int main() {
     setCamera(cx, cy, cz, 0, 0, 0.0f);
     gsRet badA = ref.tick(), badB = fast.step();
     CHECK(!badA.valid && !badB.valid, "FOV 0: both paths say there is no view");
+    CHECK(badB.fault != nullptr, "FOV 0: step() says why (shown on screen)");
     setCamera(cx, cy, cz, 0, 0, 70.0f);
     compare("camera fixed: both are back");
 

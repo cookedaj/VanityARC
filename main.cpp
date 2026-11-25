@@ -66,6 +66,7 @@ int main() {
     tracker.start();
 
     const std::vector<RenderEntity> noEntities;
+    auto lastLive = std::chrono::steady_clock::now(); //the last frame with live data (or with no game running)
     while (g_Running && !OverlayShouldClose()) {
         MenuPollToggle();
         //Stream-hide (F8, SIGUSR2 or the menu switch): while on, the overlay draws nothing and takes no mouse, so a screen
@@ -112,9 +113,13 @@ int main() {
                                  std::chrono::steady_clock::now().time_since_epoch()).count() - snap->capturedNs) / 1e6 : 1e9;
         const bool live = snap->valid && ageMs <= STALE_MS; //in a raid and the data is current
         const std::vector<RenderEntity>& ents = live ? snap->entities : noEntities;
+        const auto frameNow = std::chrono::steady_clock::now();
+        if (live || !snap->gameFound) lastLive = frameNow;
+        const bool lost = snap->gameFound && !live && frameNow - lastLive > std::chrono::milliseconds(1500); //the game runs, but no live data for a while
 
         //What the player list, the inventory windows and the F6 key work with
         g_ui.ents = &ents;
+        g_ui.live = live;
         g_ui.inv = snap->inventories;
         g_ui.vm = vm;
         g_ui.localTeam = snap->localPlayerTeam;
@@ -125,9 +130,12 @@ int main() {
             if (g_KeyQuit.exchange(false)) g_Running = false;
             if (g_KeyClear.exchange(false)) { marks::clear(); marks::save(); Toast("Teammate marks cleared"); }
             if (g_KeyMark.exchange(false)) {
-                const MarkResult r = MarkNearestAtCrosshair(ents, View(vm, MakeProjection()), snap->localPlayerTeam);
-                Toast(r.text());
-                if (r.kind == MarkResult::Marked || r.kind == MarkResult::Unmarked) marks::save();
+                if (!live) Toast("No live game data: F6 did nothing");
+                else {
+                    const MarkResult r = MarkNearestAtCrosshair(ents, View(vm, MakeProjection()), snap->localPlayerTeam);
+                    Toast(r.text());
+                    if (r.kind == MarkResult::Marked || r.kind == MarkResult::Unmarked) marks::save();
+                }
             }
         } else {
             g_KeyQuit = g_KeyClear = g_KeyMark = false;
@@ -135,7 +143,18 @@ int main() {
 
         if (!snap->gameFound) DrawLabelCentered(110, 14, OBF("Waiting for ARC Raiders...").c_str(), 14.0f);
         float below = 20;
-        if (snap->gameFound && config::showDebugInfo) {
+        if (lost) {
+            //The game runs but nothing has been live for a while: say so and why, big, whatever the debug switch says
+            char why[160];
+            if (snap->valid) std::snprintf(why, sizeof why, "the data stopped updating (%.1f s old)", ageMs / 1000.0);
+            else std::snprintf(why, sizeof why, "%s", snap->fault ? snap->fault : "waiting for a raid");
+            const float x = (float)config::SCREEN_W * 0.5f, ls = config::labelSize, big = ls * 1.6f;
+            float y = 12 + big / 2;
+            DrawLabelCentered(x, y, "NO LIVE GAME DATA", big, COLOR::white, true);
+            y += big / 2 + 8 + ls / 2;
+            DrawLabelCentered(x, y, why, ls, COLOR::white, true);
+            below = y + ls + 10;
+        } else if (snap->gameFound && config::showDebugInfo) {
             const Tracker::Stats st = tracker.stats();
             char l1[200], l2[200];
             size_t players = 0;
@@ -150,7 +169,11 @@ int main() {
         DrawToast(below);
 
         if (live && config::espEnabled) DrawESP(ents, vm, snap->localPlayerTeam);
-        if (config::enableRadar) DrawRadar(ents, vm, snap->localPlayerTeam);
+        if (config::enableRadar) {
+            DrawRadar(ents, vm, snap->localPlayerTeam);
+            //An empty radar must not read as "nobody near" when there is simply no data
+            if (!live) DrawLabelCentered(config::radarCenterX, config::radarCenterY, snap->gameFound ? "NO DATA" : "NO GAME", config::labelSize, COLOR::white, true);
+        }
 
         RenderEnd(DrawUi);
     }

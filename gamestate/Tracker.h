@@ -23,6 +23,7 @@ struct Snapshot {
     int localPlayerTeam = -1;
     bool valid = false;      //in a raid: world and camera were read
     bool gameFound = false;  //the game process exists
+    const char* fault = nullptr; //when !valid: why there is no data, in a few words for the screen (nullptr: not known)
     uint64_t seq = 0;
     int64_t capturedNs = 0;  //steady_clock time when this was read: the draw loop ignores data that is too old
     std::shared_ptr<const InventoryMap> inventories; //players whose inventory window is open (see setInspected)
