@@ -19,7 +19,7 @@ https://youtu.be/tiK0ihPw6m8
  Apply.
 ```
 5) Download CLion from JetBrains (the non-commercial version is free).
-6) Install dependencies: `sudo apt install cmake g++ libglfw3-dev libgl-dev`
+6) Install dependencies: `sudo apt install cmake g++ pkg-config libglfw3-dev libgl-dev libwayland-dev libwayland-bin libegl-dev`
 7) Download the code (which you have presumably done already) and unzip it.
 8) Build:
 ```
