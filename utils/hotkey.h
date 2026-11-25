@@ -65,8 +65,9 @@ inline int HeldModifiers(int fd) {
 
 //Reads whatever input_event structs are waiting on fd and flips g_MenuToggle on an Insert key press
 //(not on release or key repeat). Returns false once the device is gone.
-//A hotkey pressed together with a modifier belongs to another program (Shift+F10 context menu, Shift+Insert paste...)
-//and is ignored. F6 still works with Shift or Ctrl held (sprinting, crouching), just not with Alt or Meta.
+//Insert always opens and closes the menu, whatever else is held (Shift to sprint, Ctrl, Alt, movement keys).
+//An F-key pressed together with a modifier belongs to another program (Shift+F10 context menu...) and is ignored.
+//F6 still works with Shift or Ctrl held (sprinting, crouching), just not with Alt or Meta.
 inline bool HandleKeyEvents(int fd) {
     input_event ev[32];
     for (;;) {
@@ -76,12 +77,12 @@ inline bool HandleKeyEvents(int fd) {
         for (size_t i = 0; i < size_t(n) / sizeof(input_event); i++) {
             if (ev[i].type != EV_KEY) continue;
             const int c = ev[i].code;
-            if (ev[i].value == 1 && (c == MENU_KEY || c == KEY_F6 || c == KEY_F7 || c == KEY_F8 || c == KEY_F10)) {
+            if (ev[i].value == 1 && c == MENU_KEY) g_MenuToggle = true;
+            else if (ev[i].value == 1 && (c == KEY_F6 || c == KEY_F7 || c == KEY_F8 || c == KEY_F10)) {
                 const int mods = HeldModifiers(fd);
                 if (c == KEY_F6) { if (!(mods & 2)) g_KeyMark = true; }
                 else if (!mods) {
-                    if (c == MENU_KEY) g_MenuToggle = true;
-                    else if (c == KEY_F7) g_KeyClear = true;
+                    if (c == KEY_F7) g_KeyClear = true;
                     else if (c == KEY_F10) g_KeyQuit = true;
                     else g_KeyStream = true; //F8
                 }
