@@ -82,13 +82,13 @@ std::string cleanName(const std::string& raw) {
         out += word;
     }
     out = lower(out);
-    for (size_t i = 0; i < out.size(); i++)
-        if (i == 0 || out[i - 1] == ' ') out[i] = (char)std::toupper((unsigned char)out[i]); //title case, as the wiki writes names
-    for (size_t at = out.find("arc"); at != std::string::npos; at = out.find("arc", at + 1)) { //the word ARC, not "arcade"
+    for (size_t at = out.find("arc"); at != std::string::npos; at = out.find("arc", at + 1)) { //the word ARC, not "arcade" (before title case, while all lower case)
         const bool wordStart = at == 0 || out[at - 1] == ' ';
         const bool wordEnd = at + 3 == out.size() || out[at + 3] == ' ';
         if (wordStart && wordEnd) { out[at] = 'A'; out[at + 1] = 'R'; out[at + 2] = 'C'; }
     }
+    for (size_t i = 0; i < out.size(); i++)
+        if (i == 0 || out[i - 1] == ' ') out[i] = (char)std::toupper((unsigned char)out[i]); //title case, as the wiki writes names
     return out.empty() ? raw : out;
 }
 

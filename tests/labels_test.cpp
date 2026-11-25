@@ -145,6 +145,7 @@ int main() {
     CHECK(D(Cat::Container, "BP_SocketContainer_Sct_LockerMedical_01_A_C") == "Locker", "container medical locker (not in the loot tag list: shown as Locker)");
     CHECK(D(Cat::Container, "BP_SocketContainer_Sct_Locker_01_A_C") == "Locker", "container locker (patch 2.5.0 loot tag list)");
     CHECK(D(Cat::Container, "BP_SalvageContainer_GreatMullein_C") == "Great Mullein", "container fallback (title case)");
+    CHECK(D(Cat::Container, "BP_SalvageContainer_ARC_Scrap_C") == "ARC Scrap", "container fallback keeps ARC in capitals");
     CHECK(D(Cat::Item, "BattleRifle_BreachAction_01") == "Ferro", "item Ferro token");
     CHECK(D(Cat::Item, "DA_Item_BattleRifle_BreachAction_01") == "Ferro", "item Ferro full name");
     CHECK(D(Cat::Item, "DA_WeaponVisuals_SMG_LowTier_01") == "Stitcher", "gun Stitcher (visuals asset)");
