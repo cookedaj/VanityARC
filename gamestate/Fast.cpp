@@ -64,7 +64,7 @@ bool GameState::scan() {
         logThrottled("[-] Invalid Uworld (not in a raid yet?)");
         return false;
     }
-    if (uworld != lastWorld_) clockVal_ = -1; //a new world has a new clock
+    if (uworld != lastWorld_) { clockVal_ = -1; lastTeamID = -1; meActor_ = 0; } //a new world: new clock, your team and pawn not known yet
     lastWorld_ = uworld;
     //PersistentLevel at UWorld+0x170 is encrypted; the plain pointer is in LevelCollections[0] (see config.h)
     ptr levelCollection = ReadMemory<ptr>(uworld + off::LEVEL_COLLECTIONS);
