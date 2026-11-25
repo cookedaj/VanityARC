@@ -431,6 +431,22 @@ int main() {
             for (int i = n0; i < vb.Size; i++) if (std::abs(vb[i].pos.x - config::SCREEN_W * 0.5f) < 60) lowTop = std::min(lowTop, vb[i].pos.y);
         });
         CHECK(wb > 0 && lowTop < 1e9f && lowTop > wb, "LOW HEALTH goes under the close-enemy card, not on top of it");
+        //an enemy to your left and a little behind: his edge arrow lands at the readout's height on the left edge
+        const std::vector<RenderEntity> side = {ent(Object::PLAYER, -681, -2000, 0)};
+        const LabelRect r = SelfHealthRect();
+        auto onCard = [&] {
+            int n = 0;
+            draw([&] {
+                DrawESP(side, cam, 3);
+                for (const ImDrawVert& q : ImGui::GetBackgroundDrawList()->VtxBuffer)
+                    n += q.pos.x > r.x0 && q.pos.x < r.x1 && q.pos.y > r.y0 && q.pos.y < r.y1;
+            });
+            return n;
+        };
+        config::showSelfHealth = false;
+        const int under = onCard();
+        config::showSelfHealth = true;
+        CHECK(under > 0 && onCard() == 0, "an edge arrow and its distance move off the HP readout");
     }
 
     //---- the radar panel

@@ -165,6 +165,14 @@ struct NearCue {
     }
 };
 
+//Where the big HP/SH readout's card is (4 px past the text's sides, 2 px past top and bottom). DrawESP keeps labels and
+//edge arrows off it; with no text, the widest readout.
+inline LabelRect SelfHealthRect(const char* text = "HP 100   SH 100") {
+    const ImVec2 ts = LabelSize(text, config::labelSize * 1.8f);
+    const float y = (float)config::SCREEN_H - 300;
+    return {36, y - ts.y / 2 - 2, 44 + ts.x, y + ts.y / 2 + 2};
+}
+
 //Your own health and shield in big white text on a dark card, at the bottom left just above the game's health bar,
 //and a big red LOW HEALTH card below the crosshair under 35. hp < 0: not read, so nothing (never a guessed number).
 //shield < 0: not read or no shield offset, so health only. below: the bottom of the close-enemy card (0: none);
@@ -176,7 +184,8 @@ inline void DrawSelfHealth(double hp, double shield, float below = 0) {
     if (shield >= 0) std::snprintf(buf, sizeof buf, "HP %d   SH %.0f", h, shield);
     else std::snprintf(buf, sizeof buf, "HP %d", h);
     const float ls = config::labelSize, big = ls * 1.8f;
-    DrawLabelCentered(40 + LabelSize(buf, big).x / 2, (float)config::SCREEN_H - 300, buf, big, COLOR::white, true);
+    const LabelRect r = SelfHealthRect(buf);
+    DrawLabelCentered((r.x0 + r.x1) / 2, (r.y0 + r.y1) / 2, buf, big, COLOR::white, true);
     if (h < 1 || h >= 35) return; //at 0 you are down: the game shows that itself
     const char* warn = "LOW HEALTH";
     const float huge = ls * 2.4f, x = (float)config::SCREEN_W * 0.5f;
@@ -331,6 +340,8 @@ inline std::vector<LabelRect> DrawEdgeArrows(const View& v, std::vector<EdgeArro
     const float k = std::max(1.0f, config::labelSize / 15.0f); //grows with the text size, never below the 15 px default
     const float as = 15.0f * k, half = 14.0f * k;              //arrow length, half its reserved square
     char buf[32];
+    const LabelRect hpCard = config::showSelfHealth ? SelfHealthRect() : LabelRect{};
+    const float m = std::max(20.0f, half + 2); //clear of the arrow's square at any text size
     for (const auto& e : edge) {
         double x, y, z;
         v.toCamera(e.ent->pos, x, y, z);
@@ -343,8 +354,8 @@ inline std::vector<LabelRect> DrawEdgeArrows(const View& v, std::vector<EdgeArro
         const float t = std::min(hx / (float)std::max(std::abs(ux), 1e-6), hy / (float)std::max(std::abs(uy), 1e-6));
         const float px = (float)v.cx + (float)ux * t;
         float py = (float)v.cy + (float)uy * t;
-        const LabelRect& L = g_listRect;
-        if (L.x1 > L.x0 && px > L.x0 - 20 && px < L.x1 + 20 && py > L.y0 - 20 && py < L.y1 + 20) py = L.y0 - 20; //not under the player list: just above it
+        for (const LabelRect& L : {g_listRect, hpCard}) //not under the player list or the HP readout: just above it
+            if (L.x1 > L.x0 && px > L.x0 - m && px < L.x1 + m && py > L.y0 - m && py < L.y1 + m) py = L.y0 - m;
         const LabelRect sq{px - half, py - half, px + half, py + half};
         if (avoid && std::any_of(avoid->begin(), avoid->end(), [&](const LabelRect& r) { return RectsOverlap(sq, r); })) continue;
         std::snprintf(buf, sizeof buf, "%.0fm", e.dist);
@@ -427,6 +438,7 @@ inline void DrawESP(const std::vector<RenderEntity>& entities, FminimalViewInfo 
     const View v(vm, MakeProjection());
     if (!v.ok) return;
     if (config::enableRadar) QueueReserve(RadarPanel()); //markers are drawn over the radar; labels move off it
+    if (config::showSelfHealth) QueueReserve(SelfHealthRect()); //the HP readout is drawn later, over this spot
     const float W = (float)config::SCREEN_W, H = (float)config::SCREEN_H;
     const float ls = config::labelSize, ls2 = config::labelSize * 0.9f;
     const float pad = config::labelCards ? 2.0f : 0.0f; //a card reaches 2 px past its text, top and bottom
