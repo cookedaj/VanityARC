@@ -27,8 +27,8 @@ void fill(RenderEntity& e);
 //Used for player guns, the inventory list and ground items alike.
 std::string itemName(const std::string& key, bool gun = false);
 
-//Everything we can read in a player's inventory: the lists named in offsets.txt (utils/offsets.h). Empty until those
-//offsets are known (see the README: KWINHELPER_PROBE=inventory). Same name merged into one row with a count.
+//Everything we can read in a player's inventory: the built-in held list, or the lists named in offsets.txt
+//(utils/offsets.h). Same name merged into one row with a count.
 std::vector<ItemRow> inventoryOf(uintptr_t pawn);
 
 //Call once per tick: forgets actors that are gone

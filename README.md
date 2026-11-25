@@ -125,7 +125,7 @@ Insert opens the menu: black and white, tabs on the left.
 
 | Tab | What it has |
 | --- | --- |
-| ESP | High visibility button, master switch, what to show (players, ARC, edge arrows, ARC edge arrows, items, containers), names and label cards, box style / colour / thickness, monochrome, health and shield bars, which way they face, your health (big HP/SH readout, red LOW HEALTH card under 35), skeleton (range, dim players behind cover and how faint), ranges, close enemy warning (big card and its Warning card range) |
+| ESP | High visibility button, master switch, what to show (players, ARC, edge arrows, ARC edge arrows, items, containers), names and label cards, box style / colour / thickness, monochrome, health and shield bars (side by side, health only, or one bar for both; optional HP and SH numbers), which way they face, your health (big HP/SH readout, red LOW HEALTH card under 35), skeleton (range, dim players behind cover and how faint), ranges, close enemy warning (big card and its Warning card range) |
 | Players | the player list options, show item values (off by default), teammate marks, and every player in view (click a name for the inventory, TEAM marks a teammate) |
 | Radar | on/off, size, range, position presets |
 | Settings | High visibility button, overlay and menu opacity, text size, spoken cues (Spoken warning range), update rate (30-240 Hz), game view (stretched resolution, gamescope, calibration), status card, hotkeys, keyboard controls the menu, stream hide, overlay window (which monitor, setup problem), reset all settings / reset to high visibility, quit |
@@ -157,7 +157,7 @@ It checks the UWorld chain (`UWORLD_RVA` and its 3 offsets), `LEVEL_COLLECTIONS`
 
 ## Shield and inventory: probes
 
-The shield bar and the inventory window need numbers the public dumps do not have. Both are **built in** (`utils/offsets.h`, probed on game build `0x6AF5C6FC`): the shield bar, and in the inventory window what a player has in their hands besides their guns. Other players' backpacks are not sent to your game. You only need the probes again after a game update, or to try something new; lines in `~/.config/kwin-helper/offsets.txt` override the built-in values.
+The shield bar and the inventory window need numbers the public dumps do not have. Both are **built in** (`utils/offsets.h`, probed on game build `0x6AF5C6FC`): the shield bar, and in the inventory window what a player has in their hands besides their guns. Other players' backpacks are not sent to your game, and other players' shields are not yet confirmed to be. You only need the probes again after a game update, or to try something new; lines in `~/.config/kwin-helper/offsets.txt` override the built-in values.
 
 The release build has no probe code in it. Build a probe version in its own folder (it is never used for normal play):
 
@@ -176,6 +176,6 @@ The same probe build also takes `bones` (stick figures), `mesh`, `flags`, `rende
 1. Start it like that, then start a raid. Stay in third person, so the overlay can tell which player is you.
 2. **Shield:** when `=== SHIELD PROBE ===` appears, move around but keep your shield full and take no damage. About 6 seconds later `=== NOW take a hit ===` appears: now take a hit (or do anything that changes your shield). Lines appear for every number that changed. Health is marked `<- known: health`. The shield is the other number that moves with it. Under each candidate there is a ready line: `if this is the shield: shield_component ... shield_value ...`.
 3. **Inventory:** every 8 seconds `=== INVENTORY PROBE ===` lists your item lists and those of the two nearest players, each with a ready `offsets.txt:  inv_array ...` line. Stand near another player for a moment.
-4. Copy the console lines (or just the shield candidates that moved with health, and the inventory lists that name real items) and send them over, or put the ready lines into `offsets.txt` yourself, then go back to the release build (no probe variable).
+4. Copy the console lines (or just the shield candidates that moved with health, and the inventory lists that name real items) and send them over, or put the ready lines into `offsets.txt` yourself (add `shield_max` with a new `shield_value`; a stride from a one-item list is only a guess), then go back to the release build (no probe variable).
 
 Both probes only read memory.

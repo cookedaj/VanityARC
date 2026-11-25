@@ -252,6 +252,20 @@ int main() {
         const int noBars = g_verts;
         config::showBars = true;
         CHECK(noBars < withBars, "Health and shield bars off: the bars are not drawn");
+        //bar style and numbers, on a player with a shield
+        std::vector<RenderEntity> sh = {ent(Object::PLAYER, 3000, 200, 0)};
+        sh[0].hasShield = true; sh[0].shield = 30; sh[0].shieldMax = 40;
+        auto verts = [&](int style, bool numbers) {
+            config::barStyle = style; config::barNumbers = numbers;
+            draw([&] { DrawESP(sh, cam, 3); });
+            return g_verts;
+        };
+        const int two = verts(0, false), hpOnly = verts(1, false), one = verts(2, false);
+        CHECK(hpOnly < one && one < two, "bar style: health only draws one bar, one bar for both draws two parts in it, side by side draws two bars");
+        CHECK(verts(0, true) > two && verts(1, true) > hpOnly, "bar numbers add text beside the bars");
+        sh[0].shield = 0;
+        CHECK(verts(2, false) < one && verts(0, false) < two, "a used-up shield: nothing of it is drawn");
+        config::barStyle = 0; config::barNumbers = false;
         config::boxStyle = 0; config::showSkeleton = true; config::showOffscreen = true;
     }
 

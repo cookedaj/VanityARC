@@ -2,7 +2,7 @@
 //Offsets that are not in the public dumps. The built-in values below were found with the probes on game build
 //0x6AF5C6FC; ~/.config/kwin-helper/offsets.txt overrides them WITHOUT rebuilding, one "name value" per line (decimal or
 //0x hex). After a game update, find new ones with a probe build (cmake -DKWINHELPER_PROBES=ON, see the README).
-//-1 means "not known": that feature simply stays off.
+//shield_value -1 turns the shield bar off. A file list replaces the built-in held list.
 #ifndef KWINHELPER_OFFSETS_H
 #define KWINHELPER_OFFSETS_H
 
@@ -108,7 +108,8 @@ inline void load(const std::string& dir = "") {
             }
         }
     }
-    if (fileShield && !fileMax) shieldMax = -1;
+    //a probe's ready line for the built-in place has no maximum: keep the built-in one then
+    if (fileShield && !fileMax && !(shieldComponent == -1 && shieldValue == SHIELD_VALUE)) shieldMax = -1;
 }
 
 } // namespace live

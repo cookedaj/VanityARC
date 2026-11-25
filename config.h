@@ -37,6 +37,8 @@ namespace config {
     inline bool dimHidden = true;          //players the game is not drawing (behind walls, off screen) get a fainter box
     inline double hiddenAlpha = 120;       //how solid that fainter box is (40 faint to 255 full)
     inline bool showBars = true;           //health and shield bars beside a player's box
+    inline double barStyle = 0;            //0 health and shield side by side, 1 health only, 2 one bar for both
+    inline bool barNumbers = false;        //HP and SH numbers next to those bars
     inline bool showSelfHealth = true;     //your own health and shield in big text at the bottom left, and a LOW HEALTH card below 35
     inline bool showFacing = true;         //an arrow in each player's box and a line on each radar dot: the way they face
     inline bool showSkeleton = true;       //a stick figure on players (the box stays; players without a readable pose get the box only)

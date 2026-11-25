@@ -251,13 +251,11 @@ inline void DrawInspectWindows() {
                         const char* np = havePrices && price(r) < 0 ? "  (no price)" : "";
                         if (r.count > 1) ImGui::Text(slotsOnly(r.category) ? "  %s  %d slots%s" : "  %s  x%d%s", r.name.c_str(), r.count, np); else ImGui::Text("  %s%s", r.name.c_str(), np);
                     }
-                } else if (live::invArrays.empty()) {
-                    ui::Note("The inventory lists are not set up yet (see offsets.txt in the config folder).");
                 } else if (!rows) {
                     ui::Note("Reading inventory..."); //the tracker has not read this player yet
                 } else {
-                    ui::Note("Nothing else to show: only what the game sends about this player can be read (their guns are "
-                             "listed above).");
+                    ui::Note(e->sub.empty() ? "Nothing read. The game may not send this, or a game update moved it."
+                                            : "Nothing besides their guns: only what the game sends about this player can be read.");
                 }
             }
         }

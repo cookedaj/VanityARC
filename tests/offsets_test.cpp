@@ -61,6 +61,11 @@ int main() {
           "a number with junk after it is refused, and a shield set without a good maximum gets none");
 
     live::reset();
+    writeFile(dir, "if this is the shield:  shield_component -1  shield_value 0x1d0  shield_is_float 0\n");
+    live::load(dir);
+    CHECK(live::shieldMax == 0x1D8, "the probe's ready line for the built-in place keeps the built-in maximum");
+
+    live::reset();
     writeFile(dir, "shield_value -1\n");
     live::load(dir);
     CHECK(live::shieldValue == -1 && live::shieldMax == -1, "shield_value -1 turns the shield bar off");

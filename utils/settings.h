@@ -35,7 +35,7 @@ inline std::vector<Entry>& table() {
         B("showPlayerNames", &config::showPlayerNames); B("showPlayerGuns", &config::showPlayerGuns);
         B("showArcNames", &config::showArcNames); B("showContainerNames", &config::showContainerNames);
         B("showItemNames", &config::showItemNames); B("labelCards", &config::labelCards);
-        B("showSkeleton", &config::showSkeleton); B("dimHidden", &config::dimHidden); D("hiddenAlpha", &config::hiddenAlpha, 40, 255); B("showBars", &config::showBars); B("showFacing", &config::showFacing); D("skeletonMaxDist", &config::skeletonMaxDist, 20, 300);
+        B("showSkeleton", &config::showSkeleton); B("dimHidden", &config::dimHidden); D("hiddenAlpha", &config::hiddenAlpha, 40, 255); B("showBars", &config::showBars); D("barStyle", &config::barStyle, 0, 2); B("barNumbers", &config::barNumbers); B("showFacing", &config::showFacing); D("skeletonMaxDist", &config::skeletonMaxDist, 20, 300);
         B("showOffscreen", &config::showOffscreen); B("showArcOffscreen", &config::showArcOffscreen);
         B("showTeammates", &config::showTeammates);
         B("closeWarning", &config::closeWarning); D("warnDist", &config::warnDist, 5, 100);

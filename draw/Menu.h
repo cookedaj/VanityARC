@@ -218,6 +218,10 @@ inline void PageEsp() {
     Switch("Monochrome (white and grey)", &config::monochrome);
     Slider("Line thickness", &config::boxThickness, 1.0f, 10.0f,"%.1f px");
     Switch("Health and shield bars", &config::showBars);
+    if (config::showBars) {
+        Choice("Bar style", &config::barStyle, {"Health + shield", "Health only", "One bar for both"});
+        Switch("Numbers on the bars", &config::barNumbers);
+    }
     Switch("Which way they face", &config::showFacing);
     Note("An arrow in each player's box (pointing down: facing you) and a line on each radar dot (players and ARC) show which way they face.");
     Section("YOUR HEALTH");

@@ -56,13 +56,16 @@ int main() {
     //save and load again: the same values come back
     config::maxArcDist = 222; config::boxColor = 4; config::monochrome = true; config::labelCards = true; config::overlayOpacity = 0.7f; config::trackerHz = 90;
     config::showItemValues = true;
+    config::barStyle = 2; config::barNumbers = true;
     settings::save(dir);
     config::maxArcDist = 50; config::boxColor = 0; config::monochrome = false; config::labelCards = false; config::overlayOpacity = 1.0f; config::trackerHz = 240;
     config::showItemValues = false;
+    config::barStyle = 0; config::barNumbers = false;
     CHECK(settings::load(dir) == 0, "a file the overlay saved has no ignored lines");
     CHECK(config::maxArcDist == 222 && config::boxColor == 4 && config::monochrome && config::labelCards && std::abs(config::overlayOpacity - 0.7f) < 1e-6 && config::trackerHz == 90,
           "saved values come back after loading");
     CHECK(config::showItemValues, "Show item values is saved");
+    CHECK(config::barStyle == 2 && config::barNumbers, "bar style and bar numbers are saved");
     CHECK(!std::filesystem::exists(settings::path(dir) + ".tmp"), "no half-written file is left behind");
 
     //reset everything
@@ -71,6 +74,7 @@ int main() {
     for (size_t i = 0; i < settings::table().size(); i++) same &= settings::value(settings::table()[i]) == settings::defaults()[i] || std::abs(settings::value(settings::table()[i]) - settings::defaults()[i]) < 1e-6;
     CHECK(same, "Reset restores every default");
     CHECK(!config::showItemValues, "Reset turns Show item values off");
+    CHECK(config::barStyle == 0 && !config::barNumbers, "Reset: health and shield side by side, no numbers");
 
     //a value that left its range by a bug is brought back
     config::fovScale = 9.0f; config::listMode = -4;
