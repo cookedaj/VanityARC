@@ -441,6 +441,39 @@ inline void DrawESP(const std::vector<RenderEntity>& entities, FminimalViewInfo 
     FlushLabels();
 }
 
+//A big card under the middle of the screen for the nearest enemy closer than warnDist: "ENEMY 9 m BEHIND", or
+//"3 ENEMIES - NEAREST 9 m LEFT". White text on a dark card framed in the enemy colour. Returns the text drawn.
+inline std::string DrawCloseEnemyWarning(const std::vector<RenderEntity>& entities, FminimalViewInfo vm, int localPlayerTeam) {
+    if (!config::closeWarning) return {};
+    if (config::hideUnknownTeams && localPlayerTeam < 0) return {}; //no team to compare with: everyone is hidden
+    const View v(vm, MakeProjection());
+    if (!v.ok) return {};
+    const RenderEntity* nearest = nullptr;
+    double best = 0;
+    int count = 0;
+    for (const auto& ent : entities) {
+        if (ent.type != Object::PLAYER || ent.isDead || IsTeammate(ent, localPlayerTeam)) continue;
+        const double dist = ent.pos.Dist(vm.Location) / 100.0;
+        if (!(dist <= config::warnDist)) continue; //NaN too
+        count++;
+        if (!nearest || dist < best) { best = dist; nearest = &ent; }
+    }
+    if (!nearest) return {};
+    double x, y, z;
+    v.toCamera(nearest->pos, x, y, z);
+    const char* where = z < -std::abs(x) ? "BEHIND" : x < -std::abs(z) ? "LEFT" : x > std::abs(z) ? "RIGHT" : "AHEAD";
+    char buf[96];
+    if (count == 1) std::snprintf(buf, sizeof buf, "ENEMY %.0f m %s", best, where);
+    else std::snprintf(buf, sizeof buf, "%d ENEMIES - NEAREST %.0f m %s", count, best, where);
+    const float size = config::labelSize * 2.0f, cx = (float)v.cx, cy = (float)v.cy + 140.0f;
+    const ImVec2 ts = LabelSize(buf, size);
+    const float hx = ts.x / 2 + 10, hy = ts.y / 2 + 6;
+    DrawRectFilled(cx - hx, cy - hy, cx + hx, cy + hy, IM_COL32(0, 0, 0, 220));
+    DrawRectOutline(cx - hx, cy - hy, cx + hx, cy + hy, COLOR::enemy(), 3.0f);
+    DrawLabelCentered(cx, cy, buf, size, COLOR::white);
+    return buf;
+}
+
 //Fit the saved centre to this screen, so a position saved on another monitor or scale stays visible
 inline ImVec2 RadarCenter() {
     const float R = config::radarRadius;

@@ -173,6 +173,9 @@ inline void PageEsp() {
     SliderD("Players range", &config::maxPlayerDist, 50, 800, "%.0f m");
     SliderD("ARC range", &config::maxArcDist, 20, 500, "%.0f m");
     SliderD("Loot range", &config::maxLootDist, 5, 150, "%.0f m");
+    Section("CLOSE ENEMY WARNING");
+    Switch("Big warning for a close enemy", &config::closeWarning);
+    if (config::closeWarning) SliderD("Warning range", &config::warnDist, 5, 100, "%.0f m");
 }
 
 inline void PagePlayers() {
