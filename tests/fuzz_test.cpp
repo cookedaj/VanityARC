@@ -80,7 +80,6 @@ int main(int argc, char** argv) {
         for (int c = 0; c < labels::CAT_COUNT; c++) {
             (void)labels::defaultName((labels::Cat)c, key);
             (void)labels::display((labels::Cat)c, key, R(2) ? key : "");
-            if (R(50) == 0) labels::setOverride((labels::Cat)c, key, key);
         }
         if (it % 1000 == 0) labeler::endTick();
         if (it % 5000 == 0) { names::clearCache(); labeler::reset(); }

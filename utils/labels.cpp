@@ -14,10 +14,8 @@ namespace labels {
 namespace {
 
 std::map<std::string, std::string> g_override[CAT_COUNT];
-std::map<std::string, std::string> g_seen[CAT_COUNT];
-unsigned g_version = 1;
 std::string g_dir;
-//The tracker thread asks for names while the menu (draw thread) edits them
+//The tracker and draw threads ask for names; load() fills them
 std::mutex g_mu;
 
 std::string configDir() {
@@ -257,47 +255,9 @@ std::string defaultName(Cat c, const std::string& key) {
 
 std::string display(Cat c, const std::string& key, const std::string& def) {
     std::lock_guard<std::mutex> lk(g_mu);
-    auto& seenMap = g_seen[(int)c];
     std::string base = def.empty() ? defaultName(c, key) : def;
-    seenMap[key] = base;
     auto it = g_override[(int)c].find(key);
     return it != g_override[(int)c].end() ? it->second : base;
-}
-
-void setOverride(Cat c, const std::string& key, const std::string& name) {
-    std::lock_guard<std::mutex> lk(g_mu);
-    std::string n;
-    for (char ch : name) if (ch != '\t' && ch != '\n' && ch != '\r') n.push_back(ch);
-    while (!n.empty() && n.back() == ' ') n.pop_back();
-    auto& m = g_override[(int)c];
-    auto it = m.find(key);
-    if (n.empty()) { if (it == m.end()) return; m.erase(it); }
-    else { if (it != m.end() && it->second == n) return; m[key] = n; }
-    g_version++;
-}
-
-std::string overrideOf(Cat c, const std::string& key) {
-    std::lock_guard<std::mutex> lk(g_mu);
-    auto it = g_override[(int)c].find(key);
-    return it == g_override[(int)c].end() ? std::string() : it->second;
-}
-
-std::vector<std::string> gunNames() {
-    std::vector<std::string> v;
-    for (const Rule& r : ITEM_NAMES) v.push_back(r.name);
-    std::sort(v.begin(), v.end());
-    v.erase(std::unique(v.begin(), v.end()), v.end());
-    return v;
-}
-
-unsigned version() {
-    std::lock_guard<std::mutex> lk(g_mu);
-    return g_version;
-}
-
-std::map<std::string, std::string> seen(Cat c) {
-    std::lock_guard<std::mutex> lk(g_mu);
-    return g_seen[(int)c]; //a copy: the other thread may add keys while the menu draws the list
 }
 
 void setDir(const std::string& dir) {
@@ -310,34 +270,23 @@ void load() {
     std::ifstream f(configDir() + "/labels.txt");
     if (!f) return;
     std::string line;
+    //spaces around a field are dropped, so "item <TAB> Key <TAB> Name " still works
+    auto trim = [](std::string s) {
+        const size_t a = s.find_first_not_of(" \t"), b = s.find_last_not_of(" \t");
+        return a == std::string::npos ? std::string() : s.substr(a, b - a + 1);
+    };
+    bool first = true;
     while (std::getline(f, line)) {
+        if (first && line.compare(0, 3, "\xEF\xBB\xBF") == 0) line.erase(0, 3); //UTF-8 mark some editors put first
+        first = false;
         if (!line.empty() && line.back() == '\r') line.pop_back(); //file edited on another system
         size_t a = line.find('\t');
         size_t b = a == std::string::npos ? a : line.find('\t', a + 1);
         if (b == std::string::npos) continue;
-        std::string cat = line.substr(0, a), key = line.substr(a + 1, b - a - 1), name = line.substr(b + 1);
+        std::string cat = lower(trim(line.substr(0, a))), key = trim(line.substr(a + 1, b - a - 1)), name = trim(line.substr(b + 1));
         for (int i = 0; i < CAT_COUNT; i++)
             if (cat == catName((Cat)i) && !key.empty() && !name.empty()) g_override[i][key] = name;
     }
-    g_version++;
-}
-
-void save() {
-    std::lock_guard<std::mutex> lk(g_mu);
-    std::error_code ec;
-    std::filesystem::create_directories(configDir(), ec);
-    //Write to a temporary file and rename it over the real one: a crash or a full disk in the middle of
-    //saving can never leave you with a half-written (or empty) names file.
-    const std::string path = configDir() + "/labels.txt", tmp = path + ".tmp";
-    {
-        std::ofstream f(tmp, std::ios::trunc);
-        if (!f) return;
-        for (int i = 0; i < CAT_COUNT; i++)
-            for (auto& kv : g_override[i]) f << catName((Cat)i) << '\t' << kv.first << '\t' << kv.second << '\n';
-        f.flush();
-        if (!f) { std::filesystem::remove(tmp, ec); return; }
-    }
-    std::filesystem::rename(tmp, path, ec);
 }
 
 } // namespace labels

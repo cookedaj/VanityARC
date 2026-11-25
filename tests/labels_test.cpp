@@ -15,6 +15,7 @@
 #include "utils/keytext.h"
 #include "utils/settings.h"
 #include <filesystem>
+#include <fstream>
 #include <thread>
 #include <chrono>
 #include <filesystem>
@@ -153,26 +154,20 @@ int main() {
     CHECK(D(Cat::Item, "DA_Item_SMG_Medium_01_Carbine") == "Canto", "gun Canto variant");
     CHECK(D(Cat::Item, "DA_Item_Bandage_01") == "Bandage", "item fallback");
 
-    //--- your own names, saved and loaded
+    //--- your own names, read from labels.txt (the overlay never writes it)
     std::string dir = testDir("cfgtest");
     std::filesystem::remove_all(dir);
+    std::filesystem::create_directories(dir);
     labels::setDir(dir);
-    unsigned v0 = labels::version();
-    labels::setOverride(Cat::Arc, "DA_EnemyType_Tick", "Spider");
-    CHECK(labels::version() != v0, "version changes when a name changes");
-    CHECK(labels::display(Cat::Arc, "DA_EnemyType_Tick") == "Spider", "own name wins");
+    CHECK(labels::display(Cat::Arc, "DA_EnemyType_Runner") == "Runner", "no labels.txt: built-in name");
     CHECK(labels::display(Cat::Player, "793381ba5d093c9f", "cooked") == "cooked", "player shows its game name");
-    labels::setOverride(Cat::Player, "793381ba5d093c9f", "me");
-    CHECK(labels::display(Cat::Player, "793381ba5d093c9f", "cooked") == "me", "nickname wins over the game name");
-    CHECK(labels::seen(Cat::Player).at("793381ba5d093c9f") == "cooked", "seen list keeps the built-in name");
-    labels::save();
-    labels::setOverride(Cat::Arc, "DA_EnemyType_Tick", "");
-    labels::setOverride(Cat::Player, "793381ba5d093c9f", "");
-    CHECK(labels::display(Cat::Arc, "DA_EnemyType_Tick") == "Tick", "empty name = built-in again");
+    const std::string labelsFile = dir + "/labels.txt";
+    const std::string labelsText = "\xEF\xBB\xBF" "arc\tDA_EnemyType_Runner\tSpider\n"
+                                   "Container \t BP_SocketContainer_CUL_MuseumCrate_01_A_C \t Art crate \r\n";
+    { std::ofstream out(labelsFile, std::ios::binary); out << labelsText; }
     labels::load();
-    CHECK(labels::display(Cat::Arc, "DA_EnemyType_Tick") == "Spider" && labels::overrideOf(Cat::Player, "793381ba5d093c9f") == "me", "names come back after load");
-    labels::setOverride(Cat::Arc, "DA_EnemyType_Tick", "");
-    labels::setOverride(Cat::Player, "793381ba5d093c9f", "");
+    CHECK(labels::display(Cat::Arc, "DA_EnemyType_Runner") == "Spider", "own name wins (first line after a UTF-8 mark)");
+    CHECK(labels::display(Cat::Container, "BP_SocketContainer_CUL_MuseumCrate_01_A_C") == "Art crate", "category in any case, spaces around the fields dropped");
 
     //--- settings file
     config::showArcNames = false; config::labelSize = 19.0f; config::nameMaxLootDist = 33;
@@ -273,17 +268,19 @@ int main() {
     CHECK(e4.label == "cooked", "player name");
     CHECK(e4.sub == "Rattler (held) + Stitcher", "player guns: held first, then stowed");
 
-    //a nickname replaces the game name
-    labels::setOverride(Cat::Player, "793381ba5d093c9f", "Alex");
-    RenderEntity e5 = ent(Object::PLAYER, 50.0, pawn);
+    //a nickname in labels.txt replaces the game name (a fresh actor: a known one is re-read only every few seconds)
+    { std::ofstream out(labelsFile, std::ios::binary | std::ios::app); out << "player\t793381ba5d093c9f\tAlex\n"; }
+    labels::load();
+    u64 pawn2 = makeObject(0x1400, 0x2000, 1); put<u64>(pawn2, 0x3E8, ps); put<u64>(pawn2, 0xCB0, inv);
+    RenderEntity e5 = ent(Object::PLAYER, 50.0, pawn2);
     labeler::fill(e5);
     CHECK(e5.label == "Alex", "nickname shows on screen");
-    labels::setOverride(Cat::Player, "793381ba5d093c9f", "");
 
     //a held non-gun record (a tool) is not listed as a gun
     u64 toolRec = alloc(0x40); put<u64>(toolRec, 0x0, makeObject(0x1000, 0x2180, 0)); put<u64>(toolRec, 0x10, heldAsset);
     put<u64>(inv, 0x530, toolRec);
-    RenderEntity e6 = ent(Object::PLAYER, 50.0, pawn);
+    u64 pawn3 = makeObject(0x1400, 0x2000, 1); put<u64>(pawn3, 0x3E8, ps); put<u64>(pawn3, 0xCB0, inv);
+    RenderEntity e6 = ent(Object::PLAYER, 50.0, pawn3);
     labeler::fill(e6);
     CHECK(e6.sub.find("held") == std::string::npos, "non-weapon record is not a held gun");
 

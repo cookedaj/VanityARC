@@ -37,7 +37,6 @@ struct Info {
     std::string cls;    //actor name, e.g. BP_PickupBase_C
     std::string key;    //raw key of what it is (asset name or class name), once known
     bool resolved = false;
-    unsigned ver = 0;
     std::string label, sub;
     std::string account;
     uintptr_t ps = 0;   //the PlayerState the account came from
@@ -124,10 +123,8 @@ std::string gunsOf(uintptr_t pawn) {
 }
 
 void fillPlayer(Info& in, uintptr_t pawn, double t) {
-    const bool verChanged = in.ver != labels::version();
-    if (t - in.labelT >= PLAYER_TTL || verChanged) {
+    if (t - in.labelT >= PLAYER_TTL) {
         in.labelT = t;
-        in.ver = labels::version();
         in.label.clear();
         uintptr_t ps = ReadMemory<uintptr_t>(pawn + PAWN_PLAYERSTATE);
         if (isObj(ps)) {
@@ -153,7 +150,7 @@ void fillPlayer(Info& in, uintptr_t pawn, double t) {
         }
     }
     if (g_idsBad) in.account.clear(); //every player at once, not only at its next refresh
-    if (t - in.gunsT >= GUNS_TTL || verChanged) {
+    if (t - in.gunsT >= GUNS_TTL) {
         in.gunsT = t;
         in.sub = gunsOf(pawn);
     }
@@ -172,8 +169,7 @@ void fillArc(Info& in, uintptr_t actor, double t) {
             in.label.clear();
         }
     }
-    if (in.resolved && (in.ver != labels::version() || in.label.empty())) {
-        in.ver = labels::version();
+    if (in.resolved && in.label.empty()) {
         in.label = labels::display(labels::Cat::Arc, in.key);
     }
     if (in.resolved) { //"DA_EnemyType_TurretEnemy" and friends
@@ -185,8 +181,7 @@ void fillArc(Info& in, uintptr_t actor, double t) {
 
 void fillContainer(Info& in) {
     if (in.cls.empty()) return;
-    if (in.ver != labels::version() || in.label.empty()) {
-        in.ver = labels::version();
+    if (in.label.empty()) {
         in.key = in.cls;
         in.label = labels::display(labels::Cat::Container, in.key);
     }
@@ -243,8 +238,7 @@ void fillPickup(Info& in, uintptr_t actor, double t) {
             }
         }
     }
-    if (in.resolved && (in.ver != labels::version() || in.label.empty())) {
-        in.ver = labels::version();
+    if (in.resolved && in.label.empty()) {
         in.label = labels::display(labels::Cat::Item, in.key);
     }
 }

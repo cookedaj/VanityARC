@@ -436,16 +436,12 @@ int main() {
         CHECK(slow.updatesPerSec > 15 && slow.updatesPerSec < 45, "tracker: the update-rate setting is followed (30 Hz)");
         g_trackerHz = 120;
 
-        //the menu thread edits names and reads the list while the tracker thread adds to it
+        //another thread asks for names while the tracker thread names what it reads
         std::atomic<bool> go{true};
         std::thread menu([&] {
             int i = 0;
             while (go) {
-                labels::setOverride(labels::Cat::Container, "BP_SocketContainer_Test_" + std::to_string(i % 20), "name" + std::to_string(i));
-                auto seen = labels::seen(labels::Cat::Container);
-                (void)seen;
-                labels::version();
-                labels::overrideOf(labels::Cat::Arc, "x");
+                (void)labels::display(labels::Cat::Container, "BP_SocketContainer_Test_" + std::to_string(i % 20));
                 i++;
             }
         });
