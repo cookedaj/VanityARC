@@ -15,7 +15,7 @@ struct LabelReq {
     float x0 = 0, y0 = 0, x1 = 0, y1 = 0; //the area the text covers in its first-choice place, in pixels
     int prio = 0;                         //lower is more important: it is placed first and keeps its spot
     double dist = 0;                      //metres: for the same prio, closer wins
-    bool force = false;                   //always drawn in its first place, even over another label (players)
+    bool force = false;                   //always drawn: in a free place if any, else in its first place over another label (players)
     std::vector<LabelRect> alts;          //other places to try, in order, when the first one is taken
 };
 
@@ -50,9 +50,11 @@ inline std::vector<LabelPick> ChoosePlaces(const std::vector<LabelReq>& reqs) {
     for (size_t i : order) {
         const LabelReq& q = reqs[i];
         const LabelRect first{q.x0, q.y0, q.x1, q.y1};
-        if (q.force || free(first)) { chosen.push_back({i, -1, first}); continue; }
-        for (size_t k = 0; k < q.alts.size(); k++)
-            if (free(q.alts[k])) { chosen.push_back({i, (int)k, q.alts[k]}); break; }
+        if (free(first)) { chosen.push_back({i, -1, first}); continue; }
+        bool placed = false;
+        for (size_t k = 0; k < q.alts.size() && !placed; k++)
+            if (free(q.alts[k])) { chosen.push_back({i, (int)k, q.alts[k]}); placed = true; }
+        if (!placed && q.force) chosen.push_back({i, -1, first}); //nowhere free: forced labels still go in their first place
     }
     return chosen;
 }
