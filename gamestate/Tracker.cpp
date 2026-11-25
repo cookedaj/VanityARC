@@ -97,6 +97,7 @@ void Tracker::run() {
     auto lastGamescope = clk::now() - std::chrono::seconds(10);
     auto lastInventory = clk::now() - std::chrono::seconds(10);
     std::shared_ptr<const InventoryMap> inventories = std::make_shared<InventoryMap>();
+    std::unordered_map<ptr, int> emptyReads; //actors whose last reads came back empty while their old rows are still shown
     auto rateStart = clk::now();
     int rateCount = 0;
     double hz = 0;
@@ -146,7 +147,17 @@ void Tracker::run() {
             std::vector<ptr> want;
             { std::lock_guard<std::mutex> lk(inspMu_); want = inspected_; }
             auto m = std::make_shared<InventoryMap>();
-            for (ptr a : want) (*m)[a] = labeler::inventoryOf(a);
+            std::unordered_map<ptr, int> held;
+            for (ptr a : want) {
+                std::vector<ItemRow> rows = labeler::inventoryOf(a);
+                //One failed read does not wipe the list: the previous rows stay for up to 3 empty reads (about 1.5 s)
+                const auto prev = inventories->find(a);
+                const auto miss = emptyReads.find(a);
+                const int n = miss != emptyReads.end() ? miss->second : 0;
+                if (rows.empty() && prev != inventories->end() && !prev->second.empty() && n < 3) { rows = prev->second; held[a] = n + 1; }
+                (*m)[a] = std::move(rows);
+            }
+            emptyReads = std::move(held);
             inventories = m;
         }
 
