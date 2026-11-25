@@ -194,6 +194,28 @@ int main() {
         config::boxStyle = 0; config::showSkeleton = true; config::showOffscreen = true;
     }
 
+    //---- which way they face: up = away from you, down = towards you, right = to your right; drawn only when known
+    {
+        float x = 0, y = 0;
+        CHECK(FacingOnScreen(30, 30, x, y) && std::abs(x) < 1e-6f && std::abs(y + 1) < 1e-6f, "facing the way you look: the pointer points up");
+        CHECK(FacingOnScreen(210, 30, x, y) && std::abs(x) < 1e-6f && std::abs(y - 1) < 1e-6f, "facing back at you: down");
+        CHECK(FacingOnScreen(120, 30, x, y) && std::abs(x - 1) < 1e-6f && std::abs(y) < 1e-6f, "turned 90 degrees to the right: right");
+        CHECK(!FacingOnScreen(NAN, 30, x, y), "facing unknown: no pointer");
+        std::vector<RenderEntity> p = {ent(Object::PLAYER, 3000, 200, 0), ent(Object::ARC, 2500, -300, 0)};
+        const int unknownEsp = draw([&] { DrawESP(p, cam, 3); }), unknownRadar = draw([&] { DrawRadar(p, cam, 3); });
+        p[0].yaw = 180; p[1].yaw = 90;
+        const int knownEsp = draw([&] { DrawESP(p, cam, 3); });
+        const bool espFinite = g_finite;
+        const int knownRadar = draw([&] { DrawRadar(p, cam, 3); });
+        config::showFacing = false;
+        const int offEsp = draw([&] { DrawESP(p, cam, 3); }), offRadar = draw([&] { DrawRadar(p, cam, 3); });
+        config::showFacing = true;
+        CHECK(knownEsp > unknownEsp && offEsp == unknownEsp && espFinite, "player box: an arrow when his facing is known, none when unknown or switched off");
+        CHECK(knownRadar > unknownRadar && offRadar == unknownRadar, "radar: a line on each dot whose facing is known, none when unknown or switched off");
+        p[0].yaw = NAN; p[1].isTurret = true;
+        CHECK(draw([&] { DrawRadar(p, cam, 3); }) == unknownRadar, "a turret gets no line (its gun turns without its base)");
+    }
+
     //---- overlay opacity scales everything the ESP draws
     {
         config::overlayOpacity = 0.5f;
@@ -214,7 +236,7 @@ int main() {
     {
         config::monochrome = true;
         std::vector<RenderEntity> all = {ent(Object::PLAYER, 3000, 200, 0), ent(Object::ARC, 2500, -300, 0), ent(Object::SEARCH, 1500, 400, 0)};
-        all[0].playerHealth = 55;
+        all[0].playerHealth = 55; all[0].yaw = 0; all[1].yaw = 45; //the facing pointers too
         bool grey = true;
         draw([&] {
             DrawESP(all, cam, 3);
@@ -267,6 +289,7 @@ int main() {
             if (i % 11 == 0) x = NAN;
             if (i % 13 == 0) y = INFINITY;
             RenderEntity e = ent(o, x, y, z, (int)U(0, 10)); e.playerHealth = i % 5 == 0 ? NAN : U(-10, 150); e.isDead = i % 4 == 0; e.label = "Name";
+            e.yaw = i % 7 == 0 ? INFINITY : U(-1e6, 1e6);
             junk.push_back(e);
         }
         FminimalViewInfo c = camera();
@@ -286,6 +309,7 @@ int main() {
             Object o = (Object)(int)U(0, 4.0);
             RenderEntity e = ent(o, U(-3e4, 3e4), U(-3e4, 3e4), U(-5e3, 5e3), (int)U(0, 10));
             e.playerHealth = U(0, 120); e.isDead = i % 4 == 0; e.label = "Name"; e.sub = "Ferro (held) + Stitcher";
+            e.yaw = i % 3 == 0 ? NAN : U(-360, 360);
             good.push_back(e);
         }
         FminimalViewInfo c = camera();

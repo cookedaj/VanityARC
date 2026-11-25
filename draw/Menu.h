@@ -163,6 +163,8 @@ inline void PageEsp() {
     Switch("Monochrome (white and grey)", &config::monochrome);
     Slider("Line thickness", &config::boxThickness, 1.0f, 4.0f, "%.1f px");
     Switch("Health and shield bars", &config::showBars);
+    Switch("Which way they face", &config::showFacing);
+    Note("An arrow in each player's box (pointing down: facing you) and a line on each radar dot (players and ARC) show which way they face.");
     Section("SKELETON");
     Switch("Skeleton on players", &config::showSkeleton);
     Note("A faint skeleton means the game is not drawing that player right now, so the pose is an estimate.");

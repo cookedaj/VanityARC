@@ -229,6 +229,22 @@ inline void DrawPlayerBars(float x0, float y0, float w, float h, const RenderEnt
     }
 }
 
+//Which way something faces, as a direction on screen: up = the same way as refDeg, down = the opposite way, right = to
+//its right. Both are the game's yaw in degrees. False when the facing is not known (NaN).
+inline bool FacingOnScreen(double yawDeg, double refDeg, float& x, float& y) {
+    if (!std::isfinite(yawDeg) || !std::isfinite(refDeg)) return false;
+    const double a = (yawDeg - refDeg) * 3.14159265358979 / 180.0;
+    x = (float)std::sin(a);
+    y = (float)-std::cos(a);
+    return true;
+}
+
+//A thick line from r0 to r1 px out of (x, y) along (dx, dy), with a dark edge (1 px past the tip too) for any background
+inline void DrawFacingLine(float x, float y, float dx, float dy, float r0, float r1, ImU32 color, float t) {
+    DrawLine(x + dx * r0, y + dy * r0, x + dx * (r1 + 1), y + dy * (r1 + 1), IM_COL32(0, 0, 0, 200), t + 2.0f);
+    DrawLine(x + dx * r0, y + dy * r0, x + dx * r1, y + dy * r1, color, t);
+}
+
 //Where the player list at the bottom was drawn (set by DrawPlayerListWindow, one frame old; all zero when it is not shown)
 inline LabelRect g_listRect;
 
@@ -376,6 +392,17 @@ inline void DrawESP(const std::vector<RenderEntity>& entities, FminimalViewInfo 
 
             if (config::showSkeleton && ent.pose && dist <= config::skeletonMaxDist) DrawSkeleton(v, *ent.pose, color, th);
 
+            //Which way he faces, seen from you: an arrow from the middle of the box, pointing down when he faces you.
+            //It stays inside the box, clear of his labels, except on a tiny far box: it is never under 12 px, so it still reads.
+            float fx = 0, fy = 0;
+            const double toHim = std::atan2(ent.pos.y - vm.Location.y, ent.pos.x - vm.Location.x) * 180.0 / 3.14159265358979;
+            if (config::showFacing && FacingOnScreen(ent.yaw, toHim, fx, fy)) {
+                const float mxs = (float)sHead.x, mys = y0 + h / 2;
+                const float len = std::clamp(std::min(w, h) * 0.4f, 12.0f, 40.0f), tip = std::max(7.0f, len * 0.45f);
+                DrawFacingLine(mxs, mys, fx, fy, 0.0f, len - tip * 0.5f, color, std::max(3.0f, th + 1.0f));
+                DrawArrow(mxs + fx * len, mys + fy * len, fx, fy, tip, color);
+            }
+
             if (config::showBars) DrawPlayerBars(x0, y0, w, h, ent); //health, and the shield next to it
 
             //name above, distance and guns below, 3 px clear of the box and 2 px apart (cards included). With no room
@@ -510,9 +537,15 @@ inline void DrawRadar(const std::vector<RenderEntity>& entities, FminimalViewInf
         }
 
         //ARC a diamond, enemy a filled dot, teammate a hollow ring: told apart by shape, not only by colour
-        if (ent.type == Object::ARC) DrawDiamondFilled(screenX, screenY, 5, COLOR::arc(false));
-        else if (IsTeammate(ent, localPlayerTeam)) DrawCircleRing(screenX, screenY, 4.5f, COLOR::mate(), 2.0f);
-        else DrawCircleFilled(screenX, screenY, 5, COLOR::enemy());
+        const bool mate = ent.type != Object::ARC && IsTeammate(ent, localPlayerTeam);
+        const ImU32 col = ent.type == Object::ARC ? COLOR::arc(false) : mate ? COLOR::mate() : COLOR::enemy();
+        //The way it faces, on the map: a thick line out of the dot (under it). Not for turrets: their gun may turn without their base.
+        float fx = 0, fy = 0;
+        if (config::showFacing && !ent.isTurret && FacingOnScreen(ent.yaw, cameraInfo.Rotation.y, fx, fy))
+            DrawFacingLine(screenX, screenY, fx, fy, 4.0f, 16.0f, col, 3.0f);
+        if (ent.type == Object::ARC) DrawDiamondFilled(screenX, screenY, 5, col);
+        else if (mate) DrawCircleRing(screenX, screenY, 4.5f, col, 2.0f);
+        else DrawCircleFilled(screenX, screenY, 5, col);
     }
 
     DrawArrow(cx, cy - 7, 0, -1, 10, COLOR::white); //you, looking up

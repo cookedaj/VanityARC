@@ -196,6 +196,17 @@ int main() {
     for (const auto& e : r1.entities) if (e.actor == enemy1) found = e.pos.x == cx + 4100 && e.playerHealth == 20;
     CHECK(found, "the moved player is at his new place with his new health");
 
+    //--- which way a player faces: his root's rotation, read together with the position (all zero is not a rotation)
+    {
+        const double h = 0.70710678118654752, q[4] = {0, 0, h, h}; //turned 90 degrees about Z: facing +Y
+        std::memcpy((void*)(get<u64>(enemy1 + off::ROOT_COMPONENT_PTR) + off::POS_PTR - 0x20), q, 32);
+        gsRet rf = fast.step();
+        double y1 = 0, y2 = 0;
+        for (const auto& e : rf.entities) { if (e.actor == enemy1) y1 = e.yaw; if (e.actor == mate) y2 = e.yaw; }
+        CHECK(std::abs(y1 - 90.0) < 1e-6, "a player's facing comes from his root's rotation (90 degrees: along +Y)");
+        CHECK(std::isnan(y2), "no rotation in memory: the facing is unknown, not 0");
+    }
+
     //--- skeleton: a player with a mesh and a 97-bone list gets a stick figure; one without a mesh keeps the box only
     {
         giveMesh(enemy1, cx + 4100, cy + 150, cz - 182);
