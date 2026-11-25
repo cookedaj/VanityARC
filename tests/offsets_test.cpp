@@ -52,6 +52,12 @@ int main() {
           "the inventory probe's ready line is read as it is printed");
 
     live::reset();
+    writeFile(dir, "shield_value 0710\nshield_component 08\nshield_max 0x718zz\ninv_array 0x530 0x20 16q item\n");
+    live::load(dir);
+    CHECK(live::shieldValue == 710 && live::shieldComponent == 8, "a leading 0 is decimal, never octal");
+    CHECK(live::shieldMax == -1 && live::invArrays.empty(), "a number with junk after it is refused");
+
+    live::reset();
     std::string many;
     for (int i = 0; i < 40; i++) many += "inv_array " + std::to_string(0x530 + i * 0x10) + " 0x20 0x10 item\n";
     writeFile(dir, many);
