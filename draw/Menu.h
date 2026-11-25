@@ -363,6 +363,7 @@ inline void PageSettings() {
     if (config::soundCues) {
         SliderD("Spoken warning range", &config::cueRange, 10, 150, "%.0f m");
         if (cue::missing) ImGui::TextWrapped("No sound: spd-say was not found. Install speech-dispatcher to hear the cues.");
+        else if (cue::failed) ImGui::TextWrapped("No sound: spd-say could not reach speech-dispatcher. Run 'spd-say test' in a terminal to see why.");
     }
     Note("Says the result of F6, F7, F8 and F10, and warns when an enemy player first comes within range (at most one warning every 2 s). Enemy warnings are quiet while stream hide is on. "
          "The big on-screen card has its own range: ESP tab, Warning card range.");

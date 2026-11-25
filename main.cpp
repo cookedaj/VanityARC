@@ -78,7 +78,6 @@ int main() {
     std::signal(SIGHUP, SignalHandler);
     std::signal(SIGUSR1, MenuSignalHandler);   //before InitOverlay: an early pkill -USR1/-USR2 must not kill the overlay
     std::signal(SIGUSR2, StreamSignalHandler);
-    cue::init(); //the spoken cues' spd-say processes are cleaned up by the kernel when they end
     if (!InitOverlay()) {
         std::cerr << "[-] Failed to init Overlay (GLFW/Wayland)" << std::endl;
         return 1;
@@ -117,6 +116,7 @@ int main() {
     bool lastChanged = true; //the last frame changed something: one more follows it (ImGui windows settle a frame late)
     while (g_Running && !OverlayShouldClose()) {
         MenuPollToggle();
+        cue::reap(); //finished spd-say processes: no zombies, and the Settings tab learns when speech failed
         //Stream-hide (F8, SIGUSR2 or the menu switch): while on, the overlay draws nothing and takes no mouse, so a screen
         //recording or stream shows none of it. The menu is closed, because it would be invisible and would block clicks.
         if (g_MenuQuit.exchange(false)) g_Running = false;
