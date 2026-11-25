@@ -83,6 +83,7 @@ void Tracker::run() {
     ProcessId = fixedPid_;
     auto lastFind = clk::now() - std::chrono::seconds(10);
     auto lastData = clk::now();
+    auto lastValid = clk::now(); //last valid world (or attach / re-lookup): a minute without one looks again
     bool announced = false;
     uint64_t seq = 0;
     auto lastGamescope = clk::now() - std::chrono::seconds(10);
@@ -110,9 +111,25 @@ void Tracker::run() {
                 names::clearCache();
                 labeler::reset();
                 lastData = t0;
+                lastValid = t0;
             } else if (!announced) {
                 std::cout << OBF("[-] ARC Raiders is not running. Waiting for it...") << std::endl;
                 announced = true;
+            }
+        }
+        //A minute attached without a valid world: another Unreal game may have been picked. Look again and switch
+        //if the lookup now gives a different process.
+        if (!fixedPid_ && ProcessId != 0 && t0 - lastValid >= std::chrono::seconds(60)) {
+            lastValid = t0;
+            const pid_t p = FindGamePID();
+            if (p != 0 && p != ProcessId) {
+                std::cout << "[*] Switching from PID " << ProcessId.load() << " to PID " << p << std::endl;
+                cam_ = 0;
+                ProcessId = p;
+                gs = GameState();
+                names::clearCache();
+                labeler::reset();
+                lastData = t0;
             }
         }
         if (ProcessId == 0) {
@@ -143,6 +160,7 @@ void Tracker::run() {
 
         gsRet r = gs.step();
         if (!r.entities.empty()) lastData = t0;
+        if (r.valid) lastValid = t0;
         cam_ = r.valid ? gs.cameraActor() : 0;
 
         auto s = std::make_shared<Snapshot>();
