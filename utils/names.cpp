@@ -182,7 +182,8 @@ std::string readPoolName(u32 index) {
             u16 c = (u16)(raw[(size_t)i] ^ textKey(key, i));
             key = stepKey(key, i);
             if (c == 0) break;
-            out.push_back(c >= 32 && c <= 126 ? (char)c : '?');
+            if (c < 32 || c > 126) return ""; //object names are ASCII: a bad byte means a wrong decode, retried later
+            out.push_back((char)c);
         }
     } else {
         std::vector<u8> raw((size_t)length);
@@ -191,7 +192,8 @@ std::string readPoolName(u32 index) {
             u8 c = (u8)(raw[(size_t)i] ^ (u8)(textKey(key, i) >> 3));
             key = stepKey(key, i);
             if (c == 0) break;
-            out.push_back(c >= 32 && c <= 126 ? (char)c : '?');
+            if (c < 32 || c > 126) return "";
+            out.push_back((char)c);
         }
     }
     return printable(out) ? out : "";
