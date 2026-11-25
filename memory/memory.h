@@ -42,7 +42,8 @@ size_t ReadScatter(ReadReq* reqs, size_t n); //Overload thats to be used
 
 pid_t FindGamePID();
 
-//Reads where the game's .exe is loaded (from /proc/<pid>/maps and its PE header) into ImageBase / ImageEnd.
+//Reads where the game's .exe is loaded into ImageBase / ImageEnd: the usual base 0x140000000 when a PE header sits
+//there, else a mapping named .exe (from /proc/<pid>/maps).
 //False when it cannot be found: the usual base and range are used then.
 bool FindGameImage(pid_t pid);
 

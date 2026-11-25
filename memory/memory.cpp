@@ -157,34 +157,42 @@ pid_t FindGamePID() {
     return other; //0: not running (yet); the caller decides whether to say so and retry
 }
 
+//The PE header at base: true for a readable 64-bit image, giving its size and build stamp
+static bool peHeader(pid_t pid, uintptr_t base, uint32_t& size, uint32_t& stamp) {
+    unsigned char h[0x1000];
+    ReadMemoryBuffer(pid, (long)base, h, sizeof h); //all zero when unreadable
+    uint32_t pe = 0, sig = 0;
+    uint16_t magic = 0;
+    std::memcpy(&pe, h + 0x3C, 4); //e_lfanew
+    if (h[0] != 'M' || h[1] != 'Z' || pe > sizeof h - 0x54) return false;
+    std::memcpy(&sig, h + pe, 4);
+    std::memcpy(&stamp, h + pe + 8, 4);     //FileHeader.TimeDateStamp: changes with every build of the game
+    std::memcpy(&magic, h + pe + 0x18, 2);  //OptionalHeader.Magic: 0x20B = 64-bit
+    std::memcpy(&size, h + pe + 0x50, 4);   //OptionalHeader.SizeOfImage
+    return sig == 0x4550 && magic == 0x20B && size != 0;
+}
+
 bool FindGameImage(pid_t pid) {
     ImageBase = DEFAULT_IMAGE_BASE;
     ImageEnd = DEFAULT_IMAGE_END;
     ImageStamp = 0;
-    bool found = false;
+    uint32_t size = 0, stamp = 0;
+    auto take = [&](uintptr_t base) {
+        ImageBase = base;
+        ImageEnd = base + size;
+        ImageStamp = stamp;
+        return true;
+    };
+    //The usual base first, whatever /proc/<pid>/maps calls it. Proton can run the game there from "/memfd:wine-mapping"
+    //and keep only a read-only view of the .exe file somewhere else (proton-cachyos 11): choosing by the .exe name
+    //picked that view, and every read missed.
+    if (peHeader(pid, DEFAULT_IMAGE_BASE, size, stamp)) return take(DEFAULT_IMAGE_BASE);
     std::ifstream maps("/proc/" + std::to_string(pid) + "/maps");
     for (std::string line; std::getline(maps, line);) {
         //"start-end perms offset dev inode path": the first page of a mapped .exe is its PE header
         if (line.size() < 4 || strncasecmp(line.c_str() + line.size() - 4, ".exe", 4) != 0) continue;
         const uintptr_t base = (uintptr_t)std::strtoull(line.c_str(), nullptr, 16);
-        unsigned char h[0x1000];
-        ReadMemoryBuffer(pid, (long)base, h, sizeof h);
-        uint32_t pe = 0, sig = 0, size = 0, stamp = 0;
-        uint16_t magic = 0;
-        std::memcpy(&pe, h + 0x3C, 4); //e_lfanew
-        if (h[0] != 'M' || h[1] != 'Z' || pe > sizeof h - 0x54) continue;
-        std::memcpy(&sig, h + pe, 4);
-        std::memcpy(&stamp, h + pe + 8, 4);     //FileHeader.TimeDateStamp: changes with every build of the game
-        std::memcpy(&magic, h + pe + 0x18, 2);  //OptionalHeader.Magic: 0x20B = 64-bit
-        std::memcpy(&size, h + pe + 0x50, 4);   //OptionalHeader.SizeOfImage
-        if (sig != 0x4550 || magic != 0x20B || size == 0) continue;
-        //The first .exe image, unless one sits at the usual base (that one is the game: anything else is a copy)
-        if (found && base != DEFAULT_IMAGE_BASE) continue;
-        ImageBase = base;
-        ImageEnd = base + size;
-        ImageStamp = stamp;
-        found = true;
-        if (base == DEFAULT_IMAGE_BASE) break;
+        if (peHeader(pid, base, size, stamp)) return take(base);
     }
-    return found;
+    return false;
 }

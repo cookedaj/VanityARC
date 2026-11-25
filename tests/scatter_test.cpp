@@ -110,6 +110,19 @@ int main() {
         void* img = wrote ? mmap(nullptr, sizeof h, PROT_READ, MAP_PRIVATE, fd, 0) : MAP_FAILED;
         CHECK(img != MAP_FAILED && FindGameImage(getpid()) && ImageBase == (uintptr_t)img && ImageEnd == (uintptr_t)img + size &&
               ImageStamp == stamp, "a mapped .exe: its base, size and build stamp are read");
+        //The game PC (proton-cachyos 11): the running game is at the usual base as "/memfd:wine-mapping", and only a
+        //read-only view of the .exe file, somewhere else, has the .exe name. The running one must win.
+        const uint32_t runStamp = 0x11223344, runSize = 0x4000;
+        void* run = mmap((void*)0x140000000ULL, sizeof h, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED_NOREPLACE, -1, 0);
+        if (run != MAP_FAILED) {
+            std::memcpy(run, h, sizeof h);
+            std::memcpy((uint8_t*)run + pe + 8, &runStamp, 4);
+            std::memcpy((uint8_t*)run + pe + 0x50, &runSize, 4);
+        }
+        CHECK(run == (void*)0x140000000ULL && FindGameImage(getpid()) && ImageBase == 0x140000000ULL &&
+              ImageEnd == 0x140000000ULL + runSize && ImageStamp == runStamp,
+              "the image at the usual base wins over a .exe view of the file elsewhere, whatever it is called");
+        if (run != MAP_FAILED) munmap(run, sizeof h);
         if (img != MAP_FAILED) mprotect(img, sizeof h, PROT_NONE);
         CHECK(img != MAP_FAILED && !FindGameImage(getpid()) && ImageStamp == 0, "an unreadable header: build stamp unknown (0)");
         if (img != MAP_FAILED) munmap(img, sizeof h);
