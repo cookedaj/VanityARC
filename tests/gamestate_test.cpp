@@ -143,7 +143,7 @@ int main() {
     base = (u64)region;
     bump = base + 0x10A00000;
     names::setBase(base);
-    labels::setDir("/tmp/kwinhelper_gamestate_test_unused"); //never writes: the test does not call save()
+    labels::setDir("/tmp/kwinhelper_gamestate_test_unused"); //never read: the test does not call load(), so only built-in names are used; this keeps it away from ~/.config
 
     buildWorld();
     camActor = alloc(0x1000);
