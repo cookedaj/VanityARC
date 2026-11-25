@@ -57,6 +57,7 @@ public:
 private:
     void run();
     void publish(std::shared_ptr<const Snapshot> s);
+    void fail(const char* what, const char* fault) noexcept; //logs what, publishes an invalid snapshot with fault (a literal) for the screen
     void sleepFor(int ms); //in short slices, so stop() is never slow
 
     pid_t fixedPid_ = 0;
