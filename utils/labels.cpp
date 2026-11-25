@@ -312,6 +312,7 @@ void load() {
     std::string line;
     while (std::getline(f, line)) {
         if (!line.empty() && line.back() == '\r') line.pop_back(); //file edited on another system
+        if (line.starts_with("\xEF\xBB\xBF")) line.erase(0, 3); //UTF-8 byte-order mark (some Windows editors add one)
         size_t a = line.find('\t');
         size_t b = a == std::string::npos ? a : line.find('\t', a + 1);
         if (b == std::string::npos) continue;

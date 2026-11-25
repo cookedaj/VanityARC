@@ -52,6 +52,7 @@ void parse(const std::string& text) {
     std::istringstream in(text);
     std::string line;
     while (std::getline(in, line)) {
+        if (line.starts_with("\xEF\xBB\xBF")) line.erase(0, 3); //UTF-8 byte-order mark (some Windows editors add one)
         line = trim(line);
         if (line.empty() || line[0] == '#') continue;
         size_t bar = line.rfind('|');
