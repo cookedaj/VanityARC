@@ -3,6 +3,7 @@
 #ifndef KWINHELPER_MARKING_H
 #define KWINHELPER_MARKING_H
 
+#include <algorithm>
 #include <cmath>
 #include <string>
 #include <vector>
@@ -27,7 +28,7 @@ struct MarkResult {
     }
 };
 
-//maxPx: how close to the crosshair (screen pixels) a player has to be to count
+//maxPx: how close to the crosshair (screen pixels) a player's figure, head to feet, has to be to count
 inline MarkResult MarkNearestAtCrosshair(const std::vector<RenderEntity>& ents, const View& v, int localTeam, double maxPx = 170.0) {
     MarkResult r;
     if (!v.ok) return r;
@@ -35,10 +36,18 @@ inline MarkResult MarkNearestAtCrosshair(const std::vector<RenderEntity>& ents, 
     double d1 = 1e18, d2 = 1e18;
     for (const RenderEntity& e : ents) {
         if (e.type != Object::PLAYER) continue; //down players and your squad still count, so aiming at one never marks someone else
-        Vector3 mid = e.pos; //the middle of the body, not the feet
-        Vector2 s;
-        if (!v.project(mid, s)) continue;
-        const double d = std::hypot(s.x - v.cx, s.y - v.cy);
+        if (e.pos.Dist(v.loc) / 100.0 > config::maxPlayerDist) continue; //only players the ESP can show
+        //The figure on screen: head (90 cm up) to feet (90 cm down); just the middle when one end is behind the camera
+        Vector3 top = e.pos, bot = e.pos;
+        top.z += 90; bot.z -= 90;
+        Vector2 a, b;
+        if (!v.project(top, a) || !v.project(bot, b)) {
+            if (!v.project(e.pos, a)) continue;
+            b = a;
+        }
+        const double ex = b.x - a.x, ey = b.y - a.y, len2 = ex * ex + ey * ey;
+        const double t = len2 > 0 ? std::clamp(((v.cx - a.x) * ex + (v.cy - a.y) * ey) / len2, 0.0, 1.0) : 0.0;
+        const double d = std::hypot(a.x + ex * t - v.cx, a.y + ey * t - v.cy);
         if (d < d1) { d2 = d1; d1 = d; best = &e; }
         else if (d < d2) d2 = d;
     }
