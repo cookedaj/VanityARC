@@ -119,7 +119,8 @@ int main() {
         RenderBegin();
 
         g_trackerHz = (int)config::trackerHz; //the tracker thread reads the update rate from here
-        g_skeletonOn = config::showSkeleton && config::showPlayers && config::espEnabled; //poses are read only when they will be drawn
+        //poses are read only when they will be drawn (not while stream hide is on: nothing is drawn then)
+        g_skeletonOn = config::showSkeleton && config::showPlayers && config::espEnabled && !config::streamHide;
         g_skeletonDist = (int)config::skeletonMaxDist;
 
         //Where the game's picture is on screen (differs from the screen with gamescope / a stretched resolution)
@@ -134,7 +135,7 @@ int main() {
         //The camera is read again right now: the markers follow the view exactly, not as it was a few milliseconds ago
         FminimalViewInfo vm = snap->vm;
         bool freshCam = false;
-        if (snap->valid) {
+        if (snap->valid && !config::streamHide) { //stream hide: no markers to place, so no extra camera read
             FminimalViewInfo fresh;
             if (tracker.freshCamera(fresh)) { vm = fresh; freshCam = true; }
         }
@@ -215,8 +216,9 @@ int main() {
         }
         DrawToast(below);
 
-        if (live && config::espEnabled) DrawESP(ents, vm, snap->localPlayerTeam);
-        if (config::enableRadar) {
+        //Stream hide: the markers and the radar are not even built (the tracker keeps running, so F8 shows them at once)
+        if (live && config::espEnabled && !config::streamHide) DrawESP(ents, vm, snap->localPlayerTeam);
+        if (config::enableRadar && !config::streamHide) {
             DrawRadar(ents, vm, snap->localPlayerTeam);
             //An empty radar must not read as "nobody near" when there is simply no data
             if (!live) { const ImVec2 rc = RadarCenter(); DrawLabelCentered(rc.x, rc.y, snap->gameFound ? "NO DATA" : "NO GAME", config::labelSize, COLOR::white, true); }
