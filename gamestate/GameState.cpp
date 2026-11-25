@@ -16,7 +16,7 @@
 //Forward declaration for debug functions
 void getViewMatrix(ptr actor);
 void printVtableSummary(const std::vector<RenderEntity>& ents, const FminimalViewInfo& vm);
-void printStatusLine(const std::vector<RenderEntity>& others, const RenderEntity* me);
+void printStatusLine(const std::vector<RenderEntity>& others, const RenderEntity* me, int posed = 0, int poseWanted = 0);
 void runNameProbe(const std::vector<RenderEntity>& ents, const std::vector<RenderEntity>& unknown,
                   const FminimalViewInfo& vm, ptr uworld, FILE* out = stdout); //Probe.cpp
 void getPosPtr(ptr actor);
@@ -421,7 +421,8 @@ void printVtableSummary(const std::vector<RenderEntity>& ents, const FminimalVie
 //One line for normal (non-debug) runs, so a pasted console can be checked without scrolling.
 //"others" is everything except you; "me" is the pawn the caller already picked as you (nullptr: not known). Health is
 //read straight from memory here, so a wrong PLAYER vtable shows up as NO HEALTH instead of a fake 100.
-void printStatusLine(const std::vector<RenderEntity>& others, const RenderEntity* me) {
+//"pose n/m": n of the m players near enough for a stick figure (you included) have one (left out when nobody is that near).
+void printStatusLine(const std::vector<RenderEntity>& others, const RenderEntity* me, int posed, int poseWanted) {
     int players = 0, playersDead = 0, arcs = 0, arcsDead = 0, pickups = 0, searches = 0;
     for (const auto& e : others) {
         switch (e.type) {
@@ -446,8 +447,10 @@ void printStatusLine(const std::vector<RenderEntity>& others, const RenderEntity
 
     //Only when something changed (or once a minute as a sign of life), so the console stays readable
     char line[256];
-    std::snprintf(line, sizeof line, "[+] %s | other players %d (dead %d) | ARC %d (dead %d) | pickups %d | containers %d",
-                  meBuf, players, playersDead, arcs, arcsDead, pickups, searches);
+    int len = std::snprintf(line, sizeof line, "[+] %s | other players %d (dead %d) | ARC %d (dead %d) | pickups %d | containers %d",
+                            meBuf, players, playersDead, arcs, arcsDead, pickups, searches);
+    if (poseWanted > 0 && len > 0 && (size_t)len < sizeof line)
+        std::snprintf(line + len, sizeof line - (size_t)len, " | pose %d/%d", posed, poseWanted);
     static std::string lastLine;
     static std::chrono::steady_clock::time_point lastPrint{};
     const auto now = std::chrono::steady_clock::now();
