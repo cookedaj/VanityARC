@@ -3,6 +3,7 @@
 #include <unistd.h>
 
 #include <algorithm>
+#include <cerrno>
 #include <chrono>
 #include <cmath>
 #include <iostream>
@@ -19,6 +20,14 @@ constexpr int NO_GAME_MS = 200;
 thread_local std::mt19937 jitterRng{std::random_device{}()}; //uneven step times: a fixed rhythm is easy to spot
 
 bool processAlive(pid_t pid) { return pid > 0 && access(("/proc/" + std::to_string(pid)).c_str(), F_OK) == 0; }
+
+//Finding the game needs no permission, reading it does. The kernel checks permission before it looks at the address,
+//so one byte from any address tells: EPERM = the ptrace capability is missing (a rebuild not started with start.sh)
+bool readDenied(pid_t pid) {
+    char b;
+    iovec l{&b, 1}, r{(void*)0x10000, 1};
+    return process_vm_readv(pid, &l, 1, &r, 1, 0) < 0 && errno == EPERM;
+}
 } // namespace
 
 void Tracker::start() {
@@ -150,6 +159,7 @@ void Tracker::run() {
         s->vm = r.vm;
         s->localPlayerTeam = r.localPlayerTeam;
         s->valid = r.valid;
+        if (!r.valid) s->fault = readDenied(ProcessId) ? "no permission to read the game: start the overlay with start.sh" : r.fault;
         s->gameFound = true;
         s->seq = ++seq;
         s->capturedNs = std::chrono::duration_cast<std::chrono::nanoseconds>(clk::now().time_since_epoch()).count();

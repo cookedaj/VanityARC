@@ -61,6 +61,7 @@ bool GameState::scan() {
     const auto t0 = clk::now();
     ptr uworld = getUworld();
     if (!isValidPtr(uworld)) {
+        fault_ = "no game world: menu or loading screen (or the UWORLD offsets are stale)";
         logThrottled("[-] Invalid Uworld (not in a raid yet?)");
         return false;
     }
@@ -68,12 +69,12 @@ bool GameState::scan() {
     lastWorld_ = uworld;
     //PersistentLevel at UWorld+0x170 is encrypted; the plain pointer is in LevelCollections[0] (see config.h)
     ptr levelCollection = ReadMemory<ptr>(uworld + off::LEVEL_COLLECTIONS);
-    if (!isValidPtr(levelCollection)) { logThrottled("[-] No level collection yet"); return false; }
+    if (!isValidPtr(levelCollection)) { fault_ = "no level yet: loading (or LEVEL_COLLECTIONS is stale)"; logThrottled("[-] No level collection yet"); return false; }
     ptr persistentLevel = ReadMemory<ptr>(levelCollection + off::PERSISTENT_LEVEL);
-    if (!isValidPtr(persistentLevel)) { logThrottled("[-] No persistent level yet"); return false; }
+    if (!isValidPtr(persistentLevel)) { fault_ = "no level yet: loading (or PERSISTENT_LEVEL is stale)"; logThrottled("[-] No persistent level yet"); return false; }
     ptr actorsPtr = ReadMemory<ptr>(persistentLevel + off::ACTORS_PTR);
     int count = ReadMemory<int>(persistentLevel + off::ACTORS_PTR + 0x8);
-    if (!(isValidPtr(actorsPtr) && count > 0 && count < 30000)) { logThrottled("[-] Actor list not readable yet"); return false; }
+    if (!(isValidPtr(actorsPtr) && count > 0 && count < 30000)) { fault_ = "actor list not readable: loading (or ACTORS_PTR is stale)"; logThrottled("[-] Actor list not readable yet"); return false; }
 
     std::vector<ptr> actors((size_t)count);
     ReadMemoryBuffer(actorsPtr, actors.data(), actors.size() * sizeof(ptr));
@@ -406,7 +407,7 @@ gsRet GameState::step() {
     const bool full = camActor_ == 0 || world != lastWorld_ || !isValidPtr(world) || t0 - lastScan_ >= nextScanGap();
     if (full) {
         lastScan_ = t0;
-        if (!scan()) { statics_.clear(); dyn_.clear(); camActor_ = 0; return {}; }
+        if (!scan()) { statics_.clear(); dyn_.clear(); camActor_ = 0; return {.fault = fault_}; }
     }
     updateDynamic();
 
@@ -415,7 +416,7 @@ gsRet GameState::step() {
     if (!std::isfinite(vm.FOV) || std::abs(vm.FOV - 70.0) > 60.0) {
         logThrottled("[-] Invalid rawEntities or no viewMatrix");
         camActor_ = 0; //find the camera again at the next step
-        return {};
+        return {.fault = "no camera found (CAMMANAGER vtable or VIEW_MATRIX is stale?)"};
     }
     if (statics_.empty() && dyn_.empty()) logThrottled("[-] No ent found, may be in practice range or its just not working");
 

@@ -24,6 +24,7 @@ struct UiFrame {
     std::shared_ptr<const std::unordered_map<ptr, std::vector<ItemRow>>> inv;
     FminimalViewInfo vm{};
     int localTeam = -1;
+    bool live = true; //false: no live data from the game, so an empty list means "no data", not "nobody here"
 };
 inline UiFrame g_ui;
 inline std::vector<std::string> g_inspect; //players whose inventory window is open (see PlayerKey)
@@ -64,7 +65,7 @@ inline std::vector<ptr> InspectedActors() {
 //teammate. interactive = false: only shown (the overlay is click-through then).
 inline void DrawPlayerRows(int maxRows) {
     const auto players = PlayersByDistance();
-    if (players.empty()) { ui::Note("No players in view."); return; }
+    if (players.empty()) { ui::Note(g_ui.live ? "No players in view." : "No live data from the game."); return; }
     const float xDist = 190, xHp = 245, xSh = 295, xSeen = 360, xTeam = 415, xGun = 495, rowW = 780;
     ImGui::TextColored(ImColor(ui::GREY), "NAME");
     ImGui::SameLine(xDist); ImGui::TextColored(ImColor(ui::GREY), "DIST");
@@ -144,7 +145,7 @@ inline void DrawInspectWindows() {
         bool open = true;
         if (ImGui::Begin(title.c_str(), &open, ImGuiWindowFlags_NoCollapse)) {
             if (!e) {
-                ui::Note("Not in view right now.");
+                ui::Note(g_ui.live ? "Not in view right now." : "No live data from the game.");
             } else {
                 char b[160];
                 std::snprintf(b, sizeof b, "%.0f m   -   %s", e->pos.Dist(g_ui.vm.Location) / 100.0, e->isDead ? "down" : "alive");

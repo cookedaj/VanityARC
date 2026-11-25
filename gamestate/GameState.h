@@ -20,6 +20,7 @@ struct gsRet {
     FminimalViewInfo vm{};
     int localPlayerTeam{};
     bool valid = false; //false: no world / no camera (main menu, loading screen)
+    const char* fault = nullptr; //when !valid: why, in a few words for the screen (nullptr: not known)
 };
 
 class GameState {
@@ -99,6 +100,7 @@ private:
     bool haveTmpl_[4] = {false, false, false, false};
     std::chrono::steady_clock::time_point lastScan_{};
     Timing timing_{};
+    const char* fault_ = nullptr; //why the last scan() failed (shown on screen)
 
     bool scan();            //the whole actor list; false when there is no world yet
     void updatePose(Tracked& t, const std::vector<uint8_t>& bones, const skeleton::Xform& mesh, bool freshBones);
