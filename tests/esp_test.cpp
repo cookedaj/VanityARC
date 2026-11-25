@@ -283,14 +283,9 @@ int main() {
         });
         CHECK(mid.x0 > 1040 && edge.x1 < config::SCREEN_W - 50 && high.y0 >= 0,
               "bar numbers: right of the bars, left of the box at the screen's right edge, never above the screen");
-        LabelRect first, second;
-        draw([&] {
-            std::vector<LabelRect> taken;
-            DrawPlayerBars(1000, 500, 40, 100, sh[0], 3, &first, &taken);
-            taken.push_back(first);
-            DrawPlayerBars(1010, 505, 40, 100, sh[0], 3, &second, &taken);
-        });
-        CHECK(!RectsOverlap(first, second), "bar numbers of two players standing together do not land on each other");
+        LabelRect underName;
+        draw([&] { DrawPlayerBars(1000, 0, 40, 8, sh[0], 3, &underName, 40); });
+        CHECK(underName.y0 >= 40, "bar numbers at the screen's top stay under the name's place");
         config::barStyle = 0; config::barNumbers = false;
         config::boxStyle = 0; config::showSkeleton = true; config::showOffscreen = true;
     }
@@ -497,6 +492,34 @@ int main() {
             });
             CHECK(lb > 0 && lowVerts > 0 && maxY <= g_listRect.y0, "the close-enemy card and LOW HEALTH both stay above the player list");
             g_listRect = {};
+        }
+        {   //High visibility, an enemy 5 m away and 2 m below you (his distance and guns go above his name): LOW HEALTH
+            //under the card must not cover him either, not only the card
+            const auto keepLs = config::labelSize, keepTh = config::boxThickness;
+            const auto keepStyle = config::boxStyle;
+            const bool keepCards = config::labelCards;
+            config::labelSize = 28; config::labelCards = true; config::boxThickness = 4; config::boxStyle = 1;
+            std::vector<RenderEntity> low = {ent(Object::PLAYER, 400, -84, -208)};
+            low[0].label = "Someone"; low[0].sub = "Ferro";
+            std::vector<ImVec2> his;
+            draw([&] { DrawESP(low, cam, 3); for (const ImDrawVert& q : ImGui::GetBackgroundDrawList()->VtxBuffer) his.push_back(q.pos); });
+            float lb = 0;
+            LabelRect warnBox{1e9f, 1e9f, -1e9f, -1e9f};
+            draw([&] {
+                DrawCloseEnemyWarning(low, cam, 3, &lb, LowHealthRoom(20));
+                const int n0 = ImGui::GetBackgroundDrawList()->VtxBuffer.Size;
+                DrawSelfHealth(20, 50, lb);
+                const auto& vb = ImGui::GetBackgroundDrawList()->VtxBuffer;
+                for (int i = n0; i < vb.Size; i++)
+                    if (std::abs(vb[i].pos.x - config::SCREEN_W * 0.5f) < 600) { //LOW HEALTH, not the HP readout at the left
+                        warnBox.x0 = std::min(warnBox.x0, vb[i].pos.x); warnBox.x1 = std::max(warnBox.x1, vb[i].pos.x);
+                        warnBox.y0 = std::min(warnBox.y0, vb[i].pos.y); warnBox.y1 = std::max(warnBox.y1, vb[i].pos.y);
+                    }
+            });
+            bool clear = lb > 0 && warnBox.x1 > warnBox.x0 && !his.empty();
+            for (const ImVec2& p : his) clear = clear && !(p.x > warnBox.x0 && p.x < warnBox.x1 && p.y > warnBox.y0 && p.y < warnBox.y1);
+            CHECK(clear, "LOW HEALTH under the close-enemy card keeps off the enemy's box and labels");
+            config::labelSize = keepLs; config::labelCards = keepCards; config::boxThickness = keepTh; config::boxStyle = keepStyle;
         }
         //an enemy to your left and a little behind: his edge arrow lands at the readout's height on the left edge
         const std::vector<RenderEntity> side = {ent(Object::PLAYER, -681, -2000, 0)};
