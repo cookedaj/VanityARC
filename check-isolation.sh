@@ -61,14 +61,19 @@ KP="$(pgrep -x kwin-helper | head -1)"
 if [ -z "$KP" ]; then
     note "kwin-helper is not running: start it and run this again for the live checks"
 else
-    [ "$(readlink "/proc/$KP/ns/pid")" = "$HOSTNS" ] && ok "it runs in the host PID namespace" || bad "it runs inside a sandbox namespace"
+    [ "$(awk '/^NSpid:/ {print NF-1}' "/proc/$KP/status" 2>/dev/null)" = 1 ] && ok "it runs in the host PID namespace" || bad "it runs inside a sandbox namespace"
     seen=0
     for d in $(ls "/proc/$GAME/root/proc" 2>/dev/null | grep -E '^[0-9]+$'); do
         [ "$(cat "/proc/$GAME/root/proc/$d/comm" 2>/dev/null)" = "kwin-helper" ] && seen=1
     done
     [ "$seen" = 0 ] && ok "the game's own /proc does not list it" || bad "the game's own /proc lists it"
-    if ss -xp 2>/dev/null | grep "pid=$KP," | awk '{print $5}' | grep -q '^@'; then bad "it holds a named abstract socket (visible through the shared network namespace)"; else ok "it holds no named abstract socket"; fi
-    tr '\0' '\n' < "/proc/$KP/environ" 2>/dev/null | grep -qiE 'vanity|raiders|pioneer|steam|proton' && note "its environment names the project folder (readable only from the host, not from the sandbox)" || ok "its environment is clean"
+    if [ ! -r "/proc/$KP/environ" ]; then
+        note "its ptrace permission hides its sockets and environment from you: not checked"
+    else
+        if ! command -v ss >/dev/null 2>&1; then note "ss is not installed (package iproute2): socket check skipped"
+        elif ss -xp 2>/dev/null | grep "pid=$KP," | awk '{print $5}' | grep -q '^@'; then bad "it holds a named abstract socket (visible through the shared network namespace)"; else ok "it holds no named abstract socket"; fi
+        tr '\0' '\n' < "/proc/$KP/environ" 2>/dev/null | grep -qiE 'vanity|raiders|pioneer|steam|proton' && note "its environment names the project folder (readable only from the host, not from the sandbox)" || ok "its environment is clean"
+    fi
 fi
 
 echo
