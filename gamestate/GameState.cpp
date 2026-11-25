@@ -97,6 +97,31 @@ uintptr_t GameState::getUworld() {
     return p;
 }
 
+ptr GameState::cameraViaController(ptr vtableCam) {
+    if (vtableCam && camFieldTold_) return vtableCam;    //found, and its field already printed
+    if (!vtableCam && !off::PC_CAMERA_MANAGER) return 0; //nothing to fall back on (not set in config.h)
+    const ptr pc = ReadMemory<ptr>(ReadMemory<ptr>(this->baseAddr + off::UWORLD_RVA) + off::UWORLD_CHAIN_1); //see getUworld
+    if (!isValidPtr(pc)) return vtableCam;
+    if (!vtableCam) {
+        const ptr cam = ReadMemory<ptr>(pc + off::PC_CAMERA_MANAGER);
+        if (!isValidPtr(cam)) return 0;
+        const FminimalViewInfo v = ReadMemory<FminimalViewInfo>(cam + off::VIEW_MATRIX);
+        return viewUsable(v) && std::abs(v.FOV - 70.0) <= 60.0 ? cam : 0; //the check scan() makes on the vtable's camera
+    }
+    //The vtable works: find which PlayerController field holds that camera, so it can go in config.h before a patch
+    ptr words[0x800 / sizeof(ptr)] = {};
+    ReadMemoryBuffer(pc, words, sizeof words);
+    if (words[0] == 0) return vtableCam; //not readable now (a failed read is all zeros): try again at the next scan
+    camFieldTold_ = true;
+    size_t at = 0;
+    for (size_t i = 1; i < sizeof words / sizeof words[0] && !at; i++) if (words[i] == vtableCam) at = i * sizeof(ptr);
+    if (at) std::printf("[i] The camera is also at PlayerController+0x%zX: off::PC_CAMERA_MANAGER = 0x%zX%s\n", at, at,
+                        at == off::PC_CAMERA_MANAGER ? "   (matches config.h)" : "   (put it in config.h: a stale CAMMANAGER then no longer blanks the overlay)");
+    else std::printf("[i] The camera is not in the PlayerController's first 0x800 bytes: off::PC_CAMERA_MANAGER not learned\n");
+    std::fflush(stdout);
+    return vtableCam;
+}
+
 
 GameState::FilterRet GameState::filterEnt(const std::vector<RenderEntity>& rawEnt, const FminimalViewInfo& vm) {
     FilterRet fr{};
@@ -152,6 +177,7 @@ GameState::RawInfo GameState::getRawEnt(ptr uworld) {
     std::vector<ptr> actorList((size_t)actorsCount);
     ReadMemoryBuffer(actors, actorList.data(), actorList.size() * sizeof(ptr));
 
+    ptr vtCam = 0; //the camera found by its vtable
     for (int a = 0; a < actorsCount; a++) {
         ptr actor = actorList[(size_t)a];
         if (!isValidPtr(actor)) continue;
@@ -173,7 +199,7 @@ GameState::RawInfo GameState::getRawEnt(ptr uworld) {
         ent.vt = vt;
 
         //Before the rootComp/pos checks so the camera never depends on its transform component
-        if (vt == vtabels::CAMMANAGER) { ri.VM = ReadMemory<FminimalViewInfo>(actor + off::VIEW_MATRIX); camActor_ = actor; }
+        if (vt == vtabels::CAMMANAGER) { ri.VM = ReadMemory<FminimalViewInfo>(actor + off::VIEW_MATRIX); camActor_ = vtCam = actor; }
         if (scanForCamera) getViewMatrix(actor);
 
         ptr rootComp = ReadMemory<ptr>(actor + off::ROOT_COMPONENT_PTR);
@@ -244,6 +270,8 @@ GameState::RawInfo GameState::getRawEnt(ptr uworld) {
 
         ri.rawEnt.push_back(ent);
     }
+    //No actor with the CAMMANAGER vtable (stale after a patch): the camera through the PlayerController, if config.h has it
+    if (const ptr cam = cameraViaController(vtCam); cam && !vtCam) { ri.VM = ReadMemory<FminimalViewInfo>(cam + off::VIEW_MATRIX); camActor_ = cam; }
     return ri;
 }
 

@@ -90,7 +90,7 @@ static void setCamera(double x, double y, double z, double pitch, double yaw, fl
 }
 static u64 g_chain0, g_chain1, g_chain2;
 static void buildWorld() {
-    g_chain0 = alloc(0x400); g_chain1 = alloc(0x400); g_chain2 = alloc(0x400);
+    g_chain0 = alloc(0x400); g_chain1 = alloc(0x1000); g_chain2 = alloc(0x400); //g_chain1 is the PlayerController
     uworldObj = alloc(0x400);
     u64 lc = alloc(0x40); levelObj = alloc(0x200);
     put<u64>(base + off::UWORLD_RVA, g_chain0);
@@ -382,6 +382,17 @@ int main() {
     setCamera(cx, cy, cz, 0, 0, 5.0f);
     compare("FOV 5 (a high-zoom scope): both paths still draw");
     setCamera(cx, cy, cz, 0, 0, 70.0f);
+
+    //--- a patch moved the CAMMANAGER vtable: the camera is found through the PlayerController (once config.h has the offset)
+    if constexpr (off::PC_CAMERA_MANAGER != 0) {
+        put<u64>(g_chain1 + off::PC_CAMERA_MANAGER, camActor);
+        put<u64>(camActor, 0x14c0de000ULL); //no actor has the CAMMANAGER vtable now
+        GameState patched(base);            //no camera known yet
+        gsRet pa = ref.tick(), pb = patched.step();
+        CHECK(pa.valid && pb.valid && pb.vm.FOV == 70.0f && pb.vm.Location.x == cx,
+              "stale CAMMANAGER vtable: both paths find the camera through the PlayerController");
+        put<u64>(camActor, vtabels::CAMMANAGER);
+    }
 
     //--- speed (printed; the check is only that the fast path is clearly faster)
     {

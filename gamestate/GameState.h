@@ -49,6 +49,11 @@ public:
 
 private:
     ptr getUworld();
+    //The camera through the PlayerController the UWorld chain passes (off::PC_CAMERA_MANAGER), for when no actor has the
+    //CAMMANAGER vtable (that address moves with every patch); 0 when not set or its view is not usable. vtableCam: the
+    //camera the vtable found (0: none), returned as it is; while it is found, the field holding it is printed once.
+    ptr cameraViaController(ptr vtableCam);
+    bool camFieldTold_ = false;
 
     struct RawInfo {
         std::vector<RenderEntity> rawEnt{};

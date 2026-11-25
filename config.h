@@ -143,6 +143,10 @@ namespace off {
     //Find by setting scanForCamera = true (below) and reading the console.
     // PCM::ViewTarget(0xDF0) + TViewTarget::POV(0x10) + MinimalViewInfo::Location(0x10)
     inline constexpr uintptr_t VIEW_MATRIX = 0xE10;
+    // APlayerController::PlayerCameraManager (same dump as PCM::ViewTarget). The camera through the PlayerController of
+    // the UWorld chain, used only when no actor has vtabels::CAMMANAGER (stale after a patch), so the overlay stays up.
+    // 0 = off. While CAMMANAGER works, the console prints this value once ("[i] The camera is also at PlayerController+0x...").
+    inline constexpr uintptr_t PC_CAMERA_MANAGER = 0;
     inline constexpr uintptr_t POS_PTR = 0x3B0; // SceneComponent::ComponentToWorld(0x390) + translation(0x20)
 
     // "namespace Character" -> TeamId
@@ -171,7 +175,8 @@ namespace off {
 // These are RUNTIME addresses, not in any offset dump.
 // They change every game update and MUST be rediscovered in debug mode:
 //   1) isDebugMode = true and scanForCamera = true above, rebuild, run in a raid (not scoped)
-//      and copy the printed "vtabels::CAMMANAGER" value in here
+//      and copy the printed "vtabels::CAMMANAGER" value in here (with off::PC_CAMERA_MANAGER set, a stale
+//      CAMMANAGER no longer blanks the overlay: the camera is then found through the PlayerController)
 //   2) set scanForCamera = false, rebuild: the console now lists every vtable nearest-first every 2s
 //      (and the overlay labels objects with theirs). Your own player is the ~0 m row = PLAYER;
 //      stand next to a loot container / ground item / ARC robot to find SEARCH / PICKUP / ARC
