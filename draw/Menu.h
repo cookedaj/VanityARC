@@ -229,7 +229,9 @@ inline void DrawMenu() {
     ui::PushTheme(std::min(1.0f, std::max(0.5f, config::menuOpacity)));
     ImGui::SetNextWindowPos(ImVec2(120, 110), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(ImVec2(820, 640), ImGuiCond_Always);
-    ImGui::Begin("kwin-helper", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoScrollbar);
+    //NoBringToFrontOnFocus: a click on the menu must not hide the inventory windows behind it
+    ImGui::Begin("kwin-helper", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoScrollbar |
+                                         ImGuiWindowFlags_NoBringToFrontOnFocus);
 
     ImGui::PushFont(OverlayFont(), 20.0f);
     ImGui::TextUnformatted("Overlay");
