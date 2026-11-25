@@ -230,7 +230,7 @@ void GameState::updateDynamic() {
         ptr vt = 0, root = 0, hc = 0, sc = 0; int team = 0; uint8_t destroyed = 0; Vector3 pos; double hp = 0; uint64_t shRaw = 0, shMaxRaw = 0;
         bool wantPose = false; ptr ctrl = 0, mesh = 0, boneData = 0; uint64_t rtRaw = 0; int boneNum = 0; MeshXf mx{}; std::vector<uint8_t> bones;
         const std::vector<uint8_t>* view = nullptr; bool freshBones = false; //the bone list to use: this step's read, or the cached one
-        double hpMax = 0; int teamAt = -1, hpAt = -1, maxAt = -1; bool teamOk = false, hpOk = false; //which reads worked (a failed one reads as 0)
+        double hpMax = 0; int teamAt = -1, hpAt = -1, maxAt = -1, shAt = -1; bool teamOk = false, hpOk = false, shOk = false; //which reads worked (a failed one reads as 0)
     };
     const bool shieldOn = live::shieldValue >= 0;
     const bool skeletonOn = g_skeletonOn.load(std::memory_order_relaxed);
@@ -275,15 +275,17 @@ void GameState::updateDynamic() {
         if (dyn_[i].ent.type == Object::PLAYER && shieldOn) {
             const ptr comp = live::shieldComponent >= 0 ? r.sc : r.hc;
             if (isValidPtr(comp)) {
-                queue(rq, comp + (ptr)live::shieldValue, &r.shRaw);
+                r.shAt = (int)rq.size(); queue(rq, comp + (ptr)live::shieldValue, &r.shRaw);
                 if (live::shieldMax >= 0) queue(rq, comp + (ptr)live::shieldMax, &r.shMaxRaw);
             }
         }
     }
     ReadScatter(rq.data(), rq.size());
-    for (Row& r : rows) //before rq is reused. A failed read is 0 (dead): only a believable pair counts, as in printStatusLine
+    for (Row& r : rows) { //before rq is reused. A failed read is 0 (dead): only a believable pair counts, as in printStatusLine
         r.hpOk = r.hpAt >= 0 && rq[(size_t)r.hpAt].ok && rq[(size_t)r.maxAt].ok &&
                  r.hpMax >= 50 && r.hpMax <= 500 && r.hp >= 0 && r.hp <= r.hpMax + 1;
+        r.shOk = r.shAt >= 0 && rq[(size_t)r.shAt].ok;
+    }
 
     //Third round: the bone list itself, only for players whose mesh and a list of exactly 97 bones were readable. A list
     //read less than BONE_PERIOD ago is reused instead: reading it on every step would cost the game and the CPU for no gain.
@@ -319,7 +321,7 @@ void GameState::updateDynamic() {
         t.root = r.root;
         t.ent.pos = r.pos;
         if (t.ent.type == Object::PLAYER) {
-            if (r.hpOk) t.ent.playerHealth = r.hp; //otherwise the last good value: 100 (alive) for a player not read yet
+            if (r.hpOk) { t.ent.playerHealth = r.hp; t.hpRead = true; } //otherwise the last good value: 100 (alive) for a player not read yet
             t.ent.isDead = t.ent.playerHealth < 1;
             t.ent.isLocal = isValidPtr(r.ctrl);
             t.ent.isVisible = true; //no mesh read: unknown, treated as visible
@@ -351,6 +353,9 @@ void GameState::updateDynamic() {
                 //so a player first seen with a damaged shield is not drawn as full
                 if (t.ent.shield == lastShield && t.ent.shield < 1000.0) shieldCap_ = std::max(shieldCap_, t.ent.shield);
                 t.ent.shieldMax = live::shieldMax >= 0 ? std::max(shieldNumber(r.shMaxRaw), t.ent.shield) : std::max(seen, shieldCap_);
+                if (r.shOk) t.shieldRead = t.ent.shield;
+            } else {
+                t.shieldRead = -1;
             }
         } else {
             t.ent.isDead = r.destroyed == 1; //a bool is 0 or 1; any other byte means the offset moved: unknown, treated as alive
@@ -387,6 +392,7 @@ gsRet GameState::assemble(const FminimalViewInfo& vm) {
     out.vm = vm;
     out.localPlayerTeam = lastTeamID;
     out.valid = true;
+    if (me && me->hpRead) { out.selfHealth = me->ent.playerHealth; out.selfShield = me->shieldRead; } //never the stand-in 100
     out.entities.reserve(statics_.size() + dyn_.size());
     for (const Tracked& t : statics_) {
         out.entities.push_back(t.ent);

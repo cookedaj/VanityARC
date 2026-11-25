@@ -27,6 +27,7 @@ struct Snapshot {
     uint64_t seq = 0;
     int64_t capturedNs = 0;  //steady_clock time when this was read: the draw loop ignores data that is too old
     std::shared_ptr<const InventoryMap> inventories; //players whose inventory window is open (see setInspected)
+    double selfHealth = -1, selfShield = -1; //your own health and shield (-1: not read, nothing is shown)
 };
 
 class Tracker {

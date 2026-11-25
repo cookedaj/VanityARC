@@ -202,6 +202,9 @@ inline void PageEsp() {
     Switch("Monochrome (white and grey)", &config::monochrome);
     Slider("Line thickness", &config::boxThickness, 1.0f, 10.0f,"%.1f px");
     Switch("Health and shield bars", &config::showBars);
+    Section("YOUR HEALTH");
+    Switch("Big health and shield readout", &config::showSelfHealth);
+    Note("Your own health and shield in big text at the bottom left, and a red LOW HEALTH card below the crosshair under 35.");
     Section("SKELETON");
     Switch("Skeleton on players", &config::showSkeleton);
     Note("A faint skeleton means the game is not drawing that player right now, so the pose is an estimate.");

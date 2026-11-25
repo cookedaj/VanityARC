@@ -194,6 +194,8 @@ void Tracker::run() {
         s->entities = std::move(r.entities);
         s->vm = r.vm;
         s->localPlayerTeam = r.localPlayerTeam;
+        s->selfHealth = r.selfHealth;
+        s->selfShield = r.selfShield;
         s->valid = r.valid;
         if (!r.valid) s->fault = readDenied(ProcessId) ? "no permission to read the game: start the overlay with start.sh" : r.fault;
         s->gameFound = true;

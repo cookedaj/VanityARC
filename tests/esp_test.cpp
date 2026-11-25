@@ -359,6 +359,30 @@ int main() {
         CHECK(nc.update(v, c, 3, 15.0) == "Enemy ahead, 30 meters", "cue: said again after leaving and coming back");
     }
 
+    //---- your own health: nothing when not read, the readout when read, the LOW HEALTH card under 35 (not at 0: down)
+    {
+        const int unread = draw([&] { DrawSelfHealth(-1, 50); });
+        const int nan = draw([&] { DrawSelfHealth(NAN, -1); });
+        const int fine = draw([&] { DrawSelfHealth(80, 50); });
+        const int low = draw([&] { DrawSelfHealth(30, 50); });
+        const int down = draw([&] { DrawSelfHealth(0, 50); });
+        CHECK(unread == 0 && nan == 0, "own health not read: nothing is drawn");
+        CHECK(fine > 0 && low > fine && down < low, "own health: readout, plus the LOW HEALTH card under 35 only");
+        draw([&] { DrawSelfHealth(30, 50); });
+        CHECK(g_finite, "own health: every vertex is a finite number");
+        //an enemy 9 m ahead: his card and LOW HEALTH both show under the crosshair, LOW HEALTH below his card
+        float wb = 0, lowTop = 1e9f;
+        const std::vector<RenderEntity> close = {ent(Object::PLAYER, 900, 0, 0)};
+        draw([&] {
+            DrawCloseEnemyWarning(close, cam, 3, &wb);
+            const int n0 = ImGui::GetBackgroundDrawList()->VtxBuffer.Size;
+            DrawSelfHealth(30, 50, wb);
+            const auto& vb = ImGui::GetBackgroundDrawList()->VtxBuffer;
+            for (int i = n0; i < vb.Size; i++) if (std::abs(vb[i].pos.x - config::SCREEN_W * 0.5f) < 60) lowTop = std::min(lowTop, vb[i].pos.y);
+        });
+        CHECK(wb > 0 && lowTop < 1e9f && lowTop > wb, "LOW HEALTH goes under the close-enemy card, not on top of it");
+    }
+
     //---- the radar panel
     {
         std::vector<RenderEntity> radarEnts = {ent(Object::PLAYER, 3000, 200, 0), ent(Object::ARC, -2500, 1000, 0)};

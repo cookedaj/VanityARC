@@ -312,14 +312,23 @@ int main() {
             return nullptr;
         };
         put<u64>(mate + off::CONTROLLER, enemy1);   //any valid pointer: this pawn has a controller
+        setHp(mate, 30);
         fast.step();
         gsRet rl = fast.step();
         CHECK(!findPlayer(rl, mate), "the pawn with a controller is you and is not drawn");
         CHECK(findPlayer(rl, enemy1), "a player next to nobody else's camera stays drawn");
+        CHECK(rl.selfHealth == 30 && rl.selfShield < 0, "your own health is passed on (no shield offset known: no shield)");
         put<u64>(mate + off::CONTROLLER, 0);       //you died: the controller lets go of the pawn, but you are still you
         fast.step();
         gsRet rd = fast.step();
         CHECK(!findPlayer(rd, mate), "without a controller you are still the pawn you were");
+        const u64 hc = get<u64>(mate + off::HEALTH_COMPONENT);
+        put<u64>(mate + off::HEALTH_COMPONENT, 0); //your health cannot be read from the next scan on
+        std::this_thread::sleep_for(std::chrono::milliseconds(150));
+        gsRet ru = fast.step();
+        CHECK(ru.valid && ru.selfHealth < 0, "your health unreadable: no number at all, never the stand-in 100");
+        put<u64>(mate + off::HEALTH_COMPONENT, hc);
+        setHp(mate, 100);
     }
 
     //--- a destroyed actor's memory reused for something else: dropped at once

@@ -159,6 +159,28 @@ struct NearCue {
     }
 };
 
+//Your own health and shield in big white text on a dark card, at the bottom left just above the game's health bar,
+//and a big red LOW HEALTH card below the crosshair under 35. hp < 0: not read, so nothing (never a guessed number).
+//shield < 0: not read or no shield offset, so health only. below: the bottom of the close-enemy card (0: none);
+//LOW HEALTH then goes under it instead of on top of it.
+inline void DrawSelfHealth(double hp, double shield, float below = 0) {
+    if (!(hp >= 0)) return; //also NaN
+    const int h = (int)std::lround(hp);
+    char buf[48];
+    if (shield >= 0) std::snprintf(buf, sizeof buf, "HP %d   SH %.0f", h, shield);
+    else std::snprintf(buf, sizeof buf, "HP %d", h);
+    const float ls = config::labelSize, big = ls * 1.8f;
+    DrawLabelCentered(40 + LabelSize(buf, big).x / 2, (float)config::SCREEN_H - 300, buf, big, COLOR::white, true);
+    if (h < 1 || h >= 35) return; //at 0 you are down: the game shows that itself
+    const char* warn = "LOW HEALTH";
+    const float huge = ls * 2.4f, x = (float)config::SCREEN_W * 0.5f;
+    const ImVec2 ts = LabelSize(warn, huge);
+    const float y = std::max((float)config::SCREEN_H * 0.62f, below + 10 + ts.y / 2 + 6);
+    if (!COLOR::mono()) //white on solid red; monochrome: white on the dark card
+        DrawRectFilled(x - ts.x / 2 - 14, y - ts.y / 2 - 6, x + ts.x / 2 + 14, y + ts.y / 2 + 6, COLOR::red);
+    DrawLabelCentered(x, y, warn, huge, COLOR::white, COLOR::mono());
+}
+
 //--- labels: collected while drawing, then the ones that would overlap are moved or dropped (see Declutter.h)
 struct PendingLabel {
     LabelReq box;
@@ -502,8 +524,10 @@ inline void DrawESP(const std::vector<RenderEntity>& entities, FminimalViewInfo 
 }
 
 //A big card under the middle of the screen for the nearest enemy closer than warnDist: "ENEMY 9 m BEHIND", or
-//"3 ENEMIES - NEAREST 9 m LEFT". White text on a dark card framed in the enemy colour. Returns the text drawn.
-inline std::string DrawCloseEnemyWarning(const std::vector<RenderEntity>& entities, FminimalViewInfo vm, int localPlayerTeam) {
+//"3 ENEMIES - NEAREST 9 m LEFT". White text on a dark card framed in the enemy colour. Returns the text drawn;
+//bottom (if given) gets the card's lower edge, left alone when nothing is drawn.
+inline std::string DrawCloseEnemyWarning(const std::vector<RenderEntity>& entities, FminimalViewInfo vm, int localPlayerTeam,
+                                         float* bottom = nullptr) {
     if (!config::closeWarning) return {};
     if (config::hideUnknownTeams && localPlayerTeam < 0) return {}; //no team to compare with: everyone is hidden
     const View v(vm, MakeProjection());
@@ -531,6 +555,7 @@ inline std::string DrawCloseEnemyWarning(const std::vector<RenderEntity>& entiti
     DrawRectFilled(cx - hx, cy - hy, cx + hx, cy + hy, IM_COL32(0, 0, 0, 220));
     DrawRectOutline(cx - hx, cy - hy, cx + hx, cy + hy, COLOR::enemy(), 3.0f);
     DrawLabelCentered(cx, cy, buf, size, COLOR::white);
+    if (bottom) *bottom = cy + hy + 2; //+ half the 3 px frame
     return buf;
 }
 

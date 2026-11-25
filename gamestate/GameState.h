@@ -21,6 +21,8 @@ struct gsRet {
     int localPlayerTeam{};
     bool valid = false; //false: no world / no camera (main menu, loading screen)
     const char* fault = nullptr; //when !valid: why, in a few words for the screen (nullptr: not known)
+    double selfHealth = -1;      //your own health, only from a read that worked (-1: not known, nothing is shown)
+    double selfShield = -1;      //your own shield, the same way (-1: not known or no shield offset)
 };
 
 class GameState {
@@ -66,6 +68,8 @@ private:
         RenderEntity ent;
         ptr root = 0;       //RootComponent when last read
         bool live = false;  //passed this update's checks, so it is drawn
+        bool hpRead = false;     //players: playerHealth came from a read that worked since the scan (not the stand-in 100)
+        double shieldRead = -1;  //players: the shield from the last read that worked since the scan (-1: none)
     };
     std::vector<Tracked> statics_; //containers and ground items: position read at each scan
     std::vector<Tracked> dyn_;     //players and ARC: re-read every step
