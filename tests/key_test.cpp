@@ -31,9 +31,9 @@ int main() {
             if (write(p[1], &e, sizeof e) != (ssize_t)sizeof e) menu++;
         };
         feed(KEY_LEFTSHIFT, 1); feed(MENU_KEY, 1);
-        if (!HandleKeyEvents(p[0]) || !g_MenuToggle.exchange(false)) menu++;
+        if (!HandleKeyEvents(p[0], false) || !g_MenuToggle.exchange(false)) menu++;
         feed(MENU_KEY, 2); feed(MENU_KEY, 0); feed(KEY_LEFTSHIFT, 0);
-        HandleKeyEvents(p[0]);
+        HandleKeyEvents(p[0], false);
         if (g_MenuToggle.exchange(false)) menu++;
         close(p[0]); close(p[1]);
     }

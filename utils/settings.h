@@ -48,6 +48,7 @@ inline std::vector<Entry>& table() {
         D("listMode", &config::listMode, 0, 2); D("listRows", &config::listRows, 3, 16);
         B("showDebugInfo", &config::showDebugInfo); B("hotkeysEnabled", &config::hotkeysEnabled);
         B("soundCues", &config::soundCues); D("cueRange", &config::cueRange, 10, 150);
+        B("menuKeyboard", &config::menuKeyboard);
         //streamHide is not saved: every launch starts visible, so a stray F8 can never look like a broken overlay
         B("fovIsHorizontal", &config::fovIsHorizontal); B("useCameraRoll", &config::useCameraRoll);
         F("fovScale", &config::fovScale, 0.5, 2);
