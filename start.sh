@@ -5,6 +5,7 @@
 #   with the Insert hotkey before you have logged out/in after joining group "input":
 #                 sg input -c "bash start.sh"
 set -euo pipefail
+export PATH="$PATH:/usr/sbin:/sbin"   # getcap/setcap live here on Debian and openSUSE, off a normal user's PATH
 SELF="$(readlink -f "$0")"
 cd "$(dirname "$SELF")"
 
@@ -25,6 +26,10 @@ fi
 
 # Reading another process's memory needs the ptrace capability on the binary. It is lost every time the
 # program is rebuilt, so it is only set (and sudo only asked for) when it is missing.
+command -v getcap >/dev/null && command -v setcap >/dev/null || {
+    echo "getcap/setcap are missing: install libcap2-bin (Debian/Ubuntu) or libcap-progs (openSUSE)" >&2
+    exit 1
+}
 if ! getcap "$BIN" 2>/dev/null | grep -q cap_sys_ptrace; then
     echo "[+] First start after a build: giving kwin-helper permission to read the game (sudo password needed once)"
     sudo setcap cap_sys_ptrace=eip "$BIN"
