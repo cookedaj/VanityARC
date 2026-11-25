@@ -7,7 +7,7 @@ static int fails = 0;
 #define CHECK(cond, what) do { if (!(cond)) { std::printf("FAIL  %s\n", what); fails++; } else std::printf("PASS  %s\n", what); } while (0)
 
 int main() {
-    itemvalues::parse(
+    const int ignored = itemvalues::parse(
         "# a comment line\n"
         "\n"
         "Snap Hook | 14000\n"
@@ -28,8 +28,10 @@ int main() {
     CHECK(itemvalues::valueOf("Negative") == -1, "a negative value is skipped");
     CHECK(itemvalues::valueOf("No Separator") == -1, "a line without | is skipped");
     CHECK(itemvalues::count() == 4, "count is the number of usable price lines");
+    CHECK(ignored == 3, "the bad lines are counted as ignored (comments and blank lines are not)");
+    CHECK(itemvalues::parse("Light Ammo | 1,234\n| 5\nName |\n") == 3, "thousands commas, no name, no number: each line counted");
 
-    itemvalues::parse("Snap Hook | 1");
+    CHECK(itemvalues::parse("Snap Hook | 1") == 0, "a good file ignores nothing");
     CHECK(itemvalues::valueOf("Snap Hook") == 1, "parse replaces the table");
     CHECK(itemvalues::valueOf("Light Ammo") == -1, "old entries are gone after parse");
 

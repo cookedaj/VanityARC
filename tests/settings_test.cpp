@@ -38,8 +38,11 @@ int main() {
 
     //a damaged / hand-edited file
     writeFile(dir, "maxPlayerDist 99999\nboxStyle -3\nboxThickness nan\noverlayOpacity 0\nlistRows 1\nbogusName 5\nshowPlayers 0\n"
-                   "trackerHz abc\nlabelSize 1e300\nmenuOpacity inf\n\x01\x02 garbage line\n");
-    settings::load(dir);
+                   "trackerHz abc\nlabelSize 1e300\nmenuOpacity inf\n\x01\x02 garbage line\n\n   \n# a comment\nshowArc true\r\nstreamHide 1\n");
+    const int ignored = settings::load(dir);
+    //nan, bogusName, abc, inf, the garbage line, "true": ignored. Clamped values still count as used; blank lines, comments
+    //and the retired streamHide line are not errors.
+    CHECK(ignored == 6, "ignored lines are counted");
     CHECK(config::maxPlayerDist == 800, "too big: pulled down to the largest allowed value");
     CHECK(config::boxStyle == 0, "negative: pulled up to the smallest allowed value");
     CHECK(config::overlayOpacity == 0.2f, "opacity 0 is raised to 0.2 (the overlay can never be made invisible by accident)");
@@ -53,7 +56,7 @@ int main() {
     config::maxArcDist = 222; config::boxColor = 4; config::monochrome = true; config::labelCards = true; config::overlayOpacity = 0.7f; config::trackerHz = 90;
     settings::save(dir);
     config::maxArcDist = 50; config::boxColor = 0; config::monochrome = false; config::labelCards = false; config::overlayOpacity = 1.0f; config::trackerHz = 240;
-    settings::load(dir);
+    CHECK(settings::load(dir) == 0, "a file the overlay saved has no ignored lines");
     CHECK(config::maxArcDist == 222 && config::boxColor == 4 && config::monochrome && config::labelCards && std::abs(config::overlayOpacity - 0.7f) < 1e-6 && config::trackerHz == 90,
           "saved values come back after loading");
     CHECK(!std::filesystem::exists(settings::path(dir) + ".tmp"), "no half-written file is left behind");

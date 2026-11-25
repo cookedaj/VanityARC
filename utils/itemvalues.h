@@ -17,13 +17,14 @@ long valueOf(const std::string& name);
 //How many prices are loaded (0: no values.txt, or nothing usable in it)
 size_t count();
 
-void load();                             //read values.txt (call once at start)
+int load();                              //read values.txt (call once at start); returns how many lines were ignored
 void setDir(const std::string& dir);     //tests only; default is ~/.config/kwin-helper
 void setValueForTest(const std::string& name, long value);
 void clear();
 
-//Parse the file text into the table (used by load and by the tests)
-void parse(const std::string& text);
+//Parse the file text into the table (used by load and by the tests). Returns how many lines were ignored; the first few
+//are printed with their line number and the expected format.
+int parse(const std::string& text);
 
 } // namespace itemvalues
 

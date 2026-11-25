@@ -24,7 +24,7 @@ std::string display(Cat c, const std::string& key, const std::string& def = "");
 //Item / gun key: the part of a raw name that identifies the item ("BattleRifle_BreachAction_01")
 std::string itemToken(const std::string& raw);
 
-void load();                      //read labels.txt (call once at start)
+int load();                       //read labels.txt (call once at start); returns how many lines were ignored
 void setDir(const std::string& dir); //tests only; default is ~/.config/kwin-helper
 
 const char* catName(Cat c);

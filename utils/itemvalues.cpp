@@ -1,6 +1,7 @@
 #include "itemvalues.h"
 
 #include <cctype>
+#include <cstdio>
 #include <cstdlib>
 #include <fstream>
 #include <map>
@@ -49,32 +50,38 @@ long valueOf(const std::string& name) {
 
 size_t count() { return table().size(); }
 
-void parse(const std::string& text) {
+int parse(const std::string& text) {
     table().clear();
     std::istringstream in(text);
     std::string line;
+    int lineNo = 0, ignored = 0;
     while (std::getline(in, line)) {
+        lineNo++;
         if (line.starts_with("\xEF\xBB\xBF")) line.erase(0, 3); //UTF-8 byte-order mark (some Windows editors add one)
         line = trim(line);
         if (line.empty() || line[0] == '#') continue;
         size_t bar = line.rfind('|');
-        if (bar == std::string::npos) continue;
-        std::string name = trim(line.substr(0, bar));
-        std::string num = trim(line.substr(bar + 1));
-        if (name.empty() || num.empty()) continue;
+        std::string name = bar == std::string::npos ? "" : trim(line.substr(0, bar));
+        std::string num = bar == std::string::npos ? "" : trim(line.substr(bar + 1));
         char* end = nullptr;
-        long v = std::strtol(num.c_str(), &end, 10);
-        if (end == num.c_str() || *end != '\0' || v < 0) continue;
+        long v = num.empty() ? -1 : std::strtol(num.c_str(), &end, 10);
+        if (name.empty() || num.empty() || end == num.c_str() || *end != '\0' || v < 0) {
+            if (++ignored <= 5) //a few are enough to find them; the toast gives the total
+                std::printf("[!] values.txt line %d ignored: \"%s\" (expected: name | whole number without commas, e.g. \"Snap Hook | 14000\")\n",
+                            lineNo, line.c_str());
+            continue;
+        }
         table()[norm(name)] = v;
     }
+    return ignored;
 }
 
-void load() {
+int load() {
     std::ifstream f(configDir() + "/values.txt");
-    if (!f) { table().clear(); return; }
+    if (!f) { table().clear(); return 0; }
     std::stringstream ss;
     ss << f.rdbuf();
-    parse(ss.str());
+    return parse(ss.str());
 }
 
 void setDir(const std::string& dir) { dirOverride() = dir; }

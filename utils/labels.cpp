@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -272,35 +273,41 @@ void setDir(const std::string& dir) {
     g_dir = dir;
 }
 
-void load() {
+int load() {
     std::lock_guard<std::mutex> lk(g_mu);
     std::ifstream f(configDir() + "/labels.txt");
-    if (!f) return;
+    if (!f) return 0;
     std::string line;
     //spaces around a field are dropped, so "item <TAB> Key <TAB> Name " still works
     auto trim = [](std::string s) {
         const size_t a = s.find_first_not_of(" \t"), b = s.find_last_not_of(" \t");
         return a == std::string::npos ? std::string() : s.substr(a, b - a + 1);
     };
+    int lineNo = 0, ignored = 0;
     while (std::getline(f, line)) {
+        lineNo++;
         if (!line.empty() && line.back() == '\r') line.pop_back(); //file edited on another system
         if (line.starts_with("\xEF\xBB\xBF")) line.erase(0, 3); //UTF-8 byte-order mark (some Windows editors add one)
-        if (trim(line).starts_with('#')) continue; //a note
+        const std::string all = trim(line);
+        if (all.empty() || all[0] == '#') continue; //blank line or comment
         size_t a = line.find('\t');
         size_t b = a == std::string::npos ? a : line.find('\t', a + 1);
+        bool used = false, tabLine = false;
         if (b != std::string::npos) { //"category<TAB>raw key<TAB>name"
             std::string cat = lower(trim(line.substr(0, a))), key = trim(line.substr(a + 1, b - a - 1)), name = trim(line.substr(b + 1));
-            bool tabLine = false;
             for (int i = 0; i < CAT_COUNT; i++)
-                if (cat == catName((Cat)i)) { tabLine = true; if (!key.empty() && !name.empty()) g_override[i][key] = name; }
-            if (tabLine) continue;
+                if (cat == catName((Cat)i)) { tabLine = true; if (!key.empty() && !name.empty()) { g_override[i][key] = name; used = true; } }
         }
         //"Trash Can = Bin": the name you see on screen, then your own (any case, spaces or TABs around '=')
-        const size_t eq = line.find('=');
-        if (eq == std::string::npos) continue;
-        const std::string shown = norm(line.substr(0, eq)), name = trim(line.substr(eq + 1));
-        if (!shown.empty() && !name.empty()) g_shown[shown] = name;
+        if (const size_t eq = line.find('='); !tabLine && eq != std::string::npos) {
+            const std::string shown = norm(line.substr(0, eq)), name = trim(line.substr(eq + 1));
+            if (!shown.empty() && !name.empty()) { g_shown[shown] = name; used = true; }
+        }
+        if (!used && ++ignored <= 5) //a few are enough to find them; the toast gives the total
+            std::printf("[!] labels.txt line %d ignored: \"%s\" (expected: the name on screen = your name, or arc, container, item or player, a TAB, the internal name, a TAB, your name)\n",
+                        lineNo, line.c_str());
     }
+    return ignored;
 }
 
 } // namespace labels
