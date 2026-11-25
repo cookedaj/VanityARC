@@ -14,6 +14,8 @@
 //Set by the drawing thread from the settings, read here: read players' poses only when they will be drawn
 inline std::atomic<bool> g_skeletonOn{true};
 inline std::atomic<int> g_skeletonDist{120}; //m
+//The loot range plus a margin (m): containers and ground items further away are not named or put in the snapshot
+inline std::atomic<int> g_lootRange{50};
 
 struct gsRet {
     std::vector<RenderEntity> entities{};
@@ -66,6 +68,7 @@ private:
         RenderEntity ent;
         ptr root = 0;       //RootComponent when last read
         bool live = false;  //passed this update's checks, so it is drawn
+        bool named = false; //statics: refine/fill done since the last scan (done when it first comes within g_lootRange)
     };
     std::vector<Tracked> statics_; //containers and ground items: position read at each scan
     std::vector<Tracked> dyn_;     //players and ARC: re-read every step

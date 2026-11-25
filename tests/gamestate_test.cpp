@@ -167,6 +167,7 @@ int main() {
     actorArray = alloc(8 * 20000);
     publishActors();
 
+    g_lootRange = 1000; //tick() has no loot range: compared with it, every container is in range (the range has its own check below)
     GameState ref(base), fast(base);
     const char* why = "";
     auto compare = [&](const char* what) {
@@ -362,6 +363,22 @@ int main() {
     setCamera(cx, cy, cz, 0, 0, 5.0f);
     compare("FOV 5 (a high-zoom scope): both paths still draw");
     setCamera(cx, cy, cz, 0, 0, 70.0f);
+
+    //--- loot beyond the loot range is not sent; raising the range brings it back at the next step, already named
+    {
+        g_lootRange = 50;
+        fast.step();
+        gsRet rn = fast.step();
+        int nearLoot = 0; bool farLoot = false;
+        for (const auto& e : rn.entities) if (e.type == Object::SEARCH) { nearLoot++; farLoot |= e.dist > 50; }
+        CHECK(nearLoot > 0 && nearLoot < 26 && !farLoot, "containers beyond the loot range are left out of the snapshot");
+        g_lootRange = 1000;
+        gsRet rb = fast.step();
+        int allLoot = 0;
+        for (const auto& e : rb.entities) allLoot += e.type == Object::SEARCH;
+        CHECK(allLoot == 26, "the loot range raised: every container is back at the very next step");
+        compare("and named the way tick() names them");
+    }
 
     //--- speed (printed; the check is only that the fast path is clearly faster)
     {

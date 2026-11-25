@@ -123,9 +123,7 @@ bool GameState::scan() {
         t.root = c.root;
         if (c.type == Object::PLAYER || c.type == Object::ARC) {
             dyn_.push_back(std::move(t));
-        } else {
-            labeler::refine(t.ent);  //ground items share the container vtable; the actor's name tells them apart
-            labeler::fill(t.ent);    //static things get their name now, not on every step
+        } else { //named in assemble(), and only when within the loot range
             t.live = true;
             statics_.push_back(std::move(t));
         }
@@ -388,9 +386,19 @@ gsRet GameState::assemble(const FminimalViewInfo& vm) {
     out.localPlayerTeam = lastTeamID;
     out.valid = true;
     out.entities.reserve(statics_.size() + dyn_.size());
-    for (const Tracked& t : statics_) {
+    const double lootRange = g_lootRange.load(std::memory_order_relaxed) * 100.0; //cm
+    for (Tracked& t : statics_) {
+        const double d = t.ent.pos.Dist(vm.Location);
+        if (d > lootRange) continue; //too far to be drawn: not named, not copied
+        //Named the first time it is in range after a scan, before it is published: never drawn without its name or as
+        //the wrong kind, also right after the loot range is raised. The labeler caches, so this is cheap.
+        if (!t.named) {
+            labeler::refine(t.ent); //ground items share the container vtable; the actor's name tells them apart
+            labeler::fill(t.ent);
+            t.named = true;
+        }
         out.entities.push_back(t.ent);
-        out.entities.back().dist = t.ent.pos.Dist(vm.Location) / 100;
+        out.entities.back().dist = d / 100;
     }
     for (Tracked& t : dyn_) {
         if (!t.live || &t == me) continue;

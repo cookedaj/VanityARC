@@ -121,6 +121,7 @@ int main() {
         g_trackerHz = (int)config::trackerHz; //the tracker thread reads the update rate from here
         g_skeletonOn = config::showSkeleton && config::showPlayers && config::espEnabled; //poses are read only when they will be drawn
         g_skeletonDist = (int)config::skeletonMaxDist;
+        g_lootRange = (int)config::maxLootDist + 10; //loot is named and sent only this near (10 m spare: the camera moves between reads)
 
         //Where the game's picture is on screen (differs from the screen with gamescope / a stretched resolution)
         GameViewSettings gvs;
