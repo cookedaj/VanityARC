@@ -33,7 +33,7 @@ Google/ask AI how to set up the build utility inside of CLion (Release build).
     Delete the line to go back to the built-in name. Lines starting with `#` are ignored. The overlay only reads this file, it never changes it. (The older form `category<TAB>internal key<TAB>your name`, for example `item<TAB>BattleRifle_BreachAction_01<TAB>My rifle`, still works and wins over a shown-name line.)
 
 ## Known Issues
-1) ESP gets distorted at the edges.
+1) ESP gets distorted at the edges. Fix it in Insert menu > Settings > Calibration.
 2) some annoying stuff with stuttering and for like a split second you teammates are labeled as enemies.
 
 ## How to Configure

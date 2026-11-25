@@ -27,7 +27,7 @@ namespace config {
     inline bool showItemNames = true;
     inline double nameMaxLootDist = 25 /*<-Dist in m. Loot names further away stay hidden so the screen is not cluttered*/;
     inline float labelSize = 15.0f;        //text size in px
-    inline bool showDebugInfo = false;     //"Status card": stats at the top middle of the screen (fps, update rate, counts)
+    inline bool showDebugInfo = false;     //"Status card": stats at the top middle of the screen (fps, update rate, counts), only while the game is found; Insert menu: Settings > Other > Status card
 
     //How things look (Insert menu: spread over the ESP, Players and Settings tabs)
     inline double boxStyle = 0;            //player boxes: 0 corner brackets, 1 full rectangle, 2 sides only
@@ -87,9 +87,10 @@ namespace config {
     inline float radarRadius = 100;  //size px
     inline float scale = 200.0f; //cm per radar pixel: range in m = radarRadius x scale / 100 (the menu's Radar Range sets it)
 
-    //Set this to your monitor resolution
-    inline int SCREEN_H = 1440 /*<-Make you monitor height*/ * 0.94/*just trust me, this helps with distortion around screen edge*/;
-    inline int SCREEN_W = 2560 /*<-Make you monitor width*/;
+    // Placeholders only: the overlay sets these from its window at start and every frame (draw/OverlayBackend.cpp).
+    // Markers off near the screen edge? Insert menu > Settings > Calibration: flip "FOV is horizontal", then adjust "Zoom".
+    inline int SCREEN_H = 1440;
+    inline int SCREEN_W = 2560;
 
     inline const auto OVERLAY_NAME = "KWin Helper"; //Name of the overlay
 
@@ -101,8 +102,9 @@ inline constexpr bool isDebugMode = false;
 //      full per-frame debug output).
 //false (with isDebugMode): print a short vtable list every 2s instead, to find the other vtables.
 inline constexpr bool scanForCamera = false;
-//true (with isDebugMode false): every 4 s print a "PROBE" report that checks the name / weapon / ARC-type
-//offsets and finds which fields tell types apart. Read-only; replaces the one-line status while on.
+//true (with isDebugMode false): every 8 s write a "PROBE" report (SUMMARY at the top) to ~/.config/kwin-helper/probe-names.txt
+//that checks the name / weapon / ARC-type offsets and finds which fields tell types apart; the console prints where it was
+//saved, or prints the whole report if the file can't be written. Read-only; replaces the one-line status while on.
 inline constexpr bool probeNames = false;
 //The game build the offsets below are for: its .exe's PE TimeDateStamp, printed as "Game build stamp 0x..." when the
 //overlay finds the game. 0 = not recorded (no check). When set and the running game's stamp differs, the overlay says
