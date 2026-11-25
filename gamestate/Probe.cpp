@@ -1,6 +1,7 @@
 //Read-only discovery report for names and weapons (switch on with probeNames in config.h).
-//Prints one report block every few seconds: which player names / object names / gun names can be read in this
-//build, and what the actors around you are called. It reads memory only and draws nothing.
+//Writes one report every few seconds (GameState::tick saves it to ~/.config/kwin-helper/probe-names.txt): a SUMMARY
+//of OK / CHECK per group, then which player names / object names / gun names can be read in this build, and what
+//the actors around you are called. It reads memory only and draws nothing.
 #include "config.h"
 #include "utils/localUtil.h"
 #include "utils/names.h"
@@ -10,6 +11,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <map>
 #include <set>
@@ -53,6 +55,15 @@ std::string tag(uint64_t v) {
         if (!n.empty()) s += "<" + n + ">";
     }
     return s;
+}
+
+bool isDA(ptr p) { return nm(p).rfind("DA_", 0) == 0; }
+
+//One SUMMARY row. OK when at least half read fine (a far-away or dying player can miss); a stale offset reads none.
+struct Tally { int ok = 0, total = 0; };
+void summaryRow(FILE* out, const char* what, Tally t) {
+    if (!t.total) std::fprintf(out, "  %-13s --     none in view\n", what);
+    else std::fprintf(out, "  %-13s %-5s  %d of %d read\n", what, t.ok * 2 >= t.total ? "OK" : "CHECK", t.ok, t.total);
 }
 
 const char* kindName(Object t) {
@@ -145,20 +156,24 @@ ptr accountId(ptr ps) {
     return isValidPtr(obj) ? ReadMemory<ptr>(obj + 0x18) : 0;
 }
 
-void probePlayers(FILE* out, const std::vector<std::pair<double, const RenderEntity*>>& players, ptr localPawn) {
+void probePlayers(FILE* out, const std::vector<std::pair<double, const RenderEntity*>>& players, ptr localPawn, Tally& named, Tally& ids) {
     std::fprintf(out, "PLAYERS (PS = PlayerState @pawn+0x3E8, name = PS+0x460 decoded, account id = PS+0x3E0 -> +0x18)\n");
     int shown = 0;
     for (const auto& pl : players) {
         ptr pawn = pl.second->actor;
         int off = 0;
         ptr ps = playerStateOf(pawn, &off);
+        named.total++; ids.total++;
         std::fprintf(out, "  %6.1f m%s", pl.first, pawn == localPawn ? " (you)" : "      ");
         if (!ps) { std::fprintf(out, "  no PlayerState\n"); continue; }
         const int nameOff = nameOffOf(ps);
         std::string n = names::playerName(ps + nameOff);
+        const ptr id = accountId(ps);
+        if (off == 0x3E8 && nameOff == 0x460 && !n.empty()) named.ok++; //a MOVED offset is a CHECK: the overlay reads the old place
+        if (id) ids.ok++;
         std::fprintf(out, "  PS @pawn+0x%x%s  name '%s' (PS+0x%x%s)  id %016lx  pawn: %s  team %d\n", off,
                      off != 0x3E8 ? " MOVED: set PAWN_PLAYERSTATE" : "", n.c_str(), nameOff, nameOff != 0x460 ? " MOVED: set PS_NAME" : "",
-                     (unsigned long)accountId(ps), nm(pawn).c_str(), ReadMemory<int>(pawn + 0x802) & 0xFF);
+                     (unsigned long)id, nm(pawn).c_str(), ReadMemory<int>(pawn + 0x802) & 0xFF);
         if (++shown >= 16) break;
     }
 }
@@ -166,13 +181,14 @@ void probePlayers(FILE* out, const std::vector<std::pair<double, const RenderEnt
 //----------------------------------------------------------------------------------------------
 // Guns
 //----------------------------------------------------------------------------------------------
-//One stowed weapon slot: +0x10 weapon actor, +0x18 gun asset, +0x38 quality
-void printSlot(FILE* out, const char* label, ptr inv, int base) {
+//One stowed weapon slot: +0x10 weapon actor, +0x18 gun asset, +0x38 quality. True when the asset is a named DA_.
+bool printSlot(FILE* out, const char* label, ptr inv, int base) {
     ptr actor = ReadMemory<ptr>(inv + base + 0x10);
     ptr asset = ReadMemory<ptr>(inv + base + 0x18);
     int q = ReadMemory<int>(inv + base + 0x38);
-    if (!asset) { std::fprintf(out, " %s empty |", label); return; }
+    if (!asset) { std::fprintf(out, " %s empty |", label); return false; }
     std::fprintf(out, " %s asset %s actor %s q %d |", label, tag(asset).c_str(), tag(actor).c_str(), q);
+    return isDA(asset);
 }
 
 //A TArray of 0x20-byte item records (CurrentItemActors): show every qword with its object name
@@ -192,17 +208,19 @@ void printItemArray(FILE* out, const char* label, ptr inv, int off) {
     }
 }
 
-void probeGuns(FILE* out, const std::vector<std::pair<double, const RenderEntity*>>& players, ptr localPawn) {
+void probeGuns(FILE* out, const std::vector<std::pair<double, const RenderEntity*>>& players, ptr localPawn, Tally& guns) {
     constexpr int INV = 0xCB0, SLOT0 = 0x3B0, SLOT1 = 0x3F0, CUR = 0x530, CUR2 = 0x550;
     std::fprintf(out, "GUNS (inventory @pawn+0x%x; stowed slots +0x%x / +0x%x; held-item arrays +0x%x / +0x%x)\n", INV, SLOT0, SLOT1, CUR, CUR2);
     int shown = 0;
     for (const auto& pl : players) {
         ptr pawn = pl.second->actor;
         ptr inv = ReadMemory<ptr>(pawn + INV);
+        guns.total++;
         std::fprintf(out, "  %6.1f m%s", pl.first, pawn == localPawn ? " (you)" : "      ");
         if (!isObject(inv)) { std::fprintf(out, " no inventory\n"); continue; }
-        printSlot(out, "slot0", inv, SLOT0);
-        printSlot(out, "slot1", inv, SLOT1);
+        const bool s0 = printSlot(out, "slot0", inv, SLOT0);
+        const bool s1 = printSlot(out, "slot1", inv, SLOT1);
+        if (s0 || s1) guns.ok++;
         std::fprintf(out, "\n");
         printItemArray(out, "CurrentItemActors", inv, CUR);
         printItemArray(out, "LocalCurrentItemActors", inv, CUR2);
@@ -275,13 +293,19 @@ void probeNear(FILE* out, const std::vector<RenderEntity>& ents, const std::vect
 } // namespace
 
 void runNameProbe(const std::vector<RenderEntity>& ents, const std::vector<RenderEntity>& unknown,
-                  const FminimalViewInfo& vm, ptr uworld, FILE* out) {
+                  const FminimalViewInfo& vm, ptr uworld, FILE* report) {
     (void)uworld;
-    std::fprintf(out, "\n=== PROBE v4 (paste from here to the next === PROBE line) ===\n");
+    std::fprintf(report, "\n=== PROBE v4 (paste from here to the next === PROBE line) ===\n");
     const names::Status ns = names::status();
-    std::fprintf(out, "object-name decoder: %s\n", ns == names::Status::Ok ? "ready"
+    std::fprintf(report, "object-name decoder: %s\n", ns == names::Status::Ok ? "ready"
                  : ns == names::Status::PoolStale ? "NOT READY (key table reads, but name 0 is not \"None\": NAMES_RVA / ANCHOR_RVA / ANCHOR_XOR stale, or the pool is not loaded yet)"
                  : "NOT READY (text key table unreadable: RVA stale or game not in a raid)");
+    //The sections go to a buffer first: the SUMMARY counted while writing them is printed above them
+    char* body = nullptr;
+    size_t bodyLen = 0;
+    FILE* out = open_memstream(&body, &bodyLen);
+    if (!out) { std::fprintf(report, "(out of memory: no report)\n"); std::fflush(report); return; }
+    Tally playerNames, accountIds, guns, arcTypes;
 
     std::vector<ptr> containers;
     std::vector<std::pair<double, const RenderEntity*>> players;
@@ -311,16 +335,18 @@ void runNameProbe(const std::vector<RenderEntity>& ents, const std::vector<Rende
     std::fprintf(out, "players seen %zu, you: %s, ground items (PICKUP class) in view: %d\n", seen,
                  me ? "found" : "NOT FOUND (no PLAYER within 2 m)", pickups);
 
-    probePlayers(out, players, me ? me->actor : 0);
+    probePlayers(out, players, me ? me->actor : 0, playerNames, accountIds);
 
     std::fprintf(out, "ARC TYPES (EnemyTypeDataAsset @actor+0x11C0; sample = nearest actor of that type)\n");
     for (auto& kv : arc) {
+        arcTypes.total += kv.second.count;
+        if (isDA(kv.first)) arcTypes.ok += kv.second.count;
         std::fprintf(out, "  count %3d  nearest %6.1f m  asset %s  sample actor %s  AITemplate %s\n", kv.second.count, kv.second.nearest,
                      tag(kv.first).c_str(), nm(kv.second.sample).c_str(), tag(ReadMemory<ptr>(kv.second.sample + 0x11B0)).c_str());
     }
     if (arc.empty()) std::fprintf(out, "  (no ARC in view)\n");
 
-    probeGuns(out, players, me ? me->actor : 0);
+    probeGuns(out, players, me ? me->actor : 0, guns);
     //A level holds about 10,000 other-class actors and reading every name is slow: only the 1500 nearest the camera
     std::vector<RenderEntity> nearest(unknown);
     if (nearest.size() > 1500) {
@@ -334,7 +360,16 @@ void runNameProbe(const std::vector<RenderEntity>& ents, const std::vector<Rende
 
     std::fprintf(out, "CONTAINERS\n");
     diffScan(out, "  container fields", containers, 0x300, 0x1400, 14);
-    std::fflush(out);
+    std::fclose(out);
+
+    std::fprintf(report, "SUMMARY (OK = reads fine, CHECK = an offset may be stale: see its section below)\n");
+    summaryRow(report, "Player names", playerNames);
+    summaryRow(report, "Account ids", accountIds);
+    summaryRow(report, "Guns", guns);
+    summaryRow(report, "ARC types", arcTypes);
+    std::fwrite(body, 1, bodyLen, report);
+    std::free(body);
+    std::fflush(report);
 }
 
 

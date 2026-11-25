@@ -177,12 +177,16 @@ int main() {
     u64 dropped = makeObject(0x1000, 0x3000, 0); put<u64>(dropped, 0x4C0, da);
     unknown.push_back(ent(Object::NONE, 2.0, dropped));
 
-    char* buf = nullptr; size_t len = 0;
-    FILE* f = open_memstream(&buf, &len);
-    runNameProbe(ents, unknown, vm, 0, f);
-    fclose(f);
-    std::string rep(buf, len);
-    std::free(buf);
+    auto probe = [&](const std::vector<RenderEntity>& e, const std::vector<RenderEntity>& u) {
+        char* buf = nullptr; size_t len = 0;
+        FILE* f = open_memstream(&buf, &len);
+        runNameProbe(e, u, vm, 0, f);
+        fclose(f);
+        std::string r(buf, len);
+        std::free(buf);
+        return r;
+    };
+    std::string rep = probe(ents, unknown);
     std::puts("------ report ------"); std::fputs(rep.c_str(), stdout); std::puts("------ checks ------");
     auto has = [&](const char* s) { return rep.find(s) != std::string::npos; };
     CHECK(has("object-name decoder: ready"), "report: decoder ready");
@@ -194,6 +198,15 @@ int main() {
     CHECK(has("BP_Pickup_Item_C") && has("+0x4c0=DA_Item_BattleRifle_BreachAction_01"), "report: dropped gun actor + its asset field");
     CHECK(has("BP_LootContainer_Trash_C"), "report: container name in census");
     CHECK(has("CurrentItemActors") && has("+0x10=0x"), "report: held-item array printed");
+    CHECK(rep.find("SUMMARY") < rep.find("PLAYERS ("), "report: the SUMMARY comes before the sections");
+    CHECK(has("  Player names  OK     1 of 2 read\n") && has("  Account ids   OK     2 of 2 read\n"), "summary: player names (a MOVED one does not count) and account ids");
+    CHECK(has("  Guns          OK     1 of 2 read\n") && has("  ARC types     OK     3 of 3 read\n"), "summary: guns with a DA_ asset and ARC with a DA_ type");
+    {
+        const std::string moved = probe({ents[1]}, {}); //only the player whose PlayerState moved: the overlay cannot read him
+        CHECK(moved.find("  Player names  CHECK  0 of 1 read\n") != std::string::npos && moved.find("  Guns          CHECK  0 of 1 read\n") != std::string::npos,
+              "summary: CHECK when nothing reads at the known offsets");
+        CHECK(moved.find("  ARC types     --     none in view\n") != std::string::npos, "summary: a group with nothing in view says so");
+    }
 
     //---- live probes: KWINHELPER_PROBE=shield / inventory
     {
@@ -253,10 +266,7 @@ int main() {
     }
 
     //empty world must not crash
-    buf = nullptr; len = 0; f = open_memstream(&buf, &len);
-    runNameProbe({}, {}, vm, 0, f); fclose(f);
-    std::free(buf);
-    CHECK(true, "empty world does not crash");
+    CHECK(probe({}, {}).find("  Player names  --     none in view\n") != std::string::npos, "empty world does not crash and has nothing to judge");
     std::printf("%s\n", fails ? "SOME TESTS FAILED" : "ALL PASSED");
     return fails;
 }

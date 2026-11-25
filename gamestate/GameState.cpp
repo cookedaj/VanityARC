@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <map>
 #include <string>
@@ -67,12 +68,22 @@ gsRet GameState::tick() {
         DBG {std::cout << "Filt Ent Size: " << filt.filtEnt.size() << std::endl;}
 
         //One short line every 2s so a run can be checked at a glance (see printStatusLine).
-        //With probeNames on, the bigger PROBE report (every 8s) replaces it.
+        //With probeNames on, the bigger PROBE report (every 8s, into ~/.config/kwin-helper/probe-names.txt) replaces it.
         static auto lastStatus = std::chrono::steady_clock::now() - std::chrono::seconds(10);
         auto now = std::chrono::steady_clock::now();
         if (now - lastStatus >= std::chrono::seconds(probeNames ? 8 : 2)) {
             lastStatus = now;
-            if (probeNames) runNameProbe(raw.rawEnt, raw.unknown, raw.VM, uworld);
+            if (probeNames) {
+                //The latest report replaces the file (written beside it, then renamed: an open editor never sees half a report)
+                const char* home = std::getenv("HOME");
+                const std::string path = std::string(home ? home : ".") + "/.config/kwin-helper/probe-names.txt", tmp = path + ".tmp";
+                FILE* f = std::fopen(tmp.c_str(), "w");
+                if (f) runNameProbe(raw.rawEnt, raw.unknown, raw.VM, uworld, f);
+                if (f && std::fclose(f) == 0 && std::rename(tmp.c_str(), path.c_str()) == 0)
+                    std::printf("[probe] names report (SUMMARY at the top) saved to %s\n", path.c_str());
+                else runNameProbe(raw.rawEnt, raw.unknown, raw.VM, uworld); //file not writable: print it here as before
+                std::fflush(stdout);
+            }
             else printStatusLine(filt.filtEnt, nullptr);
         }
     }
