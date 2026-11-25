@@ -221,7 +221,8 @@ inline void PageEsp() {
     SliderD("Loot range", &config::maxLootDist, 5, 150, "%.0f m");
     Section("CLOSE ENEMY WARNING");
     Switch("Big warning for a close enemy", &config::closeWarning);
-    if (config::closeWarning) SliderD("Warning range", &config::warnDist, 5, 100, "%.0f m");
+    if (config::closeWarning) SliderD("Warning card range", &config::warnDist, 5, 100, "%.0f m");
+    Note("The spoken warning has its own range: Settings tab, Spoken warning range.");
 }
 
 inline void PagePlayers() {
@@ -360,10 +361,11 @@ inline void PageSettings() {
     Section("SPOKEN CUES");
     if (Switch("Say hotkey results and near enemies out loud", &config::soundCues) && config::soundCues) cue::say("Spoken cues on");
     if (config::soundCues) {
-        SliderD("Enemy warning range", &config::cueRange, 10, 150, "%.0f m");
+        SliderD("Spoken warning range", &config::cueRange, 10, 150, "%.0f m");
         if (cue::missing) ImGui::TextWrapped("No sound: spd-say was not found. Install speech-dispatcher to hear the cues.");
     }
-    Note("Says the result of F6, F7, F8 and F10, and warns when an enemy player first comes within range (at most one warning every 2 s). Enemy warnings are quiet while stream hide is on.");
+    Note("Says the result of F6, F7, F8 and F10, and warns when an enemy player first comes within range (at most one warning every 2 s). Enemy warnings are quiet while stream hide is on. "
+         "The big on-screen card has its own range: ESP tab, Warning card range.");
     Section("SPEED");
     SliderD("Update rate", &config::trackerHz, 30, 240, "%.0f Hz");
     Note("Higher follows moving players more closely and uses more CPU.");
