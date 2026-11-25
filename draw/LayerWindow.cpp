@@ -28,7 +28,7 @@ struct LayerWindow::Impl {
     wl_cursor_theme* cursorTheme = nullptr; //the desktop's cursor, shown while the menu has the mouse
     wl_cursor_image* cursorImg = nullptr;
     wl_surface* cursorSurf = nullptr;
-    struct Out { wl_output* o; std::string name; int scale = 1; };
+    struct Out { wl_output* o; std::string name; int scale = 1; uint32_t id = 0; }; //id: the registry name
     std::vector<Out> outs;
     wl_output* on = nullptr; //the output the overlay is on
     wl_output* target = nullptr; //the output asked for (nullptr: the compositor chooses)
@@ -69,12 +69,17 @@ struct LayerWindow::Impl {
             wl_seat_add_listener(s->seat, &sl, s);
         } else if (!std::strcmp(iface, "wl_output")) {
             wl_output* o = (wl_output*)wl_registry_bind(r, name, &wl_output_interface, ver < 4 ? ver : 4);
-            s->outs.push_back({o, ""});
+            s->outs.push_back({o, "", 1, name});
             static const wl_output_listener ol = {onOutGeometry, onOutMode, onOutDone, onOutScale, onOutName, onOutDesc};
             wl_output_add_listener(o, &ol, s);
         }
     }
-    static void onGlobalRemove(void*, wl_registry*, uint32_t) {}
+    //The asked-for monitor went away: start over (shouldClose), also while stream hide has no surface for the compositor
+    //to close, so create() looks at the outputs again and note() says where the overlay went
+    static void onGlobalRemove(void* d, wl_registry*, uint32_t name) {
+        Impl* s = (Impl*)d;
+        for (const Out& x : s->outs) if (x.id == name && x.o == s->target) s->closed = true;
+    }
 
     //--- outputs: only the name and the scale matter
     static void onOutGeometry(void*, wl_output*, int32_t, int32_t, int32_t, int32_t, int32_t, const char*, const char*, int32_t) {}
