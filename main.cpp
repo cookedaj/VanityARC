@@ -218,7 +218,7 @@ int main() {
         if (config::enableRadar) {
             DrawRadar(ents, vm, snap->localPlayerTeam);
             //An empty radar must not read as "nobody near" when there is simply no data
-            if (!live) DrawLabelCentered(config::radarCenterX, config::radarCenterY, snap->gameFound ? "NO DATA" : "NO GAME", config::labelSize, COLOR::white, true);
+            if (!live) { const ImVec2 rc = RadarCenter(); DrawLabelCentered(rc.x, rc.y, snap->gameFound ? "NO DATA" : "NO GAME", config::labelSize, COLOR::white, true); }
         }
 
         RenderEnd(DrawUi);

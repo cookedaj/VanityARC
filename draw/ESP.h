@@ -441,12 +441,18 @@ inline void DrawESP(const std::vector<RenderEntity>& entities, FminimalViewInfo 
     FlushLabels();
 }
 
+//Fit the saved centre to this screen, so a position saved on another monitor or scale stays visible
+inline ImVec2 RadarCenter() {
+    const float R = config::radarRadius;
+    return ImVec2(std::clamp(config::radarCenterX, R + 14, std::max(R + 14, (float)config::SCREEN_W - R - 14)),
+                  std::clamp(config::radarCenterY, R + 26, std::max(R + 26, (float)config::SCREEN_H - R - 14)));
+}
+
 //The radar: a panel with three rings, your own arrow, and the edges of your view
 inline void DrawRadar(const std::vector<RenderEntity>& entities, FminimalViewInfo cameraInfo, int localPlayerTeam) {
     const float R = config::radarRadius;
-    //Fit the saved centre to this screen, so a position saved on another monitor or scale stays visible
-    const float cx = std::clamp(config::radarCenterX, R + 14, std::max(R + 14, (float)config::SCREEN_W - R - 14));
-    const float cy = std::clamp(config::radarCenterY, R + 26, std::max(R + 26, (float)config::SCREEN_H - R - 14));
+    const ImVec2 rc = RadarCenter();
+    const float cx = rc.x, cy = rc.y;
     const double rangeM = R * config::scale / 100.0; //metres from the centre to the edge
 
     //Panel, rings, crosshairs
