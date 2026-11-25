@@ -152,12 +152,12 @@ inline bool ConfirmButton(const char* label, const char* confirm, double* armedA
 //The readable setup in one go: biggest text, thick lines, full boxes on label cards, nothing see-through. Saved at once.
 inline void ApplyHighVisibility() {
     config::labelSize = 28.0f;
-    config::boxThickness = 4.0f;
+    config::boxThickness = std::max(config::boxThickness, 4.0f); //only ever thicker
     config::labelCards = true;
     config::boxStyle = 1; //full rectangle
     config::overlayOpacity = 1.0f;
     config::menuOpacity = 1.0f;
-    config::hiddenAlpha = 200;
+    config::hiddenAlpha = std::max(config::hiddenAlpha, 200.0); //only ever more solid
     settings::save();
 }
 
@@ -166,7 +166,7 @@ inline void HighVisibilityButton() {
     ImGui::PushFont(OverlayFont(), 22.0f);
     if (ImGui::Button("High visibility", ImVec2(320, 46))) { ApplyHighVisibility(); Toast("High visibility on"); }
     ImGui::PopFont();
-    ui::Note("One click: text size 28, 4 px lines, full boxes, label cards, nothing see-through.");
+    ui::Note("One click: text size 28, lines at least 4 px, full boxes, label cards, nothing see-through.");
 }
 
 //--- the pages
