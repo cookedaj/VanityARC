@@ -177,21 +177,27 @@ inline void DrawInspectWindows() {
                 }
                 ui::Section("CARRYING");
                 if (rows && !rows->empty()) {
+                    auto slotsOnly = [](const std::string& cat) { //stack sizes not read for this list (no qty in offsets.txt): counts are slots
+                        for (const live::InvArray& a : live::invArrays) if (a.category == cat && a.qty < 0) return true;
+                        return false;
+                    };
                     long total = 0;
                     int unpriced = 0;
+                    bool atLeast = false;
                     for (const ItemRow& r : *rows) {
                         long v = itemvalues::valueOf(r.name);
                         if (v < 0) unpriced++;
-                        else total += v * r.count;
+                        else { total += v * r.count; atLeast |= slotsOnly(r.category); }
                     }
                     char tb[120];
-                    if (unpriced) std::snprintf(tb, sizeof tb, "Value %ld  (%d item%s with no price)", total, unpriced, unpriced == 1 ? "" : "s");
-                    else std::snprintf(tb, sizeof tb, "Value %ld", total);
+                    const char* lower = atLeast ? "at least " : ""; //slot counts: stacks are counted as one
+                    if (unpriced) std::snprintf(tb, sizeof tb, "Value %s%ld  (%d item%s with no price)", lower, total, unpriced, unpriced == 1 ? "" : "s");
+                    else std::snprintf(tb, sizeof tb, "Value %s%ld", lower, total);
                     ImGui::TextUnformatted(tb);
                     std::string lastCat;
                     for (const ItemRow& r : *rows) {
                         if (r.category != lastCat) { lastCat = r.category; ImGui::TextColored(ImColor(ui::GREY), "%s", r.category.c_str()); }
-                        if (r.count > 1) ImGui::Text("  %s  x%d", r.name.c_str(), r.count); else ImGui::Text("  %s", r.name.c_str());
+                        if (r.count > 1) ImGui::Text(slotsOnly(r.category) ? "  %s  %d slots" : "  %s  x%d", r.name.c_str(), r.count); else ImGui::Text("  %s", r.name.c_str());
                     }
                 } else if (live::invArrays.empty()) {
                     ui::Note("The inventory lists are not set up yet (see offsets.txt in the config folder).");

@@ -27,6 +27,14 @@ int main() {
     CHECK(live::invArrays.size() == 2 && live::invArrays[0].off == 0x530 && live::invArrays[0].comp == -1 && live::invArrays[0].category == "item", "an inventory list is read");
     CHECK(live::invArrays[1].comp == 0x700 && live::invArrays[1].off == 0x40 && live::invArrays[1].stride == 0x20 && live::invArrays[1].asset == 0x10 && live::invArrays[1].category == "pockets",
           "a list in another component is read with its component");
+    CHECK(live::invArrays[0].qty == -1 && live::invArrays[1].qty == -1, "no stack size offset: not known");
+
+    live::reset();
+    writeFile(dir, "inv_array 0x530 0x20 0x10 0x18 pockets\ninv_array_in 0x700 0x40 0x20 0x10 0x1E\ninv_array 0x530 0x20 0x10 0x18\n");
+    live::load(dir);
+    CHECK(live::invArrays.size() == 3 && live::invArrays[0].qty == 0x18 && live::invArrays[0].category == "pockets" &&
+          live::invArrays[1].qty == -1 && live::invArrays[1].category == "item" && live::invArrays[2].qty == 0x18 && live::invArrays[2].category == "item",
+          "a stack size offset may follow the asset offset; one outside the record is ignored, the list is kept");
 
     live::reset();
     writeFile(dir, "inv_array 0x530 0x4000 0x10\ninv_array 0x530 0x20 0x40\ninv_array_in 0x10 0x40 0x20 0x10\ninv_array_in 0x5000 0x40 0x20 0x10\n"
