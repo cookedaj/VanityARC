@@ -58,12 +58,6 @@ constexpr auto WORLD_CHECK_GAP = std::chrono::milliseconds(30);    //the UWorld 
 constexpr auto FAR_ARC_PERIOD = std::chrono::milliseconds(66);     //ARC far beyond the ARC and radar ranges: read about 15 times a second
 constexpr double FAR_ARC_MARGIN = 2500;                            //cm past that range, so an ARC is back to every step before it can be drawn
 
-uint64_t fnv1a(const uint8_t* p, size_t n) {
-    uint64_t h = 1469598103934665603ULL;
-    for (size_t i = 0; i < n; i++) { h ^= p[i]; h *= 1099511628211ULL; }
-    return h;
-}
-
 //printf into a std::string (the self-check's lines)
 std::string say(const char* format, ...) {
     char b[320];
@@ -261,14 +255,14 @@ const char* GameState::updatePose(Tracked& t, const std::vector<uint8_t>& bones,
         skeleton::decodeRead(bones.data(), local);
         readOk = skeleton::componentPose(local, comp);
         if (freshBones && readOk) { //a whole list read just now: compare it with the last one, and keep it for the next steps
-            const uint64_t h = fnv1a(bones.data(), bones.size());
-            if (ps.hash && h != ps.hash) ps.changed = now; //the first list has nothing to differ from
-            ps.hash = h;
-            ps.bones.assign(bones.begin(), bones.end());
+            if (ps.bones != bones) { //a byte compare with the list kept last time; an unchanged list is not copied again
+                if (!ps.bones.empty()) ps.changed = now; //the first list has nothing to differ from
+                ps.bones = bones;
+            }
             ps.bonesAt = now;
         }
     }
-    const bool animated = now - ps.changed < POSE_FROZEN_AFTER; //a failed read leaves the hash alone: still animated if it was
+    const bool animated = now - ps.changed < POSE_FROZEN_AFTER; //a failed read leaves the kept list alone: still animated if it was
     if (readOk) {
         ps.good = comp; ps.haveGood = true; ps.goodAt = now;
         //Learn what this stance looks like from a clean, animated, living player
