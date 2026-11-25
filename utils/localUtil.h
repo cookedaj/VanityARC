@@ -47,14 +47,14 @@ struct RenderEntity {
     ptr actor;
     Vector3 pos;         //Position
     double yaw = NAN;    //players and ARC: which way it faces, the game's yaw in degrees (see yawFromQuat); NaN when unknown
-    double dist{};       //Dist, may not be accurate until "filterEntities(...)"
+    double dist{};       //m from the camera when the tracker made this copy (0 in debug mode); the drawing does not use it and measures again from the current camera
     double playerHealth = 100; //Only for players
     double shield = 0;         //Only for players, and only when the shield offset is known (utils/offsets.h)
     double shieldMax = 0;
     bool hasShield = false;    //false: the shield could not be read, so no shield bar
     ptr vt;
     enum Object type = Object::NONE; //vt enum
-    bool isDead = false; //Is dead, may not be accurate until "filterEntities(...)"
+    bool isDead = false; //set when read: players health < 1, ARC bIsDestroyed == 1
     bool isVisible = true; //Only for players: the game drew him a moment ago (on screen, not behind cover)
     bool isLocal = false;  //Only for players: the pawn you control (it has a PlayerController)
     int teamID = -1; //some random value
