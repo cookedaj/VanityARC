@@ -5,6 +5,7 @@
 #define KWINHELPER_PLAYERLIST_H
 
 #include <algorithm>
+#include <cctype>
 #include <cstdio>
 #include <map>
 #include <memory>
@@ -182,9 +183,13 @@ inline void DrawInspectWindows() {
                 ImGui::TextUnformatted(line.c_str());
                 const std::vector<ItemRow>* rows = nullptr;
                 if (g_ui.inv) { auto it = g_ui.inv->find(e->actor); if (it != g_ui.inv->end()) rows = &it->second; }
-                //Amplification: the highest module level in the mod list (MK I..IV, MK V = AMP)
+                //Amplification: the highest module level in the mod list (MK I..IV, MK V = AMP). The list is tagged mod or mods, any case.
                 int ampLvl = 0;
-                if (rows) for (const ItemRow& r : *rows) if (r.category == "mod") ampLvl = std::max(ampLvl, amp::moduleLevel(r.name));
+                if (rows) for (const ItemRow& r : *rows) {
+                    std::string cat = r.category;
+                    for (char& c : cat) c = (char)std::tolower((unsigned char)c);
+                    if (cat == "mod" || cat == "mods") ampLvl = std::max(ampLvl, amp::moduleLevel(r.name));
+                }
                 std::vector<std::string> guns;
                 size_t start = 0;
                 while (start < e->sub.size()) {
@@ -196,11 +201,15 @@ inline void DrawInspectWindows() {
                 ui::Section("EQUIPPED");
                 if (guns.empty()) ui::Note("No guns read.");
                 if (guns.size() == 1 && ampLvl > 0) {
-                    ImGui::TextUnformatted(amp::gunLabel(guns[0], ampLvl).c_str()); //one gun: the module is on it
+                    //one gun: the module is on it. The level goes on the name, before " (held)".
+                    std::string g = guns[0];
+                    const std::string held = " (held)";
+                    const bool isHeld = g.size() >= held.size() && g.compare(g.size() - held.size(), held.size(), held) == 0;
+                    if (isHeld) g.resize(g.size() - held.size());
+                    ImGui::TextUnformatted((amp::gunLabel(g, ampLvl) + (isHeld ? held : std::string())).c_str());
                 } else {
                     for (const std::string& g : guns) ImGui::TextUnformatted(g.c_str());
-                    if (ampLvl == 5 && guns.size() > 1) ui::Note("AMP module fitted (which gun: not known)");
-                    else if (ampLvl > 0 && guns.size() > 1) ui::Note("Amplification module fitted (which gun: not known)");
+                    if (ampLvl > 0) ImGui::TextWrapped("%s module fitted (which gun: not known)", amp::levelText(ampLvl)); //white, like the guns
                 }
                 ui::Section("CARRYING");
                 if (rows && !rows->empty()) {

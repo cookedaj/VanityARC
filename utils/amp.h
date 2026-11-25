@@ -24,11 +24,18 @@ inline int moduleLevel(const std::string& name) {
     return 0;
 }
 
+//The level as text: "MK I".."MK IV", "AMP" at MK V, "" for no module
+inline const char* levelText(int level) {
+    if (level <= 0) return "";
+    if (level >= 5) return "AMP";
+    return level == 1 ? "MK I" : level == 2 ? "MK II" : level == 3 ? "MK III" : "MK IV";
+}
+
 //The text shown for a gun with a module of this level: "AMP Il Toro" at MK V, "Il Toro  MK III" below that
 inline std::string gunLabel(const std::string& gun, int level) {
     if (level <= 0) return gun;
     if (level >= 5) return "AMP " + gun;
-    return gun + "  MK " + std::string(level == 1 ? "I" : level == 2 ? "II" : level == 3 ? "III" : "IV");
+    return gun + "  " + levelText(level);
 }
 
 } // namespace amp
