@@ -164,7 +164,7 @@ int main() {
     u64 noRoot = makeActor(vtabels::PLAYER, cx + 100, cy + 5000, cz); put<u64>(noRoot + off::ROOT_COMPONENT_PTR, 0);
     u64 nanPos = makeActor(vtabels::SEARCH, 1, 1, 1); setPos(nanPos, NAN, 0, 0);
     u64 tooNear = makeActor(vtabels::SEARCH, 50, 400, 0);       //x < 100: dropped by the original too
-    u64 pickupVt = makeActor(vtabels::PICKUP, cx + 300, cy + 300, cz - 90); //old guess for ground items: never drawn
+    u64 pickupVt = makeActor(0x14dc5a3c0ULL, cx + 300, cy + 300, cz - 90); //old PICKUP guess (GC_StaminaDrain_C): never drawn
     std::vector<u64> containers;
     for (int i = 0; i < 25; i++) containers.push_back(makeActor(vtabels::SEARCH, cx + 500 + 700 * i, cy - 3000 + 90 * i, cz - 100));
 
