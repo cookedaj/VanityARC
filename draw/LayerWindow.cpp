@@ -224,7 +224,8 @@ void LayerWindow::destroy() {
 bool LayerWindow::pump() {
     Impl& d = *p_;
     if (!d.dpy) return false;
-    while (wl_display_prepare_read(d.dpy) != 0) wl_display_dispatch_pending(d.dpy);
+    while (wl_display_prepare_read(d.dpy) != 0)
+        if (wl_display_dispatch_pending(d.dpy) < 0) return false; //dead connection: events stay queued, prepare_read never succeeds
     wl_display_flush(d.dpy);
     pollfd pfd{wl_display_get_fd(d.dpy), POLLIN, 0};
     if (poll(&pfd, 1, 0) > 0) wl_display_read_events(d.dpy);
@@ -245,7 +246,7 @@ void LayerWindow::setInteractive(bool on) {
     if (!on) d.input.clear();
 }
 
-bool LayerWindow::shouldClose() const { return p_->closed; }
+bool LayerWindow::shouldClose() const { return p_->closed || (p_->dpy && wl_display_get_error(p_->dpy) != 0); } //also a connection lost during swap()
 int LayerWindow::width() const { return p_->w; }
 int LayerWindow::height() const { return p_->h; }
 const std::string& LayerWindow::monitorName() const { return p_->monitor; }
