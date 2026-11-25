@@ -167,6 +167,14 @@ inline void ApplyHighVisibility() {
     settings::save();
 }
 
+//"Reset to high visibility": every setting back to its default, then the high visibility values. Show item values is kept.
+inline void ResetToHighVisibility() {
+    const bool values = config::showItemValues;
+    settings::resetAll();
+    config::showItemValues = values;
+    ApplyHighVisibility();
+}
+
 //A large button with large text that applies ApplyHighVisibility()
 inline void HighVisibilityButton() {
     ImGui::PushFont(OverlayFont(), 22.0f);
@@ -236,6 +244,8 @@ inline void PagePlayers() {
     Section("LIST");
     Choice("Player list", &config::listMode, {"Off", "Always", "Only with menu"});
     SliderD("List rows", &config::listRows, 3, 16, "%.0f");
+    Switch("Show item values", &config::showItemValues);
+    Note("Sell prices and a total in the inventory windows. Prices come from ~/.config/kwin-helper/values.txt.");
     Section("TEAMMATES");
     Switch("Hide players with unknown team", &config::hideUnknownTeams);
     static double clearArmedAt = -1;
@@ -396,7 +406,7 @@ inline void PageSettings() {
     if (ConfirmButton("Reset all settings", "Yes, reset everything", &resetArmedAt)) { settings::resetAll(); ImGui::SetWindowPos("kwin-helper", ImVec2(120, 110)); Toast("Settings reset"); }
     static double resetHvArmedAt = -1;
     if (ConfirmButton("Reset to high visibility", "Yes, reset to high visibility", &resetHvArmedAt)) {
-        settings::resetAll(); ApplyHighVisibility(); ImGui::SetWindowPos("kwin-helper", ImVec2(120, 110)); Toast("Settings reset to high visibility");
+        ResetToHighVisibility(); ImGui::SetWindowPos("kwin-helper", ImVec2(120, 110)); Toast("Settings reset to high visibility");
     }
     Section("QUIT");
     if (ImGui::Button("Quit overlay")) g_MenuQuit = true;

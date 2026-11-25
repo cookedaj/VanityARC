@@ -126,7 +126,7 @@ Insert opens the menu: black and white, tabs on the left.
 | Tab | What it has |
 | --- | --- |
 | ESP | High visibility button, master switch, what to show (players, ARC, edge arrows, ARC edge arrows, items, containers), names and label cards, box style / colour / thickness, monochrome, health and shield bars, which way they face, your health (big HP/SH readout, red LOW HEALTH card under 35), skeleton (range, dim players behind cover and how faint), ranges, close enemy warning (big card and its Warning card range) |
-| Players | the player list options, teammate marks, and every player in view (click a name for the inventory, TEAM marks a teammate) |
+| Players | the player list options, show item values (off by default), teammate marks, and every player in view (click a name for the inventory, TEAM marks a teammate) |
 | Radar | on/off, size, range, position presets |
 | Settings | High visibility button, overlay and menu opacity, text size, spoken cues (Spoken warning range), update rate (30-240 Hz), game view (stretched resolution, gamescope, calibration), status card, hotkeys, keyboard controls the menu, stream hide, overlay window (which monitor, setup problem), reset all settings / reset to high visibility, quit |
 
@@ -135,6 +135,7 @@ Insert opens the menu: black and white, tabs on the left.
 - **Spoken cues** (Settings > Spoken cues, on by default): the result of F6, F7, F8 and F10 is said out loud, and an enemy player first coming within the Spoken warning range (Settings > Spoken cues, default 40 m; separate from the ESP tab's Warning card range for the on-screen card) is announced with his side and distance ("Enemy behind, 30 meters"), at most one warning every 2 seconds. It uses `spd-say` from speech-dispatcher with your own voice settings; without it the overlay stays silent and the Settings tab says so. Enemy warnings are quiet while stream hide is on.
 - **Boxes follow the pose**: a crouching player gets a shorter box. A faint skeleton or box means the game is not drawing that player right now.
 - **Player list**: at the bottom of the screen (Players tab > Player list: off / always / only with the menu). With the menu open, click a name to open that player's inventory window.
+- **Item values** (Players tab > Show item values, off by default): sell prices and a total in the inventory windows. Prices come from `~/.config/kwin-helper/values.txt`, one item per line, for example `Snap Hook | 14000`; a saved change shows within 2 seconds. While the switch is off the file is not read and the windows show no prices.
 - **Safe values**: every setting has a range; a damaged `settings.txt` cannot break the overlay, and "Reset all settings" restores the defaults.
 - **Old data is not drawn**: if the tracker stalls for more than 250 ms the markers disappear instead of showing where things were.
 

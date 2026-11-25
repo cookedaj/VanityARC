@@ -84,7 +84,8 @@ int main() {
     }
 
     //menu settings and your own names from the last run (every value kept inside its safe range)
-    const int badSettings = settings::load(), badLabels = labels::load(), badValues = itemvalues::load();
+    //values.txt only with "Show item values" on (settings are read first); switched on later, the inventory window reads it
+    const int badSettings = settings::load(), badLabels = labels::load(), badValues = config::showItemValues ? itemvalues::load() : 0;
     marks::load();    //teammates you marked by hand
     live::load();     //offsets found with the probes (offsets.txt)
     {   //hand-edited lines that were not understood: one toast at start (the terminal lists them with line numbers)

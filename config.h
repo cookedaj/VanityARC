@@ -45,6 +45,7 @@ namespace config {
     inline double trackerHz = 120;         //how often players and ARC are read (30 to 240)
     inline double listMode = 1;            //player list at the bottom: 0 off, 1 always, 2 only while the menu is open
     inline double listRows = 8;            //most players shown in the list
+    inline bool showItemValues = false;    //sell prices and a total in the inventory windows (from ~/.config/kwin-helper/values.txt)
     inline bool showOffscreen = true;      //arrows at the screen edge for enemy players you cannot see on screen
     inline bool closeWarning = true;       //a big "ENEMY 9 m BEHIND" card under the middle of the screen
     inline double warnDist = 25;           //m, enemies closer than this trigger that card

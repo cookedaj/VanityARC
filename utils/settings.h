@@ -48,6 +48,7 @@ inline std::vector<Entry>& table() {
         F("overlayOpacity", &config::overlayOpacity, 0.2, 1); F("menuOpacity", &config::menuOpacity, 0.5, 1);
         D("trackerHz", &config::trackerHz, 30, 240);
         D("listMode", &config::listMode, 0, 2); D("listRows", &config::listRows, 3, 16);
+        B("showItemValues", &config::showItemValues);
         B("showDebugInfo", &config::showDebugInfo); B("hotkeysEnabled", &config::hotkeysEnabled);
         B("soundCues", &config::soundCues); D("cueRange", &config::cueRange, 10, 150);
         B("menuKeyboard", &config::menuKeyboard);

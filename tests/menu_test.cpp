@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
 //A throw-away folder under the system temp directory (tests never touch your real ~/.config/kwin-helper)
 static std::string testDir(const char* name) {
     return (std::filesystem::temp_directory_path() / (std::string("kwinhelper_test_") + name)).string();
@@ -300,7 +301,37 @@ int main() {
         config::boxThickness = 8.0f; config::hiddenAlpha = 255;
         ApplyHighVisibility();
         CHECK(config::boxThickness == 8.0f && config::hiddenAlpha == 255, "High visibility never makes thicker lines thinner or solid hidden players fainter");
+        config::showItemValues = true;
+        ApplyHighVisibility();
+        ResetToHighVisibility();
+        CHECK(config::showItemValues && config::labelSize == 28.0f, "High visibility and Reset to high visibility keep Show item values");
         settings::resetAll();
+        CHECK(!config::showItemValues, "Reset all settings turns Show item values off");
+    }
+
+    //"Show item values": off, the inventory window shows no prices and does not read values.txt; on, it shows the total
+    {
+        const std::string vdir = testDir("menuvalues");
+        std::filesystem::create_directories(vdir);
+        std::ofstream(vdir + "/values.txt", std::ios::trunc) << "Snap Hook | 14000\n";
+        itemvalues::setDir(vdir);
+        auto inv = std::make_shared<std::unordered_map<ptr, std::vector<ItemRow>>>();
+        (*inv)[fake[0].actor] = {ItemRow{"Snap Hook", "SnapHook", "Backpack", 1}, ItemRow{"Bandage", "Bandage_01", "Backpack", 2}};
+        g_ui.inv = inv;
+        g_inspect = {PlayerKey(fake[0])};
+        std::string shown; //the text the inventory window wrote (ImGui's log)
+        auto win = [&] { ImGui::LogToBuffer(); DrawInspectWindows(); shown = G->LogBuffer.c_str(); ImGui::LogFinish(); };
+        config::showItemValues = false;
+        for (int i = 0; i < 3; i++) frame(win);
+        CHECK(shown.find("Snap Hook") != std::string::npos, "the inventory window lists the items");
+        CHECK(shown.find("Value") == std::string::npos && shown.find("price") == std::string::npos, "Show item values off: no prices, no total, no note");
+        CHECK(itemvalues::count() == 0, "Show item values off: values.txt is not read");
+        config::showItemValues = true;
+        for (int i = 0; i < 3; i++) frame(win);
+        CHECK(itemvalues::count() == 1, "Show item values on: values.txt is read");
+        CHECK(shown.find("Value at least 14000") != std::string::npos && shown.find("(no price)") != std::string::npos,
+              "Show item values on: the total and the unpriced items show");
+        config::showItemValues = false; g_ui.inv.reset(); g_inspect.clear(); itemvalues::clear();
     }
 
     ImGui::DestroyContext();

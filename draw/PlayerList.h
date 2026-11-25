@@ -182,7 +182,7 @@ inline void DrawPlayerListWindow(bool menuOpen) {
 //One window per player you clicked: who they are and everything we can read of what they carry
 inline void DrawInspectWindows() {
     if (g_inspect.empty() || !g_ui.ents) return;
-    itemvalues::reloadIfChanged(); //a price added to values.txt shows within 2 s, no restart
+    if (config::showItemValues) itemvalues::reloadIfChanged(); //a price added to values.txt shows within 2 s, no restart
     RemapInspectKeys();
     ui::PushTheme(std::min(0.96f, config::menuOpacity + 0.04f));
     std::vector<std::string> close;
@@ -223,22 +223,23 @@ inline void DrawInspectWindows() {
                 if (rows && !rows->empty()) {
                     //values.txt may name the internal key or the display name
                     auto price = [](const ItemRow& r) { long v = itemvalues::valueOf(r.key); return v >= 0 ? v : itemvalues::valueOf(r.name); };
-                    const bool havePrices = itemvalues::count() > 0;
+                    const bool values = config::showItemValues; //off (the default): no prices, no total, no note
+                    const bool havePrices = values && itemvalues::count() > 0;
                     auto slotsOnly = [](const std::string& cat) { //stack sizes not read for this list (no qty in offsets.txt): counts are slots
                         for (const live::InvArray& a : live::invArrays) if (a.category == cat && a.qty < 0) return true;
                         return false;
                     };
-                    long total = 0;
-                    int unpriced = 0;
-                    bool atLeast = false;
-                    for (const ItemRow& r : *rows) {
-                        long v = price(r);
-                        if (v < 0) unpriced++;
-                        else { total += v * r.count; atLeast |= slotsOnly(r.category); }
-                    }
-                    char tb[120];
-                    if (!havePrices) ui::Note("No prices yet: add lines like 'Snap Hook | 14000' to ~/.config/kwin-helper/values.txt");
-                    else {
+                    if (values && !havePrices) ui::Note("No prices yet: add lines like 'Snap Hook | 14000' to ~/.config/kwin-helper/values.txt");
+                    else if (havePrices) {
+                        long total = 0;
+                        int unpriced = 0;
+                        bool atLeast = false;
+                        for (const ItemRow& r : *rows) {
+                            long v = price(r);
+                            if (v < 0) unpriced++;
+                            else { total += v * r.count; atLeast |= slotsOnly(r.category); }
+                        }
+                        char tb[120];
                         const char* lower = atLeast ? "at least " : ""; //slot counts: stacks are counted as one
                         if (unpriced) std::snprintf(tb, sizeof tb, "Value at least %ld  (%d with no price)", total, unpriced);
                         else std::snprintf(tb, sizeof tb, "Value %s%ld", lower, total);
