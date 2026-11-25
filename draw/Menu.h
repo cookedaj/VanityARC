@@ -130,9 +130,30 @@ inline bool ConfirmButton(const char* label, const char* confirm, double* armedA
     return yes;
 }
 
+//The readable setup in one go: biggest text, thick lines, full boxes on label cards, nothing see-through. Saved at once.
+inline void ApplyHighVisibility() {
+    config::labelSize = 28.0f;
+    config::boxThickness = 4.0f;
+    config::labelCards = true;
+    config::boxStyle = 1; //full rectangle
+    config::overlayOpacity = 1.0f;
+    config::menuOpacity = 1.0f;
+    config::hiddenAlpha = 200;
+    settings::save();
+}
+
+//A large button with large text that applies ApplyHighVisibility()
+inline void HighVisibilityButton() {
+    ImGui::PushFont(OverlayFont(), 22.0f);
+    if (ImGui::Button("High visibility", ImVec2(320, 46))) { ApplyHighVisibility(); Toast("High visibility on"); }
+    ImGui::PopFont();
+    ui::Note("One click: text size 28, 4 px lines, full boxes, label cards, nothing see-through.");
+}
+
 //--- the pages
 inline void PageEsp() {
     using namespace ui;
+    HighVisibilityButton();
     Section("MASTER");
     Switch("ESP on", &config::espEnabled);
     Section("SHOW");
@@ -244,6 +265,7 @@ inline void DrawGameViewSettings() {
 inline void PageSettings() {
     using namespace ui;
     Section("LOOK");
+    HighVisibilityButton();
     Slider("Overlay opacity", &config::overlayOpacity, 0.2f, 1.0f, "%.2f");
     Slider("Menu opacity", &config::menuOpacity, 0.5f, 1.0f, "%.2f");
     Slider("Text size", &config::labelSize, 10.0f, 28.0f, "%.0f px");
@@ -260,6 +282,10 @@ inline void PageSettings() {
     Note("Settings, names, offsets and marks are in ~/.config/kwin-helper/");
     static double resetArmedAt = -1;
     if (ConfirmButton("Reset all settings", "Yes, reset everything", &resetArmedAt)) { settings::resetAll(); ImGui::SetWindowPos("kwin-helper", ImVec2(120, 110)); Toast("Settings reset"); }
+    static double resetHvArmedAt = -1;
+    if (ConfirmButton("Reset to high visibility", "Yes, reset to high visibility", &resetHvArmedAt)) {
+        settings::resetAll(); ApplyHighVisibility(); ImGui::SetWindowPos("kwin-helper", ImVec2(120, 110)); Toast("Settings reset to high visibility");
+    }
     Section("QUIT");
     if (ImGui::Button("Quit overlay")) g_MenuQuit = true;
 }
