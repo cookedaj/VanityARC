@@ -44,6 +44,8 @@ namespace config {
     inline double listMode = 1;            //player list at the bottom: 0 off, 1 always, 2 only while the menu is open
     inline double listRows = 8;            //most players shown in the list
     inline bool showOffscreen = true;      //arrows at the screen edge for enemy players you cannot see on screen
+    inline bool closeWarning = true;       //a big "ENEMY 9 m BEHIND" card under the middle of the screen
+    inline double warnDist = 25;           //m, enemies closer than this trigger that card
     inline bool showTeammates = false;     //draw your squad mates too (green); off = hidden like before
     inline bool espEnabled = true;         //master switch for boxes, labels and arrows (the radar has its own switch)
     inline bool labelCards = false;        //labels on a dark card instead of outlined text

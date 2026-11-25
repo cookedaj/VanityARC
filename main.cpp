@@ -215,7 +215,10 @@ int main() {
         }
         DrawToast(below);
 
-        if (live && config::espEnabled) DrawESP(ents, vm, snap->localPlayerTeam);
+        if (live && config::espEnabled) {
+            DrawESP(ents, vm, snap->localPlayerTeam);
+            DrawCloseEnemyWarning(ents, vm, snap->localPlayerTeam);
+        }
         if (config::enableRadar) {
             DrawRadar(ents, vm, snap->localPlayerTeam);
             //An empty radar must not read as "nobody near" when there is simply no data

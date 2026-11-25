@@ -70,6 +70,24 @@ int main() {
     config::showOffscreen = true;
     CHECK(withArrow > 0 && noArrow == 0, "an enemy behind you shows as an edge arrow, and not when Edge arrows is off");
 
+    //---- the big card for a close enemy: which way, how far, how many; never for teammates, the dead or far players
+    {
+        config::closeWarning = true; config::warnDist = 25;
+        auto warn = [&](const std::vector<RenderEntity>& l) { std::string s; draw([&] { s = DrawCloseEnemyWarning(l, cam, 3); }); return s; };
+        CHECK(warn({ent(Object::PLAYER, -900, 0, 0)}) == "ENEMY 9 m BEHIND" && g_verts > 0, "a close enemy behind you: ENEMY 9 m BEHIND");
+        CHECK(warn({ent(Object::PLAYER, 0, -1200, 0)}) == "ENEMY 12 m LEFT", "to the left: LEFT");
+        CHECK(warn({ent(Object::PLAYER, 0, 1200, 0)}) == "ENEMY 12 m RIGHT", "to the right: RIGHT");
+        CHECK(warn({ent(Object::PLAYER, 2000, 300, 0)}) == "ENEMY 20 m AHEAD", "in front: AHEAD");
+        CHECK(warn({ent(Object::PLAYER, 2000, 300, 0), ent(Object::PLAYER, -500, 100, 0)}) == "2 ENEMIES - NEAREST 5 m BEHIND",
+              "two close enemies: the count and the nearest one");
+        RenderEntity dead = ent(Object::PLAYER, -900, 0, 0); dead.isDead = true;
+        CHECK(warn({ent(Object::PLAYER, -900, 0, 0, 3), dead, ent(Object::PLAYER, -3000, 0, 0), ent(Object::ARC, -500, 0, 0)}).empty() && g_verts == 0,
+              "a teammate, a dead player, an enemy beyond the warning range or an ARC: no card");
+        config::closeWarning = false;
+        CHECK(warn({ent(Object::PLAYER, -900, 0, 0)}).empty() && g_verts == 0, "and no card with the warning switched off");
+        config::closeWarning = true;
+    }
+
     //teammates
     std::vector<RenderEntity> mate = {ent(Object::PLAYER, 3000, 200, 0, 3)};
     config::showTeammates = false;
@@ -272,7 +290,7 @@ int main() {
         FminimalViewInfo c = camera();
         c.Rotation = Vector3(U(-89, 89), U(-180, 180), 0);
         c.FOV = (float)(t % 17 == 0 ? 0.0 : U(30, 120));
-        draw([&] { DrawESP(junk, c, 3); DrawRadar(junk, c, 3); });
+        draw([&] { DrawESP(junk, c, 3); DrawRadar(junk, c, 3); DrawCloseEnemyWarning(junk, c, 3); });
         // NaN positions are the tracker's business to filter; here only "no crash" matters for them
         (void)g_finite;
     }
@@ -291,7 +309,7 @@ int main() {
         FminimalViewInfo c = camera();
         c.Rotation = Vector3(U(-89, 89), U(-180, 180), U(-40, 40)); //with some camera roll
         c.FOV = (float)U(30, 120);
-        draw([&] { DrawESP(good, c, 3); DrawRadar(good, c, 3); });
+        draw([&] { DrawESP(good, c, 3); DrawRadar(good, c, 3); DrawCloseEnemyWarning(good, c, 3); });
         fin &= g_finite;
     }
     CHECK(fin, "200 frames of normal entities and cameras: every vertex is a finite number");
