@@ -216,17 +216,18 @@ inline void DrawPlayerBars(float x0, float y0, float w, float h, const RenderEnt
     }
 }
 
-//Arrows at the screen edge for enemy players who are not on screen (to the side, or behind you). The arrows keep
-//other labels away from them; their distance labels only appear where there is room.
-inline void DrawEdgeArrows(const View& v, std::vector<std::pair<const RenderEntity*, double>>& edge) {
+//Arrows at the screen edge for players outside your squad who are not on screen (to the side, or behind you). The arrows
+//keep other labels away from them; their distance labels only appear where there is room.
+struct EdgeArrow { const RenderEntity* ent; double dist; ImU32 color; }; //color: enemy, or teammate for a hand mark
+inline void DrawEdgeArrows(const View& v, std::vector<EdgeArrow>& edge) {
     if (edge.empty()) return;
-    std::sort(edge.begin(), edge.end(), [](const auto& a, const auto& b) { return a.second < b.second; });
+    std::sort(edge.begin(), edge.end(), [](const EdgeArrow& a, const EdgeArrow& b) { return a.dist < b.dist; });
     if (edge.size() > 8) edge.resize(8);
     const float hx = std::max(20.0f, (float)v.rw / 2 - 46), hy = std::max(20.0f, (float)v.rh / 2 - 46); //edges of the game's picture
     char buf[32];
     for (const auto& e : edge) {
         double x, y, z;
-        v.toCamera(e.first->pos, x, y, z);
+        v.toCamera(e.ent->pos, x, y, z);
         double ux, uy;
         if (z >= 1.0) { ux = x / z * v.focal * v.sx; uy = -(y / z) * v.focal * v.sy; } //where it would be on screen, relative to the middle
         else { ux = x; uy = -z; }                                          //behind: left/right as it is, down on screen
@@ -235,10 +236,10 @@ inline void DrawEdgeArrows(const View& v, std::vector<std::pair<const RenderEnti
         ux /= len; uy /= len;
         const float t = std::min(hx / (float)std::max(std::abs(ux), 1e-6), hy / (float)std::max(std::abs(uy), 1e-6));
         const float px = (float)v.cx + (float)ux * t, py = (float)v.cy + (float)uy * t;
-        DrawArrow(px, py, (float)ux, (float)uy, 15.0f, COLOR::enemy());
+        DrawArrow(px, py, (float)ux, (float)uy, 15.0f, e.color);
         QueueReserve({px - 14, py - 14, px + 14, py + 14});
-        std::snprintf(buf, sizeof buf, "%.0fm", e.second);
-        QueueLabel(px - (float)ux * 30, py - (float)uy * 30, buf, config::labelSize * 0.9f, 0, e.second);
+        std::snprintf(buf, sizeof buf, "%.0fm", e.dist);
+        QueueLabel(px - (float)ux * 30, py - (float)uy * 30, buf, config::labelSize * 0.9f, 0, e.dist);
     }
 }
 
@@ -281,7 +282,7 @@ inline void DrawESP(const std::vector<RenderEntity>& entities, FminimalViewInfo 
     const float W = (float)config::SCREEN_W, H = (float)config::SCREEN_H;
     const float ls = config::labelSize, ls2 = config::labelSize * 0.9f;
     auto onScreen = [&](double x, double y) { return x > -60 && x < W + 60 && y > -60 && y < H + 60; };
-    std::vector<std::pair<const RenderEntity*, double>> edge;
+    std::vector<EdgeArrow> edge;
     char buf[64];
 
     for (const auto& ent : entities) {
@@ -301,10 +302,11 @@ inline void DrawESP(const std::vector<RenderEntity>& entities, FminimalViewInfo 
 
         //To consider. 1) Dist, 2) dead?, 3) visible, 4) team
         if (ent.type == Object::PLAYER) {
-            const bool mate = IsTeammate(ent, localPlayerTeam); //your squad, or marked by hand
+            const bool squad = localPlayerTeam >= 0 && ent.teamID == localPlayerTeam;
+            const bool mate = squad || marks::isMarked(ent.account); //your squad, or marked by hand
             if (!config::showPlayers) continue;
             if (dist > config::maxPlayerDist) continue;
-            if (mate && !config::showTeammates) continue;
+            if (squad && !config::showTeammates) continue; //a hand mark is always drawn (in the teammate colour): it may be stale
             if (!mate && config::hideUnknownTeams && localPlayerTeam < 0) continue; //no team to compare with
             if (ent.isDead) {
                 if (!config::showDeadPlayers || !front || !onScreen(sp.x, sp.y)) continue;
@@ -325,7 +327,7 @@ inline void DrawESP(const std::vector<RenderEntity>& entities, FminimalViewInfo 
             Vector3 feetPos = ent.pos; feetPos.z = boxBottom;
             Vector2 sHead, sFeet;
             if (!v.project(headPos, sHead) || !v.project(feetPos, sFeet) || !onScreen(sHead.x, (sHead.y + sFeet.y) / 2)) {
-                if (!mate && config::showOffscreen) edge.push_back({&ent, dist});
+                if (!squad && config::showOffscreen) edge.push_back({&ent, dist, mate ? COLOR::mate() : COLOR::enemy()});
                 continue;
             }
 

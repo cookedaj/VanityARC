@@ -111,6 +111,26 @@ inline void DrawPlayerRows(int maxRows) {
     if ((int)players.size() > maxRows) ImGui::TextColored(ImColor(ui::GREY), "+ %d more", (int)players.size() - maxRows);
 }
 
+//Every saved hand mark (they never expire), each with a button to remove it. The name shows when that player is in view.
+inline void DrawSavedMarks() {
+    const std::vector<std::string> ids = marks::all();
+    char head[48];
+    std::snprintf(head, sizeof head, "SAVED MARKS (%d)", (int)ids.size());
+    ui::Section(head);
+    if (ids.empty()) { ui::Note("No saved marks."); return; }
+    for (const std::string& id : ids) {
+        std::string who = id;
+        if (g_ui.ents)
+            for (const RenderEntity& e : *g_ui.ents)
+                if (e.type == Object::PLAYER && e.account == id && !e.label.empty()) { who = e.label + "  (" + id + ")"; break; }
+        ImGui::PushID(id.c_str());
+        if (ImGui::SmallButton("remove")) { marks::setMarked(id, false); marks::save(); }
+        ImGui::SameLine();
+        ImGui::TextUnformatted(who.c_str());
+        ImGui::PopID();
+    }
+}
+
 //The list at the bottom of the screen. menuOpen: clickable; otherwise it is only shown.
 inline void DrawPlayerListWindow(bool menuOpen) {
     const int mode = (int)config::listMode;
