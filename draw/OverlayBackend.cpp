@@ -68,14 +68,29 @@ bool initGlfw() {
     glfwWindowHint(GLFW_FOCUS_ON_SHOW, GLFW_FALSE);
     glfwWindowHint(GLFW_FOCUSED, GLFW_FALSE);
 
+    //The monitor start.sh chose (KWINHELPER_MONITOR, e.g. DP-1), else the primary one
     GLFWmonitor* monitor = glfwGetPrimaryMonitor();
+    if (const char* want = std::getenv("KWINHELPER_MONITOR"); want && *want) {
+        int count = 0;
+        GLFWmonitor** all = glfwGetMonitors(&count);
+        GLFWmonitor* found = nullptr;
+        for (int i = 0; i < count && !found; ++i) {
+            const char* name = glfwGetMonitorName(all[i]);
+            if (name && std::strcmp(name, want) == 0) found = all[i];
+        }
+        if (found) monitor = found;
+        else std::cerr << "[!] Monitor '" << want << "' not found. Sizing the window from the primary monitor." << std::endl;
+    }
     if (!monitor) {
         std::cerr << "[-] Failed to get primary monitor." << std::endl;
         return false;
     }
     const GLFWvidmode* mode = glfwGetVideoMode(monitor);
-    config::SCREEN_W = mode->width;
-    config::SCREEN_H = mode->height;
+    //The mode is in pixels; a Wayland window is sized in the compositor's scaled units
+    float xs = 1.0f, ys = 1.0f;
+    glfwGetMonitorContentScale(monitor, &xs, &ys);
+    config::SCREEN_W = (int)(mode->width / (xs > 0 ? xs : 1.0f) + 0.5f);
+    config::SCREEN_H = (int)(mode->height / (ys > 0 ? ys : 1.0f) + 0.5f);
 
     g_glfw = glfwCreateWindow(config::SCREEN_W, config::SCREEN_H, config::OVERLAY_NAME, nullptr, nullptr);
     if (!g_glfw) return false;
