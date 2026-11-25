@@ -167,15 +167,13 @@ void fillArc(Info& in, uintptr_t actor, double t) {
             in.key = assetName(a, "DA_");
             in.resolved = !in.key.empty();
             in.label.clear();
+            std::string k = in.key; //"DA_EnemyType_TurretEnemy" and friends; worked out once per asset
+            for (char& c : k) c = (char)std::tolower((unsigned char)c);
+            in.turret = k.find("turret") != std::string::npos;
         }
     }
     if (in.resolved && in.label.empty()) {
         in.label = labels::display(labels::Cat::Arc, in.key);
-    }
-    if (in.resolved) { //"DA_EnemyType_TurretEnemy" and friends
-        std::string k = in.key;
-        for (char& c : k) c = (char)std::tolower((unsigned char)c);
-        in.turret = k.find("turret") != std::string::npos;
     }
 }
 
