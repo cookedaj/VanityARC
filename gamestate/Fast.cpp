@@ -66,7 +66,7 @@ bool GameState::scan() {
         logThrottled("[-] Invalid Uworld (not in a raid yet?)");
         return false;
     }
-    if (uworld != lastWorld_) { camActor_ = 0; shieldSeen_.clear(); } //a new world has a new camera and new players
+    if (uworld != lastWorld_) { camActor_ = 0; shieldSeen_.clear(); lastTeamID = -1; meActor_ = 0; } //a new world: new camera and players, your team and pawn not known yet
     lastWorld_ = uworld;
     //PersistentLevel at UWorld+0x170 is encrypted; the plain pointer is in LevelCollections[0] (see config.h)
     ptr levelCollection = ReadMemory<ptr>(uworld + off::LEVEL_COLLECTIONS);
