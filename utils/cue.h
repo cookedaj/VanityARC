@@ -6,9 +6,9 @@
 #ifndef KWINHELPER_CUE_H
 #define KWINHELPER_CUE_H
 
-#include <signal.h>
 #include <spawn.h>
 #include <string>
+#include <sys/wait.h>
 
 #include "../config.h"
 
@@ -17,16 +17,11 @@ extern char** environ;
 namespace cue {
 
 inline bool missing = false; //the last cue could not start spd-say (not installed)
+inline bool failed = false;  //the last finished spd-say could not reach speech-dispatcher (exit status not 0)
 
-//Once at startup: the kernel cleans up every finished spd-say, so none is left behind as a zombie. SIGCHLD keeps its
-//default action and the flag is not passed on to spd-say; nothing in this program waits for a child.
-inline void init() {
-    struct sigaction sa {};
-    sa.sa_handler = SIG_DFL;
-    sa.sa_flags = SA_NOCLDWAIT;
-    sigemptyset(&sa.sa_mask);
-    sigaction(SIGCHLD, &sa, nullptr);
-}
+//Every draw frame, on the draw thread: collects each finished spd-say (none is left behind as a zombie) and keeps
+//whether the last one worked. One non-blocking call; spd-say is the only child this program starts.
+inline void reap() { int st; while (waitpid(-1, &st, WNOHANG) > 0) failed = !(WIFEXITED(st) && WEXITSTATUS(st) == 0); }
 
 //Says text out loud without waiting for it. posix_spawnp, not fork: the overlay's memory is not copied (no stutter),
 //and it is safe in a program with several threads. Called from the draw thread only.
