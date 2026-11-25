@@ -391,7 +391,8 @@ void meshProbe(ptr pawn, FILE* out) {
     std::fprintf(out, "  pawn+0x%lx (mesh pointer) = 0x%lx\n", (unsigned long)off::MESH, (unsigned long)mesh);
     if (!isValidPtr(mesh)) { std::fprintf(out, "  -> not a pointer: off::MESH is wrong for this build\n"); std::fflush(out); return; }
     std::fprintf(out, "  mesh has a vtable inside the game image: %s\n", isObject(mesh) ? "yes" : "NO");
-    std::fprintf(out, "  mesh name: %s\n", nm(mesh).c_str());
+    const std::string meshName = nm(mesh);
+    std::fprintf(out, "  mesh name: %s\n", meshName.c_str());
 
     const ptr root = ReadMemory<ptr>(pawn + off::ROOT_COMPONENT_PTR);
     auto meshPos = readBlock(mesh + off::POS_PTR, 24);
@@ -404,7 +405,15 @@ void meshProbe(ptr pawn, FILE* out) {
     std::memcpy(r, rootBlk.data(), 24);
     const double d = std::sqrt((m[0] - r[0]) * (m[0] - r[0]) + (m[1] - r[1]) * (m[1] - r[1]) + (m[2] - r[2]) * (m[2] - r[2]));
     std::fprintf(out, "  root position: %.1f %.1f %.1f   distance mesh-root: %.1f units (%.2f m)\n", r[0], r[1], r[2], d, d / 100.0);
-    std::fprintf(out, "  -> %s\n", d < 300.0 ? "PLAUSIBLE: the mesh is next to the pawn" : "SUSPECT: the mesh is far from the pawn, off::MESH is probably wrong");
+    //Every component attached to the pawn sits within 300 units, the capsule (root) at 0: distance alone proves nothing
+    const int boneNum = ReadMemory<int>(mesh + off::BONE_ARRAY + 8);
+    std::fprintf(out, "  bone list count (mesh+0x%lx): %d (the player skeleton has %d)\n", (unsigned long)(off::BONE_ARRAY + 8), boneNum, skeleton::BONES);
+    const char* fail = mesh == root ? "the mesh pointer is the root component (capsule) itself"
+                     : boneNum != skeleton::BONES ? "the bone list is not the player skeleton"
+                     : meshName.rfind("CharacterMesh", 0) != 0 ? "the name does not start with CharacterMesh"
+                     : d >= 300.0 ? "the mesh is far from the pawn" : nullptr;
+    if (fail) std::fprintf(out, "  -> SUSPECT: %s, off::MESH is probably wrong\n", fail);
+    else std::fprintf(out, "  -> PLAUSIBLE: a CharacterMesh with the player skeleton, next to the pawn\n");
     std::fflush(out);
 }
 
