@@ -36,7 +36,8 @@ public:
     int width() const;
     int height() const;                  //width and height are in surface (logical) pixels
     int scale() const;                   //buffer pixels per surface pixel (the output's scale)
-    const std::string& monitorName() const;
+    const std::string& monitorName() const; //the asked-for output, else the one the compositor put the overlay on ("" until known)
+    const std::string& note() const;        //a setup problem to show on screen ("" = none): the asked-for monitor was not found
     std::vector<LayerInput> takeInput(); //pointer events since the last call (only arrive while interactive)
 
 private:

@@ -53,8 +53,10 @@ int main() {
     ImGuiWindow* w = ImGui::FindWindowByName("kwin-helper");
     CHECK(w != nullptr, "menu window exists");
     g_MenuTab = 3; //the Settings page (it has the game view part too)
+    g_OverlayNote = "Monitor 'DP-9' not found (have: DP-1)\nThe desktop chose the monitor"; //the overlay window part shows it
     for (int i = 0; i < 3; i++) frame([] { DrawMenu(); });
     CHECK(true, "menu draws the Settings page");
+    g_OverlayNote.clear();
 
     //typing: a text box that is made active, then keys arrive through the same queue the keyboard thread fills
     char buf[48] = "";

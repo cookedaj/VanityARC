@@ -4,6 +4,7 @@
 #include <EGL/eglext.h>
 #include <linux/input-event-codes.h>
 #include <poll.h>
+#include <strings.h>
 #include <wayland-client.h>
 #include <wayland-cursor.h>
 #include <wayland-egl.h>
@@ -42,6 +43,7 @@ struct LayerWindow::Impl {
     int w = 0, h = 0;
     bool configured = false, closed = false, interactive = false;
     std::string monitor;
+    std::string note; //set by create(): see note()
     std::vector<LayerInput> input;
     bool inside = false;
     wl_callback* frameCb = nullptr; //the compositor's "last frame is shown" signal, waited for in pump()
@@ -181,6 +183,7 @@ bool LayerWindow::create(const std::string& monitor, std::string* error) {
     d.w = d.h = 0;
     d.configured = d.closed = d.interactive = d.inside = false;
     d.monitor.clear();
+    d.note.clear();
     d.input.clear();
 
     d.dpy = wl_display_connect(nullptr);
@@ -210,9 +213,12 @@ bool LayerWindow::create(const std::string& monitor, std::string* error) {
     std::string have;
     for (const Impl::Out& o : d.outs) {
         have += (have.empty() ? "" : ", ") + o.name;
-        if (!monitor.empty() && o.name == monitor) { out = o.o; d.monitor = o.name; }
+        if (!monitor.empty() && strcasecmp(o.name.c_str(), monitor.c_str()) == 0) { out = o.o; d.monitor = o.name; } //"dp-2" finds DP-2
     }
-    if (!monitor.empty() && !out) std::fprintf(stderr, "[!] Monitor '%s' not found (have: %s). The compositor will choose.\n", monitor.c_str(), have.c_str());
+    if (!monitor.empty() && !out && d.outs.size() > 1) { //with one output the compositor can only pick that one
+        std::fprintf(stderr, "[!] Monitor '%s' not found (have: %s). The compositor will choose.\n", monitor.c_str(), have.c_str());
+        d.note = "Monitor '" + monitor + "' not found (have: " + have + ")\nThe desktop chose the monitor: the overlay may be on the wrong screen";
+    }
 
     d.surf = wl_compositor_create_surface(d.comp);
     static const wl_surface_listener sl = {Impl::onSurfEnter, Impl::onSurfLeave};
@@ -336,7 +342,11 @@ bool LayerWindow::hasCursor() const { return p_->cursorSurf != nullptr; }
 int LayerWindow::width() const { return p_->w; }
 int LayerWindow::height() const { return p_->h; }
 int LayerWindow::scale() const { return p_->scale; }
-const std::string& LayerWindow::monitorName() const { return p_->monitor; }
+const std::string& LayerWindow::monitorName() const {
+    if (p_->monitor.empty()) for (const Impl::Out& o : p_->outs) if (o.o == p_->on) return o.name; //learned from the surface's enter event
+    return p_->monitor;
+}
+const std::string& LayerWindow::note() const { return p_->note; }
 
 std::vector<LayerInput> LayerWindow::takeInput() {
     std::vector<LayerInput> v;
