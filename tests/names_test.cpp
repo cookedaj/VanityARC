@@ -14,6 +14,7 @@ void runNameProbe(const std::vector<RenderEntity>& ents, const std::vector<Rende
                   const FminimalViewInfo& vm, ptr uworld, FILE* out);
 
 void runLiveProbe(const std::string& mode, ptr localPawn, const std::vector<RenderEntity>& ents, const FminimalViewInfo& vm, FILE* out);
+void announceLiveProbe(const std::string& mode, FILE* out);
 
 static int fails = 0;
 #define CHECK(cond, msg) do { bool ok_ = (cond); std::printf("%s  %s\n", ok_ ? "PASS" : "FAIL", msg); if (!ok_) fails++; } while (0)
@@ -262,7 +263,25 @@ int main() {
         CHECK(invReport.find("offsets.txt:  inv_array 0x530 0x20 0x10 item") != std::string::npos, "inventory probe: a list in the inventory component comes with its offsets.txt line");
         CHECK(invReport.find("offsets.txt:  inv_array 0x530") == invReport.rfind("offsets.txt:  inv_array 0x530"), "inventory probe: the inventory component is listed once, not twice");
         CHECK(invReport.find("offsets.txt:  inv_array_in 0x700 0x40 0x20 0x10 item") != std::string::npos, "inventory probe: a list in another component names that component");
-        CHECK(run("nonsense").empty(), "an unknown probe name prints nothing");
+        CHECK(run("nonsense").empty(), "an unknown probe name runs no probe (the start announcement warns about it)");
+
+        auto announce = [](const char* mode) {
+            char* b = nullptr; size_t l = 0;
+            FILE* o = open_memstream(&b, &l);
+            announceLiveProbe(mode, o);
+            fclose(o);
+            std::string r(b, l);
+            std::free(b);
+            return r;
+        };
+        std::string typo = announce("shield, inventroy");
+        std::printf("%s", typo.c_str());
+        CHECK(typo.find("[probe] running: shield\n") != std::string::npos, "probe start: says which probes run");
+        CHECK(typo.find("unknown name \"inventroy\" is ignored (known: mesh shield bones flags rendertime stance team inventory)") != std::string::npos,
+              "probe start: a misspelled name is reported with the known names");
+        std::string good = announce("shield,inventory");
+        CHECK(good.find("running: shield, inventory\n") != std::string::npos && good.find("unknown") == std::string::npos, "probe start: correct names give no warning");
+        CHECK(announce("nonsense").find("running: nothing") != std::string::npos, "probe start: nothing matched is said plainly");
     }
 
     //empty world must not crash

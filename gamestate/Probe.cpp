@@ -828,6 +828,29 @@ void teamProbe(ptr localPawn, const std::vector<RenderEntity>& ents, const Fmini
     std::fflush(out);
 }
 
+//Printed once when the probes start: which ones run, and each name that matches none, so a typo does not waste a
+//whole raid with no output. Same substring test as runLiveProbe below; mode is already lower-case.
+void announceLiveProbe(const std::string& mode, FILE* out) {
+    static const char* const known[] = {"mesh", "shield", "bones", "flags", "rendertime", "stance", "team", "inventory"};
+    std::string running, all;
+    for (const char* k : known) {
+        all += std::string(all.empty() ? "" : " ") + k;
+        if (mode.find(k) != std::string::npos) running += std::string(running.empty() ? "" : ", ") + k;
+    }
+    std::fprintf(out, "[probe] running: %s\n", running.empty() ? "nothing (no known name)" : running.c_str());
+    std::string tok;
+    for (size_t i = 0; i <= mode.size(); i++) { //a name is a run of letters: "shield,inventory" and "shield inventory" both work
+        const char c = i < mode.size() ? mode[i] : ',';
+        if (c >= 'a' && c <= 'z') { tok += c; continue; }
+        if (tok.empty()) continue;
+        bool hit = false;
+        for (const char* k : known) hit = hit || tok.find(k) != std::string::npos;
+        if (!hit) std::fprintf(out, "[probe] unknown name \"%s\" is ignored (known: %s)\n", tok.c_str(), all.c_str());
+        tok.clear();
+    }
+    std::fflush(out);
+}
+
 void runLiveProbe(const std::string& mode, ptr localPawn, const std::vector<RenderEntity>& ents, const FminimalViewInfo& vm, FILE* out) {
     //mode: "shield", "inventory", "mesh" or several, e.g. "shield,inventory": one raid can find everything
     if (mode.find("mesh") != std::string::npos && localPawn) meshProbe(localPawn, out);

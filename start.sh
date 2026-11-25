@@ -23,6 +23,11 @@ if [ ! -x "$BIN" ]; then
     echo "  cmake -B cmake-build-release -DCMAKE_BUILD_TYPE=Release && cmake --build cmake-build-release" >&2
     exit 1
 fi
+# The release build has no probes and ignores KWINHELPER_PROBE without a word: say so before a raid is wasted
+if [ -n "${KWINHELPER_PROBE:-}" ] && [ -z "${KWINHELPER_BIN:-}" ]; then
+    echo "[!] KWINHELPER_PROBE is set, but this is the release build, which has no probes. Start the probe build:" >&2
+    echo "    KWINHELPER_BIN=./cmake-build-probe/kwin-helper KWINHELPER_PROBE=$KWINHELPER_PROBE bash start.sh" >&2
+fi
 
 # After editing config.h or the code (patch day), a forgotten or failed rebuild would quietly start the OLD program.
 # So rebuild when any source is newer than the binary, and stop loudly if that build fails.

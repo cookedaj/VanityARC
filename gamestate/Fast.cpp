@@ -4,6 +4,7 @@
 #include "GameState.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdarg>
 #include <cstdio>
@@ -19,6 +20,7 @@
 void printStatusLine(const std::vector<RenderEntity>& others, const RenderEntity* me, int posed, int poseWanted); //GameState.cpp
 #ifdef KWINHELPER_PROBES
 void runLiveProbe(const std::string& mode, ptr localPawn, const std::vector<RenderEntity>& ents, const FminimalViewInfo& vm, FILE* out = stdout); //Probe.cpp
+void announceLiveProbe(const std::string& mode, FILE* out = stdout); //Probe.cpp
 #endif
 
 namespace {
@@ -485,7 +487,13 @@ gsRet GameState::assemble(const FminimalViewInfo& vm) {
 //KWINHELPER_PROBE=shield or inventory (set before starting): prints discovery reports every 2 s, reading memory only
 void GameState::runLiveProbeIfAsked(const std::vector<RenderEntity>& ents, const FminimalViewInfo& vm) {
 #ifdef KWINHELPER_PROBES
-    static const std::string mode = [] { const char* e = std::getenv("KWINHELPER_PROBE"); return std::string(e ? e : ""); }();
+    static const std::string mode = [] { //read once; lower-case so "Shield" works too; says once what runs
+        const char* e = std::getenv("KWINHELPER_PROBE");
+        std::string m(e ? e : "");
+        for (char& c : m) c = (char)std::tolower((unsigned char)c);
+        if (!m.empty()) announceLiveProbe(m);
+        return m;
+    }();
     if (mode.empty()) return;
     static auto last = clk::now() - std::chrono::seconds(10);
     const auto now = clk::now();
