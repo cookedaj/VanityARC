@@ -3,6 +3,7 @@
 //Reads the game on its own thread, so drawing never waits for memory reads. It also finds the game process,
 //notices when the game closes or restarts, and publishes the newest result for the draw thread to pick up.
 #include <atomic>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <thread>
@@ -29,11 +30,23 @@ struct Snapshot {
     std::shared_ptr<const InventoryMap> inventories; //players whose inventory window is open (see setInspected)
 };
 
+bool processAlive(pid_t pid); //the process still exists (/proc/<pid> is there)
+
+//How the tracker finds the game and notices that it closed. Tests put stand-ins here (Tracker::useLookup).
+struct GameLookup {
+    std::function<pid_t()> find = FindGamePID;        //the game's pid; 0: not running
+    std::function<bool(pid_t)> image = FindGameImage; //points ImageBase / ImageEnd at the game's .exe
+    std::function<bool(pid_t)> alive = processAlive;
+    int deadAfterMs = 10000; //a game that gives no data this long is checked for having closed
+};
+
 class Tracker {
 public:
     ~Tracker() { stop(); }
     //Tests only: read this process (with the game image at base) instead of looking for the game
     void useProcess(pid_t pid, ptr base) { fixedPid_ = pid; fixedBase_ = base; }
+    //Tests only: find the game, and notice it closed, with these instead of /proc. Call before start().
+    void useLookup(GameLookup l) { lookup_ = std::move(l); }
 
     void start();
     void stop();
@@ -61,6 +74,7 @@ private:
 
     pid_t fixedPid_ = 0;
     ptr fixedBase_ = 0;
+    GameLookup lookup_;
     std::thread th_;
     std::atomic<bool> stop_{false};
     mutable std::mutex mu_;

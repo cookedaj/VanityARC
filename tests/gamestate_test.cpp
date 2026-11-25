@@ -464,6 +464,60 @@ int main() {
         CHECK(ProcessId == getpid(), "stop() leaves the test's process id alone");
     }
 
+    //--- the game closes and starts again: the tracker lets go of the old one and picks up the new one by itself
+    {
+        //Stand-ins for /proc: the "game" is this process, its .exe the fake world's base
+        std::atomic<bool> gameUp{true}, alive{true};
+        std::atomic<u64> gameAt{base};
+        GameLookup lookup;
+        lookup.find = [&] { return gameUp ? getpid() : (pid_t)0; };
+        lookup.image = [&](pid_t) { ImageBase = gameAt; ImageEnd = ImageBase + off::UWORLD_RVA + 8; return true; };
+        lookup.alive = [&](pid_t) { return alive.load(); };
+        lookup.deadAfterMs = 300; //the real game gets 10 s
+        Tracker tr;
+        tr.useLookup(lookup);
+        auto has = [](const Snapshot& s, u64 actor) { for (const auto& e : s.entities) if (e.actor == actor) return true; return false; };
+        auto waitFor = [&](auto ok, int ms) {
+            const auto until = std::chrono::steady_clock::now() + std::chrono::milliseconds(ms);
+            auto s = tr.latest();
+            while (!ok(*s) && std::chrono::steady_clock::now() < until) { std::this_thread::sleep_for(std::chrono::milliseconds(5)); s = tr.latest(); }
+            return s;
+        };
+        tr.start();
+        auto s1 = waitFor([&](const Snapshot& s) { return s.valid && has(s, enemy1); }, 5000);
+        CHECK(s1->gameFound && s1->valid && has(*s1, enemy1), "restart: the game is looked up and its players shown");
+
+        alive = false; //the process check says gone, but reads still give players: the game is kept
+        std::this_thread::sleep_for(std::chrono::milliseconds(600));
+        auto s2 = tr.latest();
+        CHECK(s2->gameFound && s2->valid, "restart: a game that still gives data is not dropped");
+
+        gameUp = false; //the game closes: its reads give nothing and the lookup finds no game
+        breakWorld();
+        auto s3 = waitFor([](const Snapshot& s) { return !s.gameFound; }, 3000);
+        CHECK(!s3->gameFound && s3->entities.empty(), "restart: a closed game is noticed and nothing of it is shown");
+        FminimalViewInfo f;
+        CHECK(ProcessId == 0 && !tr.freshCamera(f), "restart: its process and camera are let go");
+
+        //The new game: another .exe base with its own world and its own players
+        base = (u64)mmap(nullptr, off::UWORLD_RVA + 0x1000, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
+        buildWorld(); //at the new base
+        u64 me2 = makePlayer(cx + 80, cy + 120, cz - 90, 5, 100);
+        u64 newcomer = makePlayer(cx + 3000, cy - 500, cz - 90, 8, 60);
+        actorList = {me2, newcomer, camActor};
+        actorArray = alloc(8 * actorList.size());
+        publishActors();
+        gameAt = base;
+        alive = true;
+        gameUp = true;
+        auto s4 = waitFor([&](const Snapshot& s) { return s.valid && has(s, newcomer); }, 5000);
+        CHECK(s4->gameFound && s4->valid && has(*s4, newcomer), "restart: the new game is found and its players shown");
+        CHECK(!has(*s4, enemy1), "restart: nothing of the old game is left");
+        CHECK(ProcessId == getpid(), "restart: the new game's process is the one read");
+        tr.stop();
+        CHECK(ProcessId == 0, "stop() lets go of a game it looked up");
+    }
+
     std::printf("%s\n", fails ? "SOME TESTS FAILED" : "ALL PASSED");
     return fails;
 }

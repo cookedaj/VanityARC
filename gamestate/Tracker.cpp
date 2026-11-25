@@ -20,8 +20,6 @@ constexpr int KEEP_MS = 250;      //a failed step this soon after a good one is 
 constexpr int NO_GAME_MS = 200;
 thread_local std::mt19937 jitterRng{std::random_device{}()}; //uneven step times: a fixed rhythm is easy to spot
 
-bool processAlive(pid_t pid) { return pid > 0 && access(("/proc/" + std::to_string(pid)).c_str(), F_OK) == 0; }
-
 //Finding the game needs no permission, reading it does. The kernel checks permission before it looks at the address,
 //so one byte from any address tells: EPERM = the ptrace capability is missing (a rebuild not started with start.sh)
 bool readDenied(pid_t pid) {
@@ -30,6 +28,8 @@ bool readDenied(pid_t pid) {
     return process_vm_readv(pid, &l, 1, &r, 1, 0) < 0 && errno == EPERM;
 }
 } // namespace
+
+bool processAlive(pid_t pid) { return pid > 0 && access(("/proc/" + std::to_string(pid)).c_str(), F_OK) == 0; }
 
 void Tracker::start() {
     if (th_.joinable()) return;
@@ -107,7 +107,7 @@ void Tracker::run() {
     while (!stop_) {
         const auto t0 = clk::now();
 
-        if (!fixedPid_ && ProcessId != 0 && t0 - lastData > std::chrono::seconds(10) && !processAlive(ProcessId)) {
+        if (!fixedPid_ && ProcessId != 0 && t0 - lastData > std::chrono::milliseconds(lookup_.deadAfterMs) && !lookup_.alive(ProcessId)) {
             std::cout << "[-] The game closed. Waiting for it to start again..." << std::endl;
             ProcessId = 0;
             cam_ = 0;
@@ -115,10 +115,10 @@ void Tracker::run() {
         }
         if (!fixedPid_ && ProcessId == 0 && t0 - lastFind >= std::chrono::seconds(2)) {
             lastFind = t0;
-            ProcessId = FindGamePID();
+            ProcessId = lookup_.find();
             if (ProcessId != 0) {
                 announced = false;
-                if (!FindGameImage(ProcessId)) std::cout << "[-] The game's .exe was not found in its memory map: using the usual address" << std::endl;
+                if (!lookup_.image(ProcessId)) std::cout << "[-] The game's .exe was not found in its memory map: using the usual address" << std::endl;
                 gs = GameState(ImageBase); //new process: nothing from the old one is valid any more
                 names::setBase(ImageBase); //also empties the name cache
                 labeler::reset();
@@ -133,12 +133,12 @@ void Tracker::run() {
         //if the lookup now gives a different process.
         if (!fixedPid_ && ProcessId != 0 && t0 - lastWorld >= std::chrono::seconds(60)) {
             lastWorld = t0;
-            const pid_t p = FindGamePID();
+            const pid_t p = lookup_.find();
             if (p != 0 && p != ProcessId) {
                 std::cout << "[*] Switching from PID " << ProcessId.load() << " to PID " << p << std::endl;
                 cam_ = 0;
                 ProcessId = p;
-                if (!FindGameImage(ProcessId)) std::cout << "[-] The game's .exe was not found in its memory map: using the usual address" << std::endl;
+                if (!lookup_.image(ProcessId)) std::cout << "[-] The game's .exe was not found in its memory map: using the usual address" << std::endl;
                 gs = GameState(ImageBase);
                 names::setBase(ImageBase); //also empties the name cache
                 labeler::reset();
