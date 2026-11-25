@@ -177,9 +177,7 @@ inline void HotkeyThread() {
     for (int fd : fds) close(fd);
 }
 
-inline std::thread StartHotkey() {
-    std::signal(SIGUSR1, MenuSignalHandler);
-    std::signal(SIGUSR2, StreamSignalHandler);
+inline std::thread StartHotkey() { //SIGUSR1/SIGUSR2 handlers are installed in main() before InitOverlay
     return std::thread(HotkeyThread);
 }
 
