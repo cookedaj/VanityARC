@@ -27,6 +27,9 @@ Kind g_kind = Kind::None;
 LayerWindow* g_layer = nullptr;
 GLFWwindow* g_glfw = nullptr;
 bool g_lost = false;         //the connection to the compositor broke
+bool g_down = false;         //the layer surface is gone and is being made again (OverlayReady)
+std::chrono::steady_clock::time_point g_retry; //the next try to make it again
+std::string g_downErr;       //why the last try failed (printed once, not every 2 s)
 bool g_interactive = false;
 std::chrono::steady_clock::time_point g_last;
 std::string g_iniPath;
@@ -146,7 +149,7 @@ const char* OverlayBackendName() { return g_kind == Kind::Layer ? "layer-shell, 
 
 void RenderBegin() {
     if (g_kind == Kind::Layer) {
-        if (!g_layer->pump()) g_lost = true;
+        //the surface's events were handled by OverlayReady(), so a closed surface is never drawn to
         ImGui_ImplOpenGL3_NewFrame();
         ImGuiIO& io = ImGui::GetIO();
         io.DisplaySize = ImVec2((float)g_layer->width(), (float)g_layer->height());
@@ -205,10 +208,44 @@ void RenderEnd(void (*extra)()) {
     else glfwSwapBuffers(g_glfw);
 }
 
-bool OverlayShouldClose() {
-    if (g_kind == Kind::Layer) return g_lost || g_layer->shouldClose();
-    return g_glfw && glfwWindowShouldClose(g_glfw);
+//The compositor closes the layer surface when its monitor is unplugged, switched off or reconfigured, and the connection
+//breaks when the compositor restarts. Neither ends the program: the surface is taken down and made again, one try every
+//2 s, while the tracker keeps reading the game.
+bool OverlayReady() {
+    if (g_kind != Kind::Layer) return true;
+    if (!g_down) {
+        if (!g_layer->pump()) g_lost = true;
+        if (!g_lost && !g_layer->shouldClose()) return true;
+        std::cerr << "[!] The overlay " << (g_lost ? "lost the connection to the compositor"
+                                                   : "surface was closed by the compositor (monitor unplugged, off or changed)")
+                  << ". Trying to show it again every 2 s." << std::endl;
+        ImGui_ImplOpenGL3_Shutdown(); //its GL objects belong to the old context
+        g_layer->destroy();
+        ImGui::GetIO().ClearInputMouse(); //the pointer went with the surface: no button stays held
+        g_down = true;
+        g_lost = false;
+        g_downErr.clear();
+    }
+    const auto now = std::chrono::steady_clock::now();
+    if (now < g_retry) return false;
+    g_retry = now + std::chrono::seconds(2);
+    const char* mon = std::getenv("KWINHELPER_MONITOR");
+    std::string err;
+    if (!g_layer->create(mon ? mon : "", &err)) {
+        if (err != g_downErr) std::cerr << "[!] The overlay is not back yet (" << err << ")" << std::endl;
+        g_downErr = err;
+        return false;
+    }
+    ImGui_ImplOpenGL3_Init("#version 130"); //new GL context: shaders and the font texture are made again
+    g_layer->setInteractive(g_interactive);  //the menu is open: the new surface takes the mouse too
+    g_down = false;
+    g_last = now;
+    std::cout << "[+] Overlay back (" << g_layer->width() << "x" << g_layer->height()
+              << (g_layer->monitorName().empty() ? "" : " on " + g_layer->monitorName()) << ")" << std::endl;
+    return true;
 }
+
+bool OverlayShouldClose() { return g_glfw && glfwWindowShouldClose(g_glfw); } //the layer surface is never final: OverlayReady
 
 void OverlayShutdown() {
     if (ImGui::GetCurrentContext()) {
