@@ -437,6 +437,27 @@ int main() {
             const bool on = PlayerScreenBox(View(cam, MakeProjection()), close[0], bx, by, bw, bh);
             CHECK(on && g_minY > by + bh + 2 * config::labelSize, "the close-enemy card stays clear of the enemy ahead and his labels");
         }
+        {   //an enemy 5 m ahead, feet low on screen, and a tall player list at the bottom: neither the card nor LOW
+            //HEALTH goes under the list (ImGui draws it over them)
+            config::showSelfHealth = true;
+            g_listRect = {config::SCREEN_W * 0.5f - 500, 1150, config::SCREEN_W * 0.5f + 500, (float)config::SCREEN_H - 14};
+            const std::vector<RenderEntity> low = {ent(Object::PLAYER, 500, 0, -60)};
+            float lb = 0, maxY = -1e9f;
+            int lowVerts = 0;
+            draw([&] {
+                DrawCloseEnemyWarning(low, cam, 3, &lb, LowHealthRoom(30));
+                const int n0 = ImGui::GetBackgroundDrawList()->VtxBuffer.Size;
+                DrawSelfHealth(30, 50, lb);
+                const auto& vb = ImGui::GetBackgroundDrawList()->VtxBuffer;
+                for (int i = 0; i < vb.Size; i++)
+                    if (std::abs(vb[i].pos.x - config::SCREEN_W * 0.5f) < 600) { //not the HP readout at the left
+                        maxY = std::max(maxY, vb[i].pos.y);
+                        lowVerts += i >= n0;
+                    }
+            });
+            CHECK(lb > 0 && lowVerts > 0 && maxY <= g_listRect.y0, "the close-enemy card and LOW HEALTH both stay above the player list");
+            g_listRect = {};
+        }
         //an enemy to your left and a little behind: his edge arrow lands at the readout's height on the left edge
         const std::vector<RenderEntity> side = {ent(Object::PLAYER, -681, -2000, 0)};
         const LabelRect r = SelfHealthRect();

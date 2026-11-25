@@ -165,6 +165,24 @@ struct NearCue {
     }
 };
 
+//Where the player list at the bottom was drawn (set by DrawPlayerListWindow, one frame old; all zero when it is not shown)
+inline LabelRect g_listRect;
+
+//The lowest the close-enemy card and LOW HEALTH may reach: 6 px above the player list (ImGui draws that window over
+//them), else the screen's bottom
+inline float WarnFloor() {
+    const float H = (float)config::SCREEN_H;
+    return g_listRect.x1 > g_listRect.x0 ? std::min(H, g_listRect.y0 - 6) : H;
+}
+
+//The room LOW HEALTH takes under the close-enemy card (its 10 px gap and its card), 0 when it does not show (as in
+//DrawSelfHealth: health read and 1 to 34)
+inline float LowHealthRoom(double hp) {
+    if (!config::showSelfHealth || !(hp >= 0)) return 0;
+    const long h = std::lround(hp);
+    return h >= 1 && h < 35 ? LabelSize("LOW HEALTH", config::labelSize * 2.4f).y + 12 + 10 : 0;
+}
+
 //Where the big HP/SH readout's card is (4 px past the text's sides, 2 px past top and bottom). DrawESP keeps labels and
 //edge arrows off it; with no text, the widest readout.
 inline LabelRect SelfHealthRect(const char* text = "HP 100   SH 100") {
@@ -176,7 +194,8 @@ inline LabelRect SelfHealthRect(const char* text = "HP 100   SH 100") {
 //Your own health and shield in big white text on a dark card, at the bottom left just above the game's health bar,
 //and a big red LOW HEALTH card below the crosshair under 35. hp < 0: not read, so nothing (never a guessed number).
 //shield < 0: not read or no shield offset, so health only. below: the bottom of the close-enemy card (0: none);
-//LOW HEALTH then goes under it instead of on top of it.
+//LOW HEALTH then goes right under it instead of on top of it (the card leaves LowHealthRoom for it). Never under the
+//player list or off the screen.
 inline void DrawSelfHealth(double hp, double shield, float below = 0) {
     if (!(hp >= 0)) return; //also NaN
     const int h = (int)std::lround(hp);
@@ -190,7 +209,7 @@ inline void DrawSelfHealth(double hp, double shield, float below = 0) {
     const char* warn = "LOW HEALTH";
     const float huge = ls * 2.4f, x = (float)config::SCREEN_W * 0.5f;
     const ImVec2 ts = LabelSize(warn, huge);
-    const float y = std::max((float)config::SCREEN_H * 0.62f, below + 10 + ts.y / 2 + 6);
+    const float y = std::min(below > 0 ? below + 10 + ts.y / 2 + 6 : (float)config::SCREEN_H * 0.62f, WarnFloor() - ts.y / 2 - 6);
     if (!COLOR::mono()) //white on solid red; monochrome: white on the dark card
         DrawRectFilled(x - ts.x / 2 - 14, y - ts.y / 2 - 6, x + ts.x / 2 + 14, y + ts.y / 2 + 6, COLOR::red);
     DrawLabelCentered(x, y, warn, huge, COLOR::white, COLOR::mono());
@@ -348,9 +367,6 @@ inline void DrawFacingLine(float x, float y, float dx, float dy, float r0, float
     DrawLine(x + dx * r0, y + dy * r0, x + dx * (r1 + 1), y + dy * (r1 + 1), IM_COL32(0, 0, 0, 200), t + 2.0f);
     DrawLine(x + dx * r0, y + dy * r0, x + dx * r1, y + dy * r1, color, t);
 }
-
-//Where the player list at the bottom was drawn (set by DrawPlayerListWindow, one frame old; all zero when it is not shown)
-inline LabelRect g_listRect;
 
 //Arrows at the screen edge for players outside your squad who are not on screen (to the side, or behind you). The arrows
 //keep other labels away from them; their distance labels only appear where there is room. Nearby live ARC get the same
@@ -580,7 +596,7 @@ inline void DrawESP(const std::vector<RenderEntity>& entities, FminimalViewInfo 
                 if (ent.isTurret && !config::showTurrets) continue;
                 if (dist > config::maxArcDist) continue;
                 color = COLOR::arc(ent.isDead);
-                radius = getProportionalRadius(dist, config::maxArcDist);
+                radius = getProportionalRadius(dist, config::maxArcDist) * 1.25; //a diamond covers 2 r^2: about the circle (pi r^2) it replaced
                 prio = 1;
                 nameOn = config::showArcNames;
                 shape = DrawDiamondFilled;
@@ -594,7 +610,7 @@ inline void DrawESP(const std::vector<RenderEntity>& entities, FminimalViewInfo 
             } else if (ent.type == Object::PICKUP) {
                 if (!config::showPickups || dist > config::maxLootDist) continue;
                 color = COLOR::pickup();
-                radius = getProportionalRadius(dist, config::maxLootDist);
+                radius = getProportionalRadius(dist, config::maxLootDist) * 1.25; //the same for the triangle
                 prio = 2;
                 nameOn = config::showItemNames && dist <= config::nameMaxLootDist;
                 shape = DrawTriangleFilled;
@@ -625,9 +641,10 @@ inline void DrawESP(const std::vector<RenderEntity>& entities, FminimalViewInfo 
 
 //A big card under the middle of the screen for the nearest enemy closer than warnDist: "ENEMY 9 m BEHIND", or
 //"3 ENEMIES - NEAREST 9 m LEFT". White text on a dark card framed in the enemy colour. Returns the text drawn;
-//bottom (if given) gets the card's lower edge, left alone when nothing is drawn.
+//bottom (if given) gets the card's lower edge, left alone when nothing is drawn. extraBelow: the room LOW HEALTH needs
+//under the card (LowHealthRoom), kept free above the player list and the screen's bottom.
 inline std::string DrawCloseEnemyWarning(const std::vector<RenderEntity>& entities, FminimalViewInfo vm, int localPlayerTeam,
-                                         float* bottom = nullptr) {
+                                         float* bottom = nullptr, float extraBelow = 0) {
     if (!config::closeWarning) return {};
     if (config::hideUnknownTeams && localPlayerTeam < 0) return {}; //no team to compare with: everyone is hidden
     const View v(vm, MakeProjection());
@@ -653,8 +670,13 @@ inline std::string DrawCloseEnemyWarning(const std::vector<RenderEntity>& entiti
     float cy = (float)v.cy + 140.0f;
     const ImVec2 ts = LabelSize(buf, size);
     const float hx = ts.x / 2 + 10, hy = ts.y / 2 + 6;
+    //The card and LOW HEALTH under it end above the player list (or the screen's bottom): moved up if needed, but its
+    //top stays 18 px or more below the crosshair
+    const float F = WarnFloor();
+    cy = std::min(cy, std::max(F - extraBelow - hy - 2, (float)v.cy + hy + 20));
     //Never over the nearest enemy when DrawESP shows him: below his box, bars and labels, above them when there is no
-    //room below (LOW HEALTH follows the card down). When he fills the screen top to bottom the card stays put.
+    //room below (LOW HEALTH follows the card, and fits between it and him). When he fills the screen top to bottom
+    //the card stays put.
     float bx, by, bw, bh;
     if (config::showPlayers && best <= config::maxPlayerDist && PlayerScreenBox(v, *nearest, bx, by, bw, bh)) {
         const float ls = config::labelSize, ls2 = ls * 0.9f, pad = config::labelCards ? 2.0f : 0.0f;
@@ -663,10 +685,10 @@ inline std::string DrawCloseEnemyWarning(const std::vector<RenderEntity>& entiti
         float half = bw / 2 + 2 * m + 16; //the health and shield bars on the right
         for (const std::string& s : {nearest->label, nearest->sub, std::string("999m")}) half = std::max(half, LabelSize(s.c_str(), ls).x / 2 + 4);
         const LabelRect him{bx - half, by - m - nameH - linesH, bx + half, by + bh + m + linesH};
-        const float gap = 8, H = (float)config::SCREEN_H;
+        const float gap = 8;
         if (RectsOverlap(him, {cx - hx - 2, cy - hy - 2, cx + hx + 2, cy + hy + 2})) {
-            if (him.y1 + gap + 2 * hy + 2 <= H) cy = him.y1 + gap + hy + 2;
-            else if (him.y0 - gap - 2 * hy - 2 >= 0) cy = him.y0 - gap - hy - 2;
+            if (him.y1 + gap + 2 * hy + 2 + extraBelow <= F) cy = him.y1 + gap + hy + 2;
+            else if (him.y0 - gap - 2 * hy - 2 - extraBelow >= 0) cy = him.y0 - gap - extraBelow - hy - 2;
         }
     }
     DrawRectFilled(cx - hx, cy - hy, cx + hx, cy + hy, IM_COL32(0, 0, 0, 220));
