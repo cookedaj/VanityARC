@@ -69,14 +69,14 @@ int main() {
 
     const std::vector<RenderEntity> noEntities;
     auto lastLive = std::chrono::steady_clock::now(); //the last frame with live data (or with no game running)
+    double quitArmedUntil = 0, clearArmedUntil = 0; //F10 and F7 act only on a second press within 2 s
     while (g_Running && !OverlayShouldClose()) {
         MenuPollToggle();
         //Stream-hide (F8, SIGUSR2 or the menu switch): while on, the overlay draws nothing and takes no mouse, so a screen
         //recording or stream shows none of it. The menu is closed, because it would be invisible and would block clicks.
         if (g_MenuQuit.exchange(false)) g_Running = false;
         if (g_KeyStream.exchange(false)) {
-            config::streamHide = !config::streamHide;
-            settings::save();
+            config::streamHide = !config::streamHide; //not saved: every launch starts visible
             std::cout << (config::streamHide ? "[+] Stream hide ON: the overlay draws nothing (F8 to show it)" : "[+] Stream hide OFF: the overlay is visible") << std::endl;
         }
         SetOverlayHidden(config::streamHide);
@@ -134,10 +134,21 @@ int main() {
         g_ui.localTeam = snap->localPlayerTeam;
         tracker.setInspected(g_MenuOpen ? InspectedActors() : std::vector<ptr>{});
 
-        //Hotkeys: F6 marks the player at the crosshair, F7 clears the marks, F10 quits
+        //Hotkeys: F6 marks the player at the crosshair, F7 clears the marks, F10 quits (F7 and F10: press twice)
         if (config::hotkeysEnabled) {
-            if (g_KeyQuit.exchange(false)) g_Running = false;
-            if (g_KeyClear.exchange(false)) { marks::clear(); marks::save(); Toast("Teammate marks cleared"); }
+            const double now = ImGui::GetTime();
+            if (g_KeyQuit.exchange(false)) {
+                if (now < quitArmedUntil) g_Running = false;
+                else { quitArmedUntil = now + 2.0; Toast("F10 again to quit", 2.0); }
+            }
+            if (g_KeyClear.exchange(false)) {
+                if (now < clearArmedUntil) { clearArmedUntil = 0; marks::clear(); marks::save(); Toast("Teammate marks cleared"); }
+                else {
+                    const size_t n = marks::all().size();
+                    clearArmedUntil = now + 2.0;
+                    Toast("F7 again to clear " + std::to_string(n) + (n == 1 ? " mark" : " marks"), 2.0);
+                }
+            }
             if (g_KeyMark.exchange(false)) {
                 if (!live) Toast("No live game data: F6 did nothing");
                 else {
