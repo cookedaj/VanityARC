@@ -295,9 +295,10 @@ inline void DrawSkeleton(const View& v, const skeleton::Pose& pose, ImU32 color,
     const Vector3 edge(centre.x + v.right.x * 9.0, centre.y + v.right.y * 9.0, centre.z + v.right.z * 9.0); //a head is about 9 cm in radius
     Vector2 c, e;
     if (v.project(centre, c) && v.project(edge, e) && std::isfinite(c.x + c.y + e.x + e.y)) {
-        const float r = std::max(2.0f, (float)std::hypot(e.x - c.x, e.y - c.y));
-        DrawCircleRing((float)c.x, (float)c.y, r, dark, thickness + 2.0f);
-        DrawCircleRing((float)c.x, (float)c.y, r, color, thickness);
+        const float r = (float)std::hypot(e.x - c.x, e.y - c.y); //across only: a stretched picture makes it sy/sx as tall
+        const float rx = std::max(2.0f, r), ry = std::max(2.0f, r * (float)(v.sy / v.sx));
+        DrawEllipseRing((float)c.x, (float)c.y, rx, ry, dark, thickness + 2.0f);
+        DrawEllipseRing((float)c.x, (float)c.y, rx, ry, color, thickness);
     }
 }
 

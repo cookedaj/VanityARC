@@ -61,6 +61,10 @@ inline void DrawCircleRing(float x, float y, float radius, ImU32 color, float th
     ImGui::GetBackgroundDrawList()->AddCircle(ImVec2(x, y), radius, Fade(color), 0, thickness);
 }
 
+inline void DrawEllipseRing(float x, float y, float rx, float ry, ImU32 color, float thickness = 1.0f) {
+    ImGui::GetBackgroundDrawList()->AddEllipse(ImVec2(x, y), ImVec2(rx, ry), Fade(color), 0.0f, 0, thickness);
+}
+
 inline void DrawBox(float x, float y, float w, float h, ImU32 color, float thickness = 1.5f) {
     ImGui::GetBackgroundDrawList()->AddRect(ImVec2(x, y), ImVec2(x + w, y + h), Fade(color), 0.0f, 0, thickness);
 }
