@@ -15,6 +15,7 @@
 #include "gamestate/Tracker.h"
 #include "utils/labels.h"
 #include "utils/names.h"
+#include "utils/offsets.h"
 
 static int fails = 0;
 #define CHECK(cond, msg) do { bool ok_ = (cond); std::printf("%s  %s\n", ok_ ? "PASS" : "FAIL", msg); if (!ok_) fails++; } while (0)
@@ -362,6 +363,49 @@ int main() {
     setCamera(cx, cy, cz, 0, 0, 5.0f);
     compare("FOV 5 (a high-zoom scope): both paths still draw");
     setCamera(cx, cy, cz, 0, 0, 70.0f);
+
+    //--- the shield (live:: offsets, from offsets.txt): in the HealthComponent or in a component of its own, as doubles or
+    //floats. Every player's bar must show the numbers written into the game, on both paths.
+    {
+        const u64 people[] = {enemy1, enemy2, corpse, mate};
+        auto findIn = [](const gsRet& r, u64 actor) -> const RenderEntity* {
+            for (const auto& e : r.entities) if (e.actor == actor) return &e;
+            return nullptr;
+        };
+        for (u64 p : people) put<u64>(p + 0x1000, alloc(0x700)); //a shield component of its own, at pawn+0x1000
+        auto comp = [](u64 p) { return get<u64>(p + (live::shieldComponent >= 0 ? (u64)live::shieldComponent : (u64)off::HEALTH_COMPONENT)); };
+        auto putNum = [](u64 a, double v) { put<u64>(a, 0); if (live::shieldIsFloat) put<float>(a, (float)v); else put<double>(a, v); };
+        for (int c = 0; c < 4; c++) { //each case writes other numbers: reading the wrong component finds the last case's
+            live::shieldComponent = (c & 1) ? 0x1000 : -1;
+            live::shieldIsFloat = c >> 1;
+            live::shieldValue = 0x600;
+            live::shieldMax = 0x608;
+            for (int i = 0; i < 4; i++) { putNum(comp(people[i]) + 0x600, 20.5 + 10 * i + c); putNum(comp(people[i]) + 0x608, 100.0 + 10 * i + c); }
+            const gsRet sa = ref.tick(), sb = fast.step();
+            bool ok = true;
+            for (int i = 0; i < 4; i++) for (const gsRet* r : {&sa, &sb}) {
+                const RenderEntity* e = findIn(*r, people[i]);
+                ok = ok && e && e->hasShield && e->shield == 20.5 + 10 * i + c && e->shieldMax == 100.0 + 10 * i + c;
+            }
+            char msg[160];
+            std::snprintf(msg, sizeof msg, "shield in %s, as %s: tick() and step() show the numbers written",
+                          (c & 1) ? "a component of its own" : "the HealthComponent", (c >> 1) ? "floats" : "doubles");
+            CHECK(ok, msg);
+        }
+        //No maximum in the game: step() keeps the highest shield seen as the full bar (tick() has no such fallback: not compared)
+        live::shieldComponent = -1; live::shieldIsFloat = 0; live::shieldMax = -1;
+        const u64 hc1 = get<u64>(enemy1 + off::HEALTH_COMPONENT);
+        put<double>(hc1 + 0x600, 250.0);
+        fast.step();
+        put<double>(hc1 + 0x600, 30.0);
+        const gsRet sm = fast.step();
+        const RenderEntity* s1 = findIn(sm, enemy1);
+        CHECK(s1 && s1->hasShield && s1->shield == 30.0 && s1->shieldMax == 250.0, "no maximum offset: a shield that drops keeps the highest seen as the full bar");
+        bool fits = true;
+        for (u64 p : people) { const RenderEntity* e = findIn(sm, p); fits = fits && e && e->hasShield && e->shieldMax >= e->shield; }
+        CHECK(fits, "no maximum offset: no player's full bar is shorter than his shield");
+        live::reset(); //the rest runs with the shield off, as before
+    }
 
     //--- speed (printed; the check is only that the fast path is clearly faster)
     {
