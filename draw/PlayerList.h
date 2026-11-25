@@ -195,8 +195,11 @@ inline void DrawInspectWindows() {
                     }
                 } else if (live::invArrays.empty()) {
                     ui::Note("The inventory lists are not set up yet (see offsets.txt in the config folder).");
+                } else if (!rows) {
+                    ui::Note("Reading inventory..."); //the tracker has not read this player yet
                 } else {
-                    ui::Note("Nothing readable: the game may not send this player's backpack to you.");
+                    ui::Note("Nothing readable. Either the game does not send this player's backpack to you, or the inventory "
+                             "offsets are out of date after a game update (run the inventory probe again).");
                 }
             }
         }
