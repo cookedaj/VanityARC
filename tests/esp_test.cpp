@@ -130,6 +130,21 @@ int main() {
     std::printf("      text vertices: one container %d, 300 stacked containers %d\n", oneText, crowdText);
     CHECK(oneText > 0 && crowdText <= oneText * 6, "300 containers on top of each other: only a few labels are drawn (around the first marker)");
 
+    //a busy room: 120 named containers spread over the screen, 12-20 m away. Each label is drawn 9 times (8 outline
+    //copies and the text); the frame must still fit 16-bit indices, for a GL context that cannot split the draw list
+    {
+        std::vector<RenderEntity> room;
+        for (int i = 0; i < 12; i++)
+            for (int j = 0; j < 10; j++) {
+                RenderEntity e = ent(Object::SEARCH, 1200, -1397 + i * 254, -720 + j * 160);
+                e.actor += i * 10 + j; e.label = "Trash can"; room.push_back(e);
+            }
+        const int roomText = textVerts(room), roomAll = draw([&] { DrawESP(room, cam, 3); });
+        std::printf("      busy room: %d vertices, %d of them text\n", roomAll, roomText);
+        CHECK(roomText >= oneText * 40, "busy room: most of the 120 labels are drawn");
+        CHECK(roomAll < (1 << 16), "busy room: the frame fits 16-bit indices");
+    }
+
 
     //---- shield bar: drawn while there is shield, gone when it is used up or cannot be read
     {
