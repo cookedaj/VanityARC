@@ -60,6 +60,7 @@ inline void load(const std::string& dir = "") {
     std::lock_guard<std::mutex> lk(detail::mu());
     while (std::getline(f, line)) {
         if (!line.empty() && line.back() == '\r') line.pop_back();
+        if (line.starts_with("\xEF\xBB\xBF")) line.erase(0, 3); //UTF-8 byte-order mark (some Windows editors add one)
         if (detail::valid(line)) detail::set().insert(line);
     }
     detail::ver()++;

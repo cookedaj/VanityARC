@@ -43,6 +43,7 @@ inline void load(const std::string& dir = "") {
     std::ifstream f(path(dir));
     std::string line;
     while (std::getline(f, line)) {
+        if (line.starts_with("\xEF\xBB\xBF")) line.erase(0, 3); //UTF-8 byte-order mark (some Windows editors add one)
         const size_t hash = line.find('#');
         if (hash != std::string::npos) line.erase(hash);
         std::istringstream in(line);
