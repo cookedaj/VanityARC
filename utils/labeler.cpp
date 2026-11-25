@@ -14,6 +14,14 @@
 #include "offsets.h"
 
 namespace labeler {
+
+std::string itemName(const std::string& key, bool gun) {
+    const amp::GunLevel g = amp::gunLevel(key);
+    if (g.level == 0 || !(gun || labels::isGun(key))) return labels::display(labels::Cat::Item, key);
+    //"AMP Canto"; your own name for the full internal key, or for "AMP Canto" itself, wins
+    return labels::display(labels::Cat::Item, key, amp::gunLabel(labels::display(labels::Cat::Item, g.base), g.level));
+}
+
 namespace {
 
 //The offsets live in config.h (off::), shared with the probe report so both always read the same fields
@@ -88,12 +96,6 @@ std::string assetName(uintptr_t p, const char* prefix) {
     return startsWith(n, prefix) ? n : std::string();
 }
 
-//A gun's shown name with its level: "Stitcher 4", "AMP Il Toro", or the plain name when the raw name has no level
-std::string gunName(const std::string& asset) {
-    const amp::GunLevel g = amp::gunLevel(asset);
-    return amp::gunLabel(labels::display(labels::Cat::Item, labels::itemToken(g.base)), g.level);
-}
-
 //The guns a player has: held first (inventory "current items" with a weapon actor), then the stowed slots
 std::string gunsOf(uintptr_t pawn) {
     uintptr_t inv = ReadMemory<uintptr_t>(pawn + PAWN_INVENTORY);
@@ -108,12 +110,12 @@ std::string gunsOf(uintptr_t pawn) {
             if (assetName(ReadMemory<uintptr_t>(rec), "BP_WeaponActor_").empty()) continue; //not a gun
             std::string asset = assetName(ReadMemory<uintptr_t>(rec + 0x10), "DA_Item_");
             if (asset.empty()) asset = assetName(ReadMemory<uintptr_t>(rec), "BP_WeaponActor_");
-            if (!asset.empty()) held.push_back(gunName(asset));
+            if (!asset.empty()) held.push_back(itemName(labels::itemToken(asset), true));
         }
     }
     for (int base : INV_STOWED) {
         std::string asset = assetName(ReadMemory<uintptr_t>(inv + base + 0x18), "DA_WeaponVisuals_");
-        if (!asset.empty()) stowed.push_back(gunName(asset));
+        if (!asset.empty()) stowed.push_back(itemName(labels::itemToken(asset), true));
     }
 
     std::string out;
@@ -244,7 +246,7 @@ void fillPickup(Info& in, uintptr_t actor, double t) {
         }
     }
     if (in.resolved && in.label.empty()) {
-        in.label = labels::display(labels::Cat::Item, in.key);
+        in.label = itemName(in.key);
     }
 }
 
@@ -305,7 +307,7 @@ std::vector<ItemRow> inventoryOf(uintptr_t pawn) {
             const int q = a.qty >= 0 ? std::clamp(ReadMemory<int>(rec + (uintptr_t)a.qty), 1, 9999) : 1; //stack size; not known: one per slot
             bool merged = false;
             for (ItemRow& r : out) if (r.key == key && r.category == a.category) { r.count += q; merged = true; break; }
-            if (!merged) { ItemRow r; r.name = labels::display(labels::Cat::Item, key); r.key = key; r.category = a.category; r.count = q; out.push_back(r); }
+            if (!merged) { ItemRow r; r.name = itemName(key); r.key = key; r.category = a.category; r.count = q; out.push_back(r); }
         }
     }
     return out;

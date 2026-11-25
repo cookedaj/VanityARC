@@ -42,6 +42,10 @@ int main() {
     CHECK(is("DA_Item_SMG_LowTier_01_Level_2", "DA_Item_SMG_LowTier_01", 2), "_Level_2");
     CHECK(is("DA_Item_SMG_LowTier_01_Tier4", "DA_Item_SMG_LowTier_01", 4), "_Tier4 in one token");
     CHECK(is("DA_Item_SMG_LowTier_01_Lvl_IV", "DA_Item_SMG_LowTier_01", 4), "_Lvl_IV");
+    CHECK(is("DA_Item_SMG_LowTier_01_IV", "DA_Item_SMG_LowTier_01", 4) && is("DA_Item_SMG_LowTier_01_II", "DA_Item_SMG_LowTier_01", 2), "a lone numeral after the number is a level");
+    //a level token this does not read gives no level, never AMP
+    CHECK(is("DA_Item_SMG_LowTier_01_T4", "DA_Item_SMG_LowTier_01_T4", 0), "_T4 is not AMP");
+    CHECK(is("DA_Item_SMG_LowTier_01_Level_6", "DA_Item_SMG_LowTier_01_Level_6", 0) && is("DA_Item_SMG_LowTier_01_Tier7", "DA_Item_SMG_LowTier_01_Tier7", 0), "_Level_6 and _Tier7 are not AMP");
 
     //amplified: the game's "Amplified <Gun>", the Ascended assets and the upgraded ones
     CHECK(is("Amplified Il Toro", "Il Toro", 5), "Amplified Il Toro");

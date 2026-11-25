@@ -32,7 +32,7 @@ struct GunLevel {
 //A gun's level from its raw asset name or a shown name:
 //  "Stitcher IV", "Stitcher 4", "Stitcher Lvl 4", "Il Toro Tier IV"   a level after a space (the game's own format)
 //  "..._T0" .. "..._T3"                                                 level I..IV (icons and redirect assets)
-//  "..._Level_4", "..._Tier4", "..._Lvl_IV"                             a level / tier token
+//  "..._Level_4", "..._Tier4", "..._Lvl_IV", "..._01_IV"                a level / tier token ("_T4", "_Level_6": no level)
 //  "Amplified Il Toro", "DA_Item_<Gun>_Ascended", "DA_WeaponVisuals_<Gun>_Ascended_Default_A"     amplified
 //  "DA_Item_<Gun>_01_<Upgrade>", "BP_WeaponActor_<Gun>_01_<Upgrade>_C"                         amplified (upgraded)
 //The "_01" after the gun is its variant number, never a level.
@@ -63,6 +63,12 @@ inline GunLevel gunLevel(const std::string& raw) {
         if (drop[i]) continue;
         if (t[i].sep == ' ' && i + 1 == t.size() && numeral(s)) { found(numeral(s), i); continue; } //"Stitcher IV"
         if (t[i].sep == '_' && !s.empty() && s.find_first_not_of("0123456789") == std::string::npos) { numSeen = true; continue; }
+        if (numSeen && t[i].sep == '_') {
+            if (s.size() >= 2 && numeral(s)) { found(numeral(s), i); continue; } //"_01_IV" ("_I" / "_V" stay variant letters)
+            //a level word this does not read ("_T4", "_Level_6", "Tier7") is not an upgrade
+            const bool tDigits = s.size() >= 2 && s[0] == 't' && s.find_first_not_of("0123456789", 1) == std::string::npos;
+            if (tDigits || s.starts_with("lvl") || s.starts_with("level") || s.starts_with("tier")) continue;
+        }
         //A word after the gun's number is an upgrade ("MoreReload", "Carbine", "ChargedBurst"). "A", "C" and "02" are
         //variants, and "Default" is the plain look of a stowed gun.
         if (numSeen && t[i].sep == '_' && s.size() >= 2 && s != "default") { g.level = 5; cut = std::min(cut, i); }

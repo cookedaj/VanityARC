@@ -31,7 +31,7 @@ Google/ask AI how to set up the build utility inside of CLion (Release build).
     Ferro = My rifle
     ```
     Delete the line to go back to the built-in name. Lines starting with `#` are ignored. The overlay only reads this file, it never changes it. (The older form `category<TAB>internal key<TAB>your name`, for example `item<TAB>BattleRifle_BreachAction_01<TAB>My rifle`, still works and wins over a shown-name line.)
-    Guns show their level the way the game does, as a plain number: `Stitcher 4`, `Anvil 2`, and `AMP Il Toro` for an amplified gun. The game does not put levels 1 to 4 in the names the overlay can read yet, so those guns show their plain name (`Stitcher`); amplified guns already show `AMP`.
+    Guns show their level as a plain number, `Stitcher 4` (the game writes `Stitcher IV`), and an amplified gun as `AMP Il Toro` (the game writes `Amplified Il Toro`). This is the same under a player's name, in the inventory window and on the ground. The game does not put levels 1 to 4 in the names the overlay can read yet, so those guns show their plain name (`Stitcher`); amplified guns already show `AMP`.
 
 ## Known Issues
 1) ESP gets distorted at the edges. Fix it in Insert menu > Settings > Calibration.

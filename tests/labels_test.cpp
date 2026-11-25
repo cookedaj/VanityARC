@@ -175,7 +175,8 @@ int main() {
     CHECK(D(Cat::Item, "DA_Item_HEGrenade") == "Heavy Fuze Grenade", "grenade Heavy Fuze Grenade");
     CHECK(D(Cat::Item, "DA_Item_CrashPad") == "Crash Mat" && D(Cat::Item, "DA_Item_Recipe_CrashPadRecipe") == "Crash Mat Blueprint", "item and its blueprint");
     CHECK(D(Cat::Item, "DA_Item_Recipe_LauncherAntiARCSingleShot01Recipe") == "Rascal Blueprint", "a gun blueprint is not the gun");
-    CHECK(D(Cat::Item, "DA_Item_Recipe_BattlerifleLight01Recipe") != "Stiletto", "an unknown blueprint is not shown as its gun");
+    CHECK(D(Cat::Item, "DA_Item_Recipe_TestOnly_SMG_LowTier_01Recipe") != "Stitcher", "an unknown blueprint is not shown as its gun");
+    CHECK(labels::isGun("SMG_Medium_01_Carbine") && !labels::isGun("Recipe_TestOnly_SMG_LowTier_01Recipe") && !labels::isGun("Augment_Combat_T1"), "isGun: a gun, not a blueprint or an augment");
     CHECK(D(Cat::Item, "DA_Item_Salvage_Planks") == "Planks", "item name after Salvage_");
     CHECK(D(Cat::Item, "DA_Item_Salvage_Trinket_BurntoutCandles") == "Burnt-out Candles", "item name after Salvage_Trinket_, game spelling");
     CHECK(D(Cat::Item, "DA_Item_IntegratedDefibrillator") == "Integrated Defibrillator", "item Integrated Defibrillator");
@@ -348,6 +349,13 @@ int main() {
     RenderEntity eAmp = ent(Object::PLAYER, 50.0, ampPawn);
     labeler::fill(eAmp);
     CHECK(eAmp.sub == "AMP Canto (held) + AMP Stitcher", "player guns: amplified guns show AMP before the name");
+    //the inventory list and ground items use the same names, but only a gun gets a level
+    CHECK(labeler::itemName("SMG_Medium_01_Carbine") == "AMP Canto" && labeler::itemName("Shotgun_PumpAction_01_Ascended") == "AMP Il Toro", "inventory and ground: an amplified gun shows AMP");
+    CHECK(labeler::itemName("Augment_Combat_T1") == "Combat Mk. 1", "an augment's _T1 is not a gun level");
+    { std::ofstream out(labelsFile, std::ios::binary | std::ios::app); out << "item\tSMG_Medium_01_Carbine\tMy Canto\n" "AMP Il Toro = Bull\n"; }
+    labels::load();
+    CHECK(labeler::itemName("SMG_Medium_01_Carbine") == "My Canto", "labels.txt: a TAB line for the full internal key of an amplified gun still works");
+    CHECK(labeler::itemName("Shotgun_PumpAction_01_Ascended") == "Bull", "labels.txt: 'AMP Il Toro = ...' works");
 
     //player with no PlayerState: no name, no crash
     u64 lone = makeObject(0x1400, 0x2000, 2);

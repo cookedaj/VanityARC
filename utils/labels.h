@@ -24,6 +24,10 @@ std::string display(Cat c, const std::string& key, const std::string& def = "");
 //Item / gun key: the part of a raw name that identifies the item ("BattleRifle_BreachAction_01")
 std::string itemToken(const std::string& raw);
 
+//True when an item key's built-in name comes from the gun table ("SMG_Medium_01_Carbine": Canto). Not for a blueprint
+//or an augment, so their "_T1" or "_02" is never read as a gun level.
+bool isGun(const std::string& key);
+
 int load();                       //read labels.txt (call once at start); returns how many lines were ignored
 void setDir(const std::string& dir); //tests only; default is ~/.config/kwin-helper
 
