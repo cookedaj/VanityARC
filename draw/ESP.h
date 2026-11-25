@@ -329,8 +329,9 @@ inline void DrawESP(const std::vector<RenderEntity>& entities, FminimalViewInfo 
                 continue;
             }
 
-            const float h = (float)(sFeet.y - sHead.y);
-            if (h < 2.0f) continue;
+            const float rawH = (float)(sFeet.y - sHead.y);
+            if (!std::isfinite(rawH)) continue;
+            const float h = std::max(6.0f, rawH); //a far player still gets a box, name and distance
             const float w = h / 2.0f * (float)(v.sx / v.sy), x0 = (float)sHead.x - w / 2, y0 = (float)sHead.y; //a stretched picture makes people wider
             const float th = std::min(4.0f, std::max(1.0f, config::boxThickness));
             const int style = (int)config::boxStyle;
