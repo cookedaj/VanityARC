@@ -11,6 +11,7 @@
 #include <string>
 #include <vector>
 
+#include "ESP.h"
 #include "Overlay.h"
 #include "PlayerList.h"
 #include "UiKit.h"
@@ -277,12 +278,36 @@ inline void StepRow(const char* label, double* v, double lo, double hi) {
     ImGui::PopID();
 }
 
+inline constexpr ImU32 GUIDE_YELLOW = IM_COL32(255, 230, 0, 255);
+
+//A thick yellow frame round the game's picture and a big cross on the middle of the projection (Shift X / Y included),
+//both edged in black so they show on any background. Worked out from the projection alone, not from a camera View:
+//in the lobby the camera has no FOV and a View would put the middle at 0,0. Under the menu, so it covers no control.
+inline void DrawCalibrationGuide() {
+    const Projection p = MakeProjection();
+    const float x = (float)p.dx, y = (float)p.dy;
+    const float w = (float)(p.dw > 0 ? p.dw : p.width), h = (float)(p.dh > 0 ? p.dh : p.height);
+    const float cx = x + w / 2 + (float)p.offX, cy = y + h / 2 + (float)p.offY; //as View works out cx, cy
+    const ImU32 black = IM_COL32(0, 0, 0, 255);
+    ImDrawList* dl = ImGui::GetBackgroundDrawList();
+    const float in = 5; //the black edge's outer side lies on the picture's edge, so none of it falls off screen
+    dl->AddRect(ImVec2(x + in, y + in), ImVec2(x + w - in, y + h - in), black, 0.0f, 0, 10.0f);
+    dl->AddRect(ImVec2(x + in, y + in), ImVec2(x + w - in, y + h - in), GUIDE_YELLOW, 0.0f, 0, 6.0f);
+    const float gap = 10, len = 70; //the gap leaves the game's own crosshair visible in the middle
+    const ImVec2 dirs[4] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
+    for (const ImVec2& d : dirs) dl->AddLine(ImVec2(cx + d.x * (gap - 2), cy + d.y * (gap - 2)), ImVec2(cx + d.x * (len + 2), cy + d.y * (len + 2)), black, 10.0f);
+    for (const ImVec2& d : dirs) dl->AddLine(ImVec2(cx + d.x * gap, cy + d.y * gap), ImVec2(cx + d.x * len, cy + d.y * len), GUIDE_YELLOW, 6.0f);
+}
+
 //The game view part of the Settings tab (stretched resolution, gamescope, calibration)
 inline void DrawGameViewSettings() {
     using namespace ui;
+    const float top = ImGui::GetCursorScreenPos().y;
     Section("GAME VIEW: STRETCHED RESOLUTION / GAMESCOPE");
     Switch("Detect automatically", &config::gameViewAuto);
     Note(g_gameView.how.c_str());
+    Note("While this part is on screen, a yellow frame shows where the overlay thinks the game's picture is and a yellow cross shows its middle. "
+         "The frame should sit on the picture's edges (if not, fix the game view here). The cross should sit on the game's crosshair (if not, fix Shift X / Shift Y).");
     if (!config::gameViewAuto) {
         static bool custom = false; //"Custom" was picked: keep the step buttons even when the size matches a listed one
         int idx = GAME_SIZE_CUSTOM;
@@ -317,6 +342,9 @@ inline void DrawGameViewSettings() {
         config::centerOffsetX = config::centerOffsetY = 0.0f;
         config::useCameraRoll = true;
     }
+    //only while some of this part is scrolled into view on the page
+    const float left = ImGui::GetWindowPos().x;
+    if (ImGui::IsRectVisible(ImVec2(left, top), ImVec2(left + ImGui::GetWindowWidth(), ImGui::GetCursorScreenPos().y))) DrawCalibrationGuide();
 }
 
 inline void PageSettings() {

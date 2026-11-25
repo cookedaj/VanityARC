@@ -56,6 +56,10 @@ int main() {
     g_OverlayNote = "Monitor 'DP-9' not found (have: DP-1)\nThe desktop chose the monitor"; //the overlay window part shows it
     for (int i = 0; i < 3; i++) frame([] { DrawMenu(); });
     CHECK(true, "menu draws the Settings page");
+    auto yellow = [] { for (const ImDrawVert& v : ImGui::GetBackgroundDrawList()->VtxBuffer) if (v.col == GUIDE_YELLOW) return true; return false; };
+    CHECK(yellow(), "the Settings page draws the yellow game picture frame and centre cross");
+    g_MenuTab = 0; frame([] { DrawMenu(); });
+    CHECK(!yellow(), "other pages do not draw the calibration guide");
     g_OverlayNote.clear();
 
     //typing: Ctrl+click turns a menu slider into a number box, then keys arrive through the same queue the keyboard thread fills
