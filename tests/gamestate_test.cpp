@@ -137,6 +137,7 @@ static double nowMs() {
 }
 
 int main() {
+    live::shieldValue = -1; //the world checks run without a shield; the shield block below sets its own
     ProcessId = getpid();
     const size_t size = 0x30000000;
     uint8_t* region = (uint8_t*)mmap(nullptr, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
@@ -627,6 +628,12 @@ int main() {
         bool fits = true;
         for (u64 p : people) { const RenderEntity* e = findIn(sm, p); fits = fits && e && e->hasShield && e->shieldMax >= e->shield; }
         CHECK(fits, "no maximum offset: no player's full bar is shorter than his shield");
+        live::reset(); //the built-in offsets: HealthComponent +0x1d0 current, +0x1d8 maximum
+        put<double>(hc1 + 0x1D0, 40.0);
+        put<double>(hc1 + 0x1D8, 40.0);
+        const gsRet sd = fast.step();
+        const RenderEntity* d1 = findIn(sd, enemy1);
+        CHECK(d1 && d1->hasShield && d1->shield == 40.0 && d1->shieldMax == 40.0, "the built-in shield offsets read a Light Shield");
         live::reset(); live::shieldValue = -1; //the rest runs with the shield off, as before
     }
 
