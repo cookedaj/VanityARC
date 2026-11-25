@@ -383,7 +383,7 @@ inline void DrawESP(const std::vector<RenderEntity>& entities, FminimalViewInfo 
             double mx, my, mz;
             v.toCamera(midPos, mx, my, mz);
             const float w = std::max(3.0f, (float)(90.0 * v.focal * v.sx / mz)), x0 = (float)sHead.x - w / 2, y0 = (float)sHead.y;
-            const float th = std::min(4.0f, std::max(1.0f, config::boxThickness));
+            const float th = std::min(10.0f, std::max(1.0f, config::boxThickness));
             const int style = (int)config::boxStyle;
             if (style == 1) DrawBoxOutlined(x0, y0, w, h, color, th);
             else if (style == 2) DrawSidesBox(x0, y0, w, h, color, th);

@@ -182,7 +182,7 @@ inline void PageEsp() {
     Choice("Box style", &config::boxStyle, {"Corners", "Full", "Sides"});
     Choice("Box colour", &config::boxColor, {"Red", "White", "Yellow", "Blue", "Green", "Violet"});
     Switch("Monochrome (white and grey)", &config::monochrome);
-    Slider("Line thickness", &config::boxThickness, 1.0f, 4.0f, "%.1f px");
+    Slider("Line thickness", &config::boxThickness, 1.0f, 10.0f,"%.1f px");
     Switch("Health and shield bars", &config::showBars);
     Section("SKELETON");
     Switch("Skeleton on players", &config::showSkeleton);

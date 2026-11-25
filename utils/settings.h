@@ -42,7 +42,7 @@ inline std::vector<Entry>& table() {
         D("maxPlayerDist", &config::maxPlayerDist, 50, 800); D("maxArcDist", &config::maxArcDist, 20, 500);
         D("maxLootDist", &config::maxLootDist, 5, 150); D("nameMaxLootDist", &config::nameMaxLootDist, 3, 150);
         D("boxStyle", &config::boxStyle, 0, 2); D("boxColor", &config::boxColor, 0, 5);
-        F("boxThickness", &config::boxThickness, 1, 4);
+        F("boxThickness", &config::boxThickness, 1, 10);
         F("overlayOpacity", &config::overlayOpacity, 0.2, 1); F("menuOpacity", &config::menuOpacity, 0.5, 1);
         D("trackerHz", &config::trackerHz, 30, 240);
         D("listMode", &config::listMode, 0, 2); D("listRows", &config::listRows, 3, 16);
