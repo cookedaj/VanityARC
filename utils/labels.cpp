@@ -277,10 +277,7 @@ void load() {
         const size_t a = s.find_first_not_of(" \t"), b = s.find_last_not_of(" \t");
         return a == std::string::npos ? std::string() : s.substr(a, b - a + 1);
     };
-    bool first = true;
     while (std::getline(f, line)) {
-        if (first && line.compare(0, 3, "\xEF\xBB\xBF") == 0) line.erase(0, 3); //UTF-8 mark some editors put first
-        first = false;
         if (!line.empty() && line.back() == '\r') line.pop_back(); //file edited on another system
         if (line.starts_with("\xEF\xBB\xBF")) line.erase(0, 3); //UTF-8 byte-order mark (some Windows editors add one)
         size_t a = line.find('\t');
