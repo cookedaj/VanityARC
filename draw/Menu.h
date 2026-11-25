@@ -311,6 +311,10 @@ inline void PageSettings() {
          "(Enter when done), or Space and then Left / Right.");
     Switch("Stream hide (F8)", &config::streamHide);
     Note("Stream hide draws nothing, so recordings and streams show no overlay. F8 always works, even with Hotkeys off. While it is on the menu cannot be opened: press F8 first.");
+    Section("OVERLAY WINDOW");
+    if (g_OverlayWhere) ImGui::TextWrapped("%s", g_OverlayWhere().c_str());
+    if (!g_OverlayNote.empty()) ImGui::TextWrapped("%s", g_OverlayNote.c_str()); //the setup problem shown at the start
+    Note("Pick the monitor with: bash start.sh DP-1 (names: kscreen-doctor -o)");
     Section("FILES");
     Note("Settings, names, offsets and marks are in ~/.config/kwin-helper/");
     static double resetArmedAt = -1;

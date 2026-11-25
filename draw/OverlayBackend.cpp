@@ -9,6 +9,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
+#include <strings.h>
 #include <iostream>
 #include <string>
 
@@ -79,10 +80,13 @@ bool initGlfw() {
         GLFWmonitor* found = nullptr;
         for (int i = 0; i < count && !found; ++i) {
             const char* name = glfwGetMonitorName(all[i]);
-            if (name && std::strcmp(name, want) == 0) found = all[i];
+            if (name && strcasecmp(name, want) == 0) found = all[i]; //"dp-2" finds DP-2
         }
         if (found) monitor = found;
-        else std::cerr << "[!] Monitor '" << want << "' not found. Sizing the window from the primary monitor." << std::endl;
+        else if (count > 1) { //with one monitor the primary one is the right one
+            std::cerr << "[!] Monitor '" << want << "' not found. Sizing the window from the primary monitor." << std::endl;
+            g_OverlayNote += std::string(g_OverlayNote.empty() ? "" : "\n") + "Monitor '" + want + "' not found: the window is sized from the primary monitor";
+        }
     }
     if (!monitor) {
         std::cerr << "[-] Failed to get primary monitor." << std::endl;
@@ -106,6 +110,13 @@ bool initGlfw() {
     return true;
 }
 
+//For the Settings tab
+std::string overlayWhere() {
+    if (g_kind != Kind::Layer) return "Normal window (no layer-shell): it cannot show over a fullscreen game";
+    const std::string& m = g_layer->monitorName();
+    return "Layer-shell" + (m.empty() ? std::string() : " on " + m) + ": shows over fullscreen games";
+}
+
 } // namespace
 
 bool InitOverlay() {
@@ -118,8 +129,10 @@ bool InitOverlay() {
             g_kind = Kind::Layer;
             config::SCREEN_W = g_layer->width();
             config::SCREEN_H = g_layer->height();
+            g_OverlayNote = g_layer->note();
         } else {
             std::cerr << "[!] No layer-shell overlay (" << err << "). Using a normal window: it cannot show over a fullscreen game." << std::endl;
+            g_OverlayNote = "No layer-shell overlay: " + err + "\nUsing a normal window: it cannot show over a fullscreen game";
             delete g_layer;
             g_layer = nullptr;
         }
@@ -153,6 +166,7 @@ bool InitOverlay() {
     ImGui_ImplOpenGL3_Init("#version 130");
 
     g_SetInteractive = setInteractive;
+    g_OverlayWhere = overlayWhere;
     g_last = std::chrono::steady_clock::now();
     std::cout << "[+] Overlay Initialized (" << OverlayBackendName();
     if (g_kind == Kind::Layer) std::cout << ", " << g_layer->width() << "x" << g_layer->height()
@@ -254,6 +268,7 @@ bool OverlayReady() {
     }
     ImGui_ImplOpenGL3_Init("#version 130"); //new GL context: shaders and the font texture are made again
     g_layer->setInteractive(g_interactive);  //the menu is open: the new surface takes the mouse too
+    g_OverlayNote = g_layer->note();         //on the asked-for monitor again, or a new problem to show
     g_down = false;
     g_last = now;
     std::cout << "[+] Overlay back (" << g_layer->width() << "x" << g_layer->height()
@@ -270,6 +285,7 @@ void OverlayShutdown() {
         ImGui::DestroyContext();
     }
     g_SetInteractive = nullptr;
+    g_OverlayWhere = nullptr;
     if (g_layer) { delete g_layer; g_layer = nullptr; }
     if (g_glfw) {
         glfwHideWindow(g_glfw);

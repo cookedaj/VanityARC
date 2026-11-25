@@ -16,6 +16,10 @@
 
 //Set by the window code: true while the menu is open (the overlay then takes the mouse), false otherwise
 inline void (*g_SetInteractive)(bool) = nullptr;
+//Set by the window code: what the overlay window is and where (for the Settings tab), and a window setup problem
+//(wrong monitor name, no layer-shell) that main.cpp shows in large text until the menu is opened ("" = none)
+inline std::string (*g_OverlayWhere)() = nullptr;
+inline std::string g_OverlayNote;
 
 inline ImFont* g_overlayFont = nullptr; //bold font for the labels on screen (null: ImGui's default)
 

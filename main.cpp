@@ -95,6 +95,7 @@ int main() {
     //A message at the top of the screen that is also said out loud (when spoken cues are on)
     auto tell = [](const std::string& text, double seconds = 3.0) { Toast(text, seconds); cue::say(text); };
     bool hadKeyboard = false; //a keyboard was open at some point in this run
+    std::string noteSeen;   //the window setup problem that was on screen when the menu was opened
     while (g_Running && !OverlayShouldClose()) {
         MenuPollToggle();
         //Stream-hide (F8, SIGUSR2 or the menu switch): while on, the overlay draws nothing and takes no mouse, so a screen
@@ -256,6 +257,18 @@ int main() {
             y += ls + 8;
             DrawLabelCentered(x, y, "Open the menu meanwhile with:  pkill -USR1 -x kwin-helper", ls, COLOR::white, true);
             below = y + ls + 10;
+        }
+        //A window setup problem (monitor name not found, no layer-shell): big on the overlay, not only in the terminal,
+        //until the menu is opened. A different problem later (the surface made again) shows again.
+        if (g_MenuOpen) noteSeen = g_OverlayNote;
+        if (!g_OverlayNote.empty() && g_OverlayNote != noteSeen) {
+            const std::string body = g_OverlayNote + "\nOpen the menu (Insert) to hide this message";
+            const float x = (float)config::SCREEN_W * 0.5f, ls = config::labelSize, big = ls * 1.6f, bh = LabelSize(body.c_str(), ls).y;
+            float y = below + big / 2;
+            DrawLabelCentered(x, y, "OVERLAY WINDOW PROBLEM", big, COLOR::white, true);
+            y += big / 2 + 8 + bh / 2;
+            DrawLabelCentered(x, y, body.c_str(), ls, COLOR::white, true);
+            below = y + bh / 2 + 10;
         }
         DrawToast(below);
 
