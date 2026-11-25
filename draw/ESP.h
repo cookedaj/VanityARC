@@ -346,7 +346,13 @@ inline void DrawESP(const std::vector<RenderEntity>& entities, FminimalViewInfo 
             const float rawH = (float)(sFeet.y - sHead.y);
             if (!std::isfinite(rawH)) continue;
             const float h = std::max(6.0f, rawH); //a far player still gets a box, name and distance
-            const float w = h / 2.0f * (float)(v.sx / v.sy), x0 = (float)sHead.x - w / 2, y0 = (float)sHead.y; //a stretched picture makes people wider
+            //About 90 cm wide whatever the pose (only the height follows it), at the depth of the box's middle; head and
+            //feet are both in front, so the middle is too. A stretched picture makes people wider. Never under 3 px, so a
+            //far player's box stays visible.
+            Vector3 midPos = ent.pos; midPos.z = (boxTop + boxBottom) / 2;
+            double mx, my, mz;
+            v.toCamera(midPos, mx, my, mz);
+            const float w = std::max(3.0f, (float)(90.0 * v.focal * v.sx / mz)), x0 = (float)sHead.x - w / 2, y0 = (float)sHead.y;
             const float th = std::min(4.0f, std::max(1.0f, config::boxThickness));
             const int style = (int)config::boxStyle;
             if (style == 1) DrawBoxOutlined(x0, y0, w, h, color, th);
