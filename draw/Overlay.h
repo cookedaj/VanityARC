@@ -82,11 +82,13 @@ inline void DrawTextImGui(float x, float y, ImU32 color, const char* text) {
 inline ImVec2 LabelSize(const char* text, float size) { return OverlayFont()->CalcTextSizeA(size, FLT_MAX, 0.0f, text); }
 
 //Text centred on x. Plain: white with a black outline, readable over any background. Card: on a dark rectangle.
-inline void DrawLabelCentered(float x, float y, const char* text, float size = 15.0f, ImU32 color = IM_COL32(255, 255, 255, 255), bool card = false) {
+//dl: where to draw (null: the background list, under the menu)
+inline void DrawLabelCentered(float x, float y, const char* text, float size = 15.0f, ImU32 color = IM_COL32(255, 255, 255, 255), bool card = false,
+                              ImDrawList* dl = nullptr) {
     ImFont* font = OverlayFont();
     ImVec2 ts = font->CalcTextSizeA(size, FLT_MAX, 0.0f, text);
     ImVec2 p(x - ts.x / 2.0f, y - ts.y / 2.0f);
-    ImDrawList* dl = ImGui::GetBackgroundDrawList();
+    if (!dl) dl = ImGui::GetBackgroundDrawList();
     if (card) {
         dl->AddRectFilled(ImVec2(p.x - 4, p.y - 2), ImVec2(p.x + ts.x + 4, p.y + ts.y + 2), Fade(IM_COL32(0, 0, 0, 185)));
         dl->AddText(font, size, p, Fade(color), text);
@@ -102,12 +104,12 @@ inline void DrawLabelCentered(float x, float y, const char* text, float size = 1
     dl->AddText(font, size, p, Fade(color), text);
 }
 
-inline void DrawRectFilled(float x0, float y0, float x1, float y1, ImU32 color) {
-    ImGui::GetBackgroundDrawList()->AddRectFilled(ImVec2(x0, y0), ImVec2(x1, y1), Fade(color));
+inline void DrawRectFilled(float x0, float y0, float x1, float y1, ImU32 color, ImDrawList* dl = nullptr) {
+    (dl ? dl : ImGui::GetBackgroundDrawList())->AddRectFilled(ImVec2(x0, y0), ImVec2(x1, y1), Fade(color));
 }
 
-inline void DrawRectOutline(float x0, float y0, float x1, float y1, ImU32 color, float t = 1.0f) {
-    ImGui::GetBackgroundDrawList()->AddRect(ImVec2(x0, y0), ImVec2(x1, y1), Fade(color), 0.0f, 0, t);
+inline void DrawRectOutline(float x0, float y0, float x1, float y1, ImU32 color, float t = 1.0f, ImDrawList* dl = nullptr) {
+    (dl ? dl : ImGui::GetBackgroundDrawList())->AddRect(ImVec2(x0, y0), ImVec2(x1, y1), Fade(color), 0.0f, 0, t);
 }
 
 //Full rectangle with a dark edge so it shows on any background

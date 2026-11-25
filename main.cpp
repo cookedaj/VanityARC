@@ -135,9 +135,15 @@ int main() {
             }
             g_TextGrab = false;
         }
+        //F10 quits on a second press within 2 s, the same while the surface is being made again (said out loud, so it
+        //is heard with nothing on screen). steady_clock: ImGui's clock stands still while no frame is drawn.
+        if (config::hotkeysEnabled && g_KeyQuit.exchange(false)) {
+            const double tNow = std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
+            if (tNow < quitArmedUntil) { g_Running = false; cue::say("Overlay closed"); }
+            else { quitArmedUntil = tNow + 2.0; tell("F10 again to quit", 2.0); }
+        }
         if (!OverlayReady()) { //the overlay surface is gone and is being made again; the tracker keeps running
             g_TextGrab = false; //no text box to type into: the keyboard stays with the game
-            if (config::hotkeysEnabled && g_KeyQuit.exchange(false)) g_Running = false; //F10 still quits
             g_KeyMark = false; g_KeyClear = false; //no stale F6/F7 when the surface comes back
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
             continue;
@@ -213,13 +219,9 @@ int main() {
         g_ui.localTeam = snap->localPlayerTeam;
         tracker.setInspected(g_MenuOpen ? InspectedActors() : std::vector<ptr>{});
 
-        //Hotkeys: F6 marks the player at the crosshair, F7 clears the marks, F10 quits (F7 and F10: press twice)
+        //Hotkeys: F6 marks the player at the crosshair, F7 clears the marks (press twice); F10 is handled further up
         if (config::hotkeysEnabled) {
             const double now = ImGui::GetTime();
-            if (g_KeyQuit.exchange(false)) {
-                if (now < quitArmedUntil) { g_Running = false; cue::say("Overlay closed"); }
-                else { quitArmedUntil = now + 2.0; tell("F10 again to quit", 2.0); }
-            }
             if (g_KeyClear.exchange(false)) {
                 if (now < clearArmedUntil) { clearArmedUntil = 0; marks::clear(); marks::save(); tell("Teammate marks cleared"); }
                 else {
@@ -321,11 +323,14 @@ int main() {
             DrawLabelCentered(x, y, body.c_str(), ls, COLOR::white, true);
             below = y + bh / 2 + 10 + ls / 2;
         }
-        DrawToast(below);
+        //The menu is the only thing drawn over the warnings; while it is open, the toast and the close-enemy card are
+        //drawn over it (the foreground list). LOW HEALTH stays under it: on top it would block menu rows for long.
+        ImDrawList* const overMenu = g_MenuOpen ? ImGui::GetForegroundDrawList() : nullptr;
+        DrawToast(below, overMenu);
 
-        //The close-enemy warning goes last so nothing covers it; LOW HEALTH moves below it when both show
+        //The close-enemy warning goes last so no other card covers it; LOW HEALTH moves below it when both show
         float warnBottom = 0;
-        if (live && config::espEnabled) DrawCloseEnemyWarning(ents, vm, snap->localPlayerTeam, &warnBottom, LowHealthRoom(snap->selfHealth));
+        if (live && config::espEnabled) DrawCloseEnemyWarning(ents, vm, snap->localPlayerTeam, &warnBottom, LowHealthRoom(snap->selfHealth), overMenu);
         if (live && config::showSelfHealth) DrawSelfHealth(snap->selfHealth, snap->selfShield, warnBottom); //old data: nothing, never an old number
 
         RenderEnd(DrawUi);

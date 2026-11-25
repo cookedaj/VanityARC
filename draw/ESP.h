@@ -117,9 +117,10 @@ inline float DrawStatusCard(const std::string& line1, const std::string& line2, 
 
 inline bool ToastShowing() { return !g_toast.empty() && ImGui::GetTime() < g_toastUntil; }
 
-inline void DrawToast(float y) {
+//dl: where to draw (null: the background list; main.cpp passes the foreground list while the menu is open)
+inline void DrawToast(float y, ImDrawList* dl = nullptr) {
     if (!ToastShowing()) return;
-    DrawLabelCentered((float)config::SCREEN_W * 0.5f, y, g_toast.c_str(), config::labelSize, COLOR::white, true);
+    DrawLabelCentered((float)config::SCREEN_W * 0.5f, y, g_toast.c_str(), config::labelSize, COLOR::white, true, dl);
 }
 
 //Which way a point is from the camera, flat (the camera's yaw only, so looking up or down changes nothing): 0 ahead,
@@ -642,9 +643,10 @@ inline void DrawESP(const std::vector<RenderEntity>& entities, FminimalViewInfo 
 //A big card under the middle of the screen for the nearest enemy closer than warnDist: "ENEMY 9 m BEHIND", or
 //"3 ENEMIES - NEAREST 9 m LEFT". White text on a dark card framed in the enemy colour. Returns the text drawn;
 //bottom (if given) gets the card's lower edge, left alone when nothing is drawn. extraBelow: the room LOW HEALTH needs
-//under the card (LowHealthRoom), kept free above the player list and the screen's bottom.
+//under the card (LowHealthRoom), kept free above the player list and the screen's bottom. dl: where to draw (null: the
+//background list; main.cpp passes the foreground list while the menu is open, so the menu never hides the card).
 inline std::string DrawCloseEnemyWarning(const std::vector<RenderEntity>& entities, FminimalViewInfo vm, int localPlayerTeam,
-                                         float* bottom = nullptr, float extraBelow = 0) {
+                                         float* bottom = nullptr, float extraBelow = 0, ImDrawList* dl = nullptr) {
     if (!config::closeWarning) return {};
     if (config::hideUnknownTeams && localPlayerTeam < 0) return {}; //no team to compare with: everyone is hidden
     const View v(vm, MakeProjection());
@@ -691,9 +693,9 @@ inline std::string DrawCloseEnemyWarning(const std::vector<RenderEntity>& entiti
             else if (him.y0 - gap - 2 * hy - 2 - extraBelow >= 0) cy = him.y0 - gap - extraBelow - hy - 2;
         }
     }
-    DrawRectFilled(cx - hx, cy - hy, cx + hx, cy + hy, IM_COL32(0, 0, 0, 220));
-    DrawRectOutline(cx - hx, cy - hy, cx + hx, cy + hy, COLOR::enemy(), 3.0f);
-    DrawLabelCentered(cx, cy, buf, size, COLOR::white);
+    DrawRectFilled(cx - hx, cy - hy, cx + hx, cy + hy, IM_COL32(0, 0, 0, 220), dl);
+    DrawRectOutline(cx - hx, cy - hy, cx + hx, cy + hy, COLOR::enemy(), 3.0f, dl);
+    DrawLabelCentered(cx, cy, buf, size, COLOR::white, false, dl);
     if (bottom) *bottom = cy + hy + 2; //+ half the 3 px frame
     return buf;
 }
