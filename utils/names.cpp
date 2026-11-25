@@ -54,6 +54,7 @@ uintptr_t g_base = 0x140000000ULL;
 
 std::mutex g_mutex;
 bool g_inited = false;
+Status g_status = Status::TableZero;
 double g_lastInitTry = -1e9;
 u16 g_textTable[TEXT_TABLE_COUNT];
 u64 g_slotXor = 0, g_blockKey = 0;
@@ -84,6 +85,8 @@ u64 clmulLo(u64 a, u64 b) {
 
 inline u64 unfold(u64 lo, u64 hi, u64 a, u64 b) { return lo ^ clmulLo(a, clmulLo(b, lo) ^ hi); }
 
+std::string readPoolName(u32 index);
+
 bool init() {
     if (g_inited) return true;
     const double t0 = nowSec();
@@ -93,12 +96,15 @@ bool init() {
     ReadMemoryBuffer(g_base + TEXT_TABLE_RVA, table, sizeof table);
     int nonZero = 0;
     for (int i = 0; i < TEXT_TABLE_COUNT; i++) nonZero += table[i] != 0;
-    if (nonZero < 8) return false; //game not running yet, or the RVA is stale
+    if (nonZero < 8) { g_status = Status::TableZero; return false; } //game not running yet, or the RVA is stale
     std::memcpy(g_textTable, table, sizeof table);
     u64 anchor = g_base + ANCHOR_RVA;
     u64 key = anchor * ((anchor ^ ANCHOR_XOR) | 1);
     g_slotXor = key + SLOT_KEY_ADD;
     g_blockKey = key + BLOCK_KEY_ADD;
+    //name 0 is always "None" in UE5: anything else means the pool / anchor RVAs or the key table are stale
+    if (readPoolName(0) != "None") { g_status = Status::PoolStale; return false; }
+    g_status = Status::Ok;
     g_inited = true;
     return true;
 }
@@ -231,6 +237,12 @@ void setBase(uintptr_t base) {
 bool ready() {
     std::lock_guard<std::mutex> lk(g_mutex);
     return init();
+}
+
+Status status() {
+    std::lock_guard<std::mutex> lk(g_mutex);
+    init();
+    return g_status;
 }
 
 void clearCache() {

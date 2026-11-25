@@ -275,7 +275,10 @@ void runNameProbe(const std::vector<RenderEntity>& ents, const std::vector<Rende
                   const FminimalViewInfo& vm, ptr uworld, FILE* out) {
     (void)uworld;
     std::fprintf(out, "\n=== PROBE v4 (paste from here to the next === PROBE line) ===\n");
-    std::fprintf(out, "object-name decoder: %s\n", names::ready() ? "ready" : "NOT READY (text key table unreadable: RVA stale or game not in a raid)");
+    const names::Status ns = names::status();
+    std::fprintf(out, "object-name decoder: %s\n", ns == names::Status::Ok ? "ready"
+                 : ns == names::Status::PoolStale ? "NOT READY (key table reads, but name 0 is not \"None\": NAMES_RVA / ANCHOR_RVA / ANCHOR_XOR stale, or the pool is not loaded yet)"
+                 : "NOT READY (text key table unreadable: RVA stale or game not in a raid)");
 
     std::vector<ptr> containers;
     std::vector<std::pair<double, const RenderEntity*>> players;
