@@ -46,7 +46,7 @@ inline std::vector<Entry>& table() {
         D("trackerHz", &config::trackerHz, 30, 240);
         D("listMode", &config::listMode, 0, 2); D("listRows", &config::listRows, 3, 16);
         B("showDebugInfo", &config::showDebugInfo); B("hotkeysEnabled", &config::hotkeysEnabled);
-        B("streamHide", &config::streamHide);
+        //streamHide is not saved: every launch starts visible, so a stray F8 can never look like a broken overlay
         B("fovIsHorizontal", &config::fovIsHorizontal); B("useCameraRoll", &config::useCameraRoll);
         F("fovScale", &config::fovScale, 0.5, 2);
         F("centerOffsetX", &config::centerOffsetX, -300, 300); F("centerOffsetY", &config::centerOffsetY, -300, 300);

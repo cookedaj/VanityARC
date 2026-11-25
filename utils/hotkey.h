@@ -50,8 +50,22 @@ inline std::vector<KeyEv> g_KeyQueue;
 inline void MenuSignalHandler(int) { g_MenuToggle = true; }
 inline void StreamSignalHandler(int) { g_KeyStream = true; }
 
+//Modifiers held on this keyboard right now: bit 0 Ctrl or Shift, bit 1 Alt or Meta.
+inline int HeldModifiers(int fd) {
+    constexpr size_t BITS = 8 * sizeof(unsigned long);
+    unsigned long st[KEY_MAX / BITS + 1] = {};
+    if (ioctl(fd, EVIOCGKEY(sizeof st), st) < 0) return 0;
+    auto down = [&](int c) { return ((st[c / BITS] >> (c % BITS)) & 1UL) != 0; };
+    int m = 0;
+    if (down(KEY_LEFTCTRL) || down(KEY_RIGHTCTRL) || down(KEY_LEFTSHIFT) || down(KEY_RIGHTSHIFT)) m |= 1;
+    if (down(KEY_LEFTALT) || down(KEY_RIGHTALT) || down(KEY_LEFTMETA) || down(KEY_RIGHTMETA)) m |= 2;
+    return m;
+}
+
 //Reads whatever input_event structs are waiting on fd and flips g_MenuToggle on an Insert key press
 //(not on release or key repeat). Returns false once the device is gone.
+//A hotkey pressed together with a modifier belongs to another program (Shift+F10 context menu, Shift+Insert paste...)
+//and is ignored. F6 still works with Shift or Ctrl held (sprinting, crouching), just not with Alt or Meta.
 inline bool HandleKeyEvents(int fd) {
     input_event ev[32];
     for (;;) {
@@ -60,12 +74,16 @@ inline bool HandleKeyEvents(int fd) {
         if (n == 0) return false;
         for (size_t i = 0; i < size_t(n) / sizeof(input_event); i++) {
             if (ev[i].type != EV_KEY) continue;
-            if (ev[i].code == MENU_KEY && ev[i].value == 1) g_MenuToggle = true;
-            if (ev[i].value == 1) {
-                if (ev[i].code == KEY_F6) g_KeyMark = true;
-                else if (ev[i].code == KEY_F7) g_KeyClear = true;
-                else if (ev[i].code == KEY_F10) g_KeyQuit = true;
-                else if (ev[i].code == KEY_F8) g_KeyStream = true;
+            const int c = ev[i].code;
+            if (ev[i].value == 1 && (c == MENU_KEY || c == KEY_F6 || c == KEY_F7 || c == KEY_F8 || c == KEY_F10)) {
+                const int mods = HeldModifiers(fd);
+                if (c == KEY_F6) { if (!(mods & 2)) g_KeyMark = true; }
+                else if (!mods) {
+                    if (c == MENU_KEY) g_MenuToggle = true;
+                    else if (c == KEY_F7) g_KeyClear = true;
+                    else if (c == KEY_F10) g_KeyQuit = true;
+                    else g_KeyStream = true; //F8
+                }
             }
             if (g_TextGrab) {
                 std::lock_guard<std::mutex> lk(g_KeyMutex);
