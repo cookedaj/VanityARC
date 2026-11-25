@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cfloat>
+#include <cmath>
 #include <cstdlib>
 #include <filesystem>
 #include <initializer_list>
@@ -97,9 +98,13 @@ inline void DrawLabelCentered(float x, float y, const char* text, float size = 1
         dl->AddText(font, size, p, Fade(color), text);
         return;
     }
+    //The outline: the text in black on all 8 sides, 1 px out up to 17 px text and 2 px from 18 px, so big text keeps a
+    //solid edge against a bright sky or snow
     const ImU32 black = Fade(IM_COL32(0, 0, 0, 255));
-    for (int dx = -1; dx <= 1; dx += 2)
-        for (int dy = -1; dy <= 1; dy += 2) dl->AddText(font, size, ImVec2(p.x + dx, p.y + dy), black, text);
+    const float o = std::max(1.0f, std::round(size / 12.0f));
+    for (int dx = -1; dx <= 1; dx++)
+        for (int dy = -1; dy <= 1; dy++)
+            if (dx || dy) dl->AddText(font, size, ImVec2(p.x + dx * o, p.y + dy * o), black, text);
     dl->AddText(font, size, p, Fade(color), text);
 }
 
