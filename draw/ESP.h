@@ -240,6 +240,8 @@ inline void DrawEdgeArrows(const View& v, std::vector<EdgeArrow>& edge) {
     std::sort(edge.begin(), edge.end(), [](const EdgeArrow& a, const EdgeArrow& b) { return a.dist < b.dist; });
     if (edge.size() > 8) edge.resize(8);
     const float hx = std::max(20.0f, (float)v.rw / 2 - 46), hy = std::max(20.0f, (float)v.rh / 2 - 46); //edges of the game's picture
+    const float k = std::max(1.0f, config::labelSize / 15.0f); //grows with the text size, never below the 15 px default
+    const float as = 15.0f * k, half = 14.0f * k;              //arrow length, half its reserved square
     char buf[32];
     for (const auto& e : edge) {
         double x, y, z;
@@ -255,15 +257,15 @@ inline void DrawEdgeArrows(const View& v, std::vector<EdgeArrow>& edge) {
         float py = (float)v.cy + (float)uy * t;
         const LabelRect& L = g_listRect;
         if (L.x1 > L.x0 && px > L.x0 - 20 && px < L.x1 + 20 && py > L.y0 - 20 && py < L.y1 + 20) py = L.y0 - 20; //not under the player list: just above it
-        DrawArrow(px, py, (float)ux, (float)uy, 15.0f, e.color);
-        QueueReserve({px - 14, py - 14, px + 14, py + 14});
+        DrawArrow(px, py, (float)ux, (float)uy, as, e.color);
+        QueueReserve({px - half, py - half, px + half, py + half});
         std::snprintf(buf, sizeof buf, "%.0fm", e.dist);
-        //Far enough back to clear the arrow's own reserved square (16 = 14 + LabelAt's x pad, 15 = 14 + its y pad), or a
-        //wide or tall label would always be dropped; never closer than the old 30 px
+        //Far enough back to clear the arrow's own reserved square (half + LabelAt's 2 px x pad / 1 px y pad), or a
+        //wide or tall label would always be dropped; never closer than two arrow lengths (the old 30 px at k = 1)
         const float ls = config::labelSize * 0.9f;
         const ImVec2 ts = LabelSize(buf, ls);
         const float ax = std::max(std::abs((float)ux), 1e-3f), ay = std::max(std::abs((float)uy), 1e-3f);
-        const float back = std::max(30.0f, 1.0f + std::min((16.0f + ts.x / 2) / ax, (15.0f + ts.y / 2) / ay));
+        const float back = std::max(2.0f * as, 1.0f + std::min((half + 2.0f + ts.x / 2) / ax, (half + 1.0f + ts.y / 2) / ay));
         QueueLabel(px - (float)ux * back, py - (float)uy * back, buf, ls, 0, e.dist);
     }
 }
@@ -481,6 +483,7 @@ inline void DrawRadar(const std::vector<RenderEntity>& entities, FminimalViewInf
     float yawRad = (cameraInfo.Rotation.y + 90.0f) * 3.14159265358979323846f / 180.0f;
     float cosA = cos(yawRad);
     float sinA = sin(yawRad);
+    const float k = std::max(1.0f, config::labelSize / 15.0f); //blips grow with the text size, never below the 15 px default
 
     for (const auto& ent : entities) {
         if (ent.type != Object::PLAYER && ent.type != Object::ARC) continue;
@@ -510,12 +513,12 @@ inline void DrawRadar(const std::vector<RenderEntity>& entities, FminimalViewInf
         }
 
         //ARC a diamond, enemy a filled dot, teammate a hollow ring: told apart by shape, not only by colour
-        if (ent.type == Object::ARC) DrawDiamondFilled(screenX, screenY, 5, COLOR::arc(false));
-        else if (IsTeammate(ent, localPlayerTeam)) DrawCircleRing(screenX, screenY, 4.5f, COLOR::mate(), 2.0f);
-        else DrawCircleFilled(screenX, screenY, 5, COLOR::enemy());
+        if (ent.type == Object::ARC) DrawDiamondFilled(screenX, screenY, 5 * k, COLOR::arc(false));
+        else if (IsTeammate(ent, localPlayerTeam)) DrawCircleRing(screenX, screenY, 4.5f * k, COLOR::mate(), 2.0f * k);
+        else DrawCircleFilled(screenX, screenY, 5 * k, COLOR::enemy());
     }
 
-    DrawArrow(cx, cy - 7, 0, -1, 10, COLOR::white); //you, looking up
+    DrawArrow(cx, cy - 7 * k, 0, -1, 10 * k, COLOR::white); //you, looking up
 }
 
 #endif //KWINHELPER_ESP_H
