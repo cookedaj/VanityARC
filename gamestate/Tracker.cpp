@@ -101,6 +101,7 @@ void Tracker::run() {
     auto rateStart = clk::now();
     int rateCount = 0;
     double hz = 0;
+    auto next = clk::now(); //when the next step is due, in full clock precision so the set rate is the rate that runs
 
     while (!stop_) {
         const auto t0 = clk::now();
@@ -196,12 +197,16 @@ void Tracker::run() {
             stats_ = {hz, tm.lastStepMs, tm.lastScanMs, tm.statics, tm.dynamics};
         }
 
-        const int spent = (int)std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count();
         if (!r.valid && !hiccup) sleepFor(IDLE_MS);
         else {
-            const int stepMs = std::max(4, 1000 / std::max(30, std::min(240, g_trackerHz.load(std::memory_order_relaxed))));
-            const int jitterMs = std::uniform_int_distribution<int>(-2, 2)(jitterRng);
-            if (spent < stepMs) sleepFor(std::max(0, stepMs - spent + jitterMs));
+            const auto step = std::chrono::microseconds(1000000 / std::max(30, std::min(240, g_trackerHz.load(std::memory_order_relaxed))));
+            next += step;
+            if (next < t1) next = t1; //behind (a slow step, or back from the menu): go on at once, no burst to catch up
+            else {
+                //up to 15% of a step early or late, around an even grid, so the average rate stays the set one
+                const auto jitter = std::chrono::duration_cast<clk::duration>(step * std::uniform_real_distribution<double>(-0.15, 0.15)(jitterRng));
+                std::this_thread::sleep_until(next + jitter);
+            }
         }
     }
     if (!fixedPid_) ProcessId = 0;
