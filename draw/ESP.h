@@ -429,7 +429,7 @@ inline void DrawRadar(const std::vector<RenderEntity>& entities, FminimalViewInf
         if (ent.type != Object::PLAYER && ent.type != Object::ARC) continue;
         if (ent.type == Object::PLAYER && !config::showPlayers) continue;
         if (ent.type == Object::ARC && !config::showArc) continue;
-        if (ent.pos.Dist(cameraInfo.Location) / 100.0 > rangeM) continue; //beyond the radar range
+        if (std::hypot(ent.pos.x - cameraInfo.Location.x, ent.pos.y - cameraInfo.Location.y) / 100.0 > rangeM) continue; //beyond the radar range (flat: the radar is a 2D disk)
         if (ent.isDead) continue;
 
         float deltaX = ent.pos.x - cameraInfo.Location.x;
