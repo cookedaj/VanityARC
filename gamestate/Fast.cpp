@@ -14,7 +14,7 @@
 #include "utils/log.h"
 #include "utils/offsets.h"
 
-void printStatusLine(const std::vector<RenderEntity>& others, const RenderEntity* me); //GameState.cpp
+void printStatusLine(const std::vector<RenderEntity>& others, const RenderEntity* me, int posed, int poseWanted); //GameState.cpp
 #ifdef KWINHELPER_PROBES
 void runLiveProbe(const std::string& mode, ptr localPawn, const std::vector<RenderEntity>& ents, const FminimalViewInfo& vm, FILE* out = stdout); //Probe.cpp
 #endif
@@ -161,7 +161,8 @@ bool GameState::scan() {
 //every frame), the game stops animating players it is not drawing, and nobody far away is animated at all, so:
 //  - a list that cannot be read is replaced by the last good one for a moment (no flicker),
 //  - a frozen player gets the pose of someone the game IS animating in the same stance and speed (drawn faint).
-void GameState::updatePose(Tracked& t, const std::vector<uint8_t>& bones, const skeleton::Xform& mesh, bool freshBones) {
+//Returns nullptr when he got a pose, otherwise why not (for the console).
+const char* GameState::updatePose(Tracked& t, const std::vector<uint8_t>& bones, const skeleton::Xform& mesh, bool freshBones) {
     using namespace std::chrono;
     const auto now = clk::now();
     PoseState& ps = poseSeen_[t.ent.actor];
@@ -215,12 +216,17 @@ void GameState::updatePose(Tracked& t, const std::vector<uint8_t>& bones, const 
     if (!animated) { //frozen: his own list is old, so a pose that fits what he is doing now
         for (int c : {cls, cls ^ 1}) if (haveTmpl_[c]) { comp = tmpl_[c]; readOk = true; break; }
     }
-    if (!readOk) return;
+    if (!readOk) return haveBones ? "the bone records do not read as bones (record layout in utils/skeleton.h, or BONE_ARRAY in config.h)"
+                                  : "no bone list was read";
     auto pose = std::make_shared<skeleton::Pose>();
-    if (skeleton::placePose(comp, mesh, t.ent.pos, *pose)) t.ent.pose = std::move(pose);
+    if (!skeleton::placePose(comp, mesh, t.ent.pos, *pose)) return "the mesh transform is not believable (MESH_TRANSFORM in config.h)";
+    t.ent.pose = std::move(pose);
+    return nullptr;
 }
 
 void GameState::updateDynamic() {
+    poseWanted_ = posed_ = 0;
+    poseWhy_.clear();
     const size_t n = dyn_.size();
     if (!n) return;
     //The mesh's own transform as it sits in memory (rotation, position, scale of the character's mesh)
@@ -338,7 +344,17 @@ void GameState::updateDynamic() {
                 mesh.t = Vector3(r.mx.t[0], r.mx.t[1], r.mx.t[2]);
                 mesh.s = Vector3(r.mx.s[0], r.mx.s[1], r.mx.s[2]);
                 static const std::vector<uint8_t> none;
-                updatePose(t, r.view ? *r.view : none, mesh, r.freshBones);
+                const char* why = updatePose(t, r.view ? *r.view : none, mesh, r.freshBones);
+                poseWanted_++;
+                if (t.ent.pose) posed_++;
+                else if (poseWhy_.empty()) { //the first reason this step, said on the console when no one gets a pose
+                    if (!isValidPtr(r.mesh)) poseWhy_ = "the player's mesh is not readable (MESH in config.h)";
+                    else if (r.boneNum != skeleton::BONES)
+                        poseWhy_ = "the game's bone list has " + std::to_string(r.boneNum) + " bones, this build expects " +
+                                   std::to_string(skeleton::BONES) + " (utils/skeleton.h)";
+                    else if (!isValidPtr(r.boneData)) poseWhy_ = "the bone list is not readable (BONE_ARRAY in config.h)";
+                    else poseWhy_ = why ? why : "unknown";
+                }
             }
             const ptr comp = live::shieldComponent >= 0 ? r.sc : r.hc;
             const double lastShield = t.ent.shield; //his shield at the last step (0 right after a scan)
@@ -426,9 +442,10 @@ gsRet GameState::step() {
     const bool full = camActor_ == 0 || world != lastWorld_ || !isValidPtr(world) || t0 - lastScan_ >= nextScanGap();
     if (full) {
         lastScan_ = t0;
-        if (!scan()) { statics_.clear(); dyn_.clear(); camActor_ = 0; return {.fault = fault_}; }
+        if (!scan()) { statics_.clear(); dyn_.clear(); camActor_ = 0; poseOkAt_ = t0; return {.fault = fault_}; }
     }
     updateDynamic();
+    if (posed_ || !poseWanted_) poseOkAt_ = t0; //stick figures work, or nobody near needs one
 
     //One bad read (a failed read, the camera being rewritten) must not blank the overlay: the last good view is used
     //for a moment. Only a camera that stays unusable is dropped and looked for again.
@@ -445,13 +462,18 @@ gsRet GameState::step() {
     gsRet out = assemble(vm);
     runLiveProbeIfAsked(out.entities, vm);
 
-    //The same one-line status as always, every 2 s (see printStatusLine): me / players / ARC / containers
+    //The same one-line status as always, every 2 s (see printStatusLine): me / players / ARC / containers / stick figures
     static auto lastStatus = clk::now() - std::chrono::seconds(10);
     if (t0 - lastStatus >= std::chrono::seconds(2)) {
         lastStatus = t0;
         const RenderEntity* meEnt = nullptr; //the pawn assemble() chose as you; out.entities already holds everything else
         for (const Tracked& t : dyn_) if (t.live && t.ent.actor == meActor_) meEnt = &t.ent;
-        printStatusLine(out.entities, meEnt);
+        printStatusLine(out.entities, meEnt, posed_, poseWanted_);
+        //Players near enough for a stick figure, and not one of them has had a pose for 5 s: say why (a patch that
+        //changed the skeleton or moved an offset would otherwise turn every stick figure off without a word)
+        if (poseWanted_ && !posed_ && t0 - poseOkAt_ >= std::chrono::seconds(5))
+            logThrottled(("[-] Stick figures: none drawn for 5 s: " + poseWhy_ +
+                          ". Run the bones probe (KWINHELPER_PROBE=bones with the probe build, see the README)").c_str());
     }
     timing_.lastStepMs = ms(t0, clk::now());
     return out;

@@ -6,6 +6,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <string>
 #include <thread>
 #include <unordered_map>
 #include <vector>
@@ -103,12 +104,17 @@ private:
     //included). Frozen players are drawn with the one that matches their stance and speed. Index: crouch * 2 + moving.
     skeleton::Pose tmpl_[4];
     bool haveTmpl_[4] = {false, false, false, false};
+    //Stick figures at the last step: players near enough for one, how many got one, and why the first one that did not
+    //failed. poseOkAt_: the last step where one did (or nobody needed one); 5 s without one is said on the console.
+    int poseWanted_ = 0, posed_ = 0;
+    std::string poseWhy_;
+    std::chrono::steady_clock::time_point poseOkAt_ = std::chrono::steady_clock::now();
     std::chrono::steady_clock::time_point lastScan_{};
     Timing timing_{};
     const char* fault_ = nullptr; //why the last scan() failed (shown on screen)
 
     bool scan();            //the whole actor list; false when there is no world yet
-    void updatePose(Tracked& t, const std::vector<uint8_t>& bones, const skeleton::Xform& mesh, bool freshBones);
+    const char* updatePose(Tracked& t, const std::vector<uint8_t>& bones, const skeleton::Xform& mesh, bool freshBones); //nullptr: posed, else why not
     void updateDynamic();   //position, health, team, dead for players and ARC
     gsRet assemble(const FminimalViewInfo& vm);
     void runLiveProbeIfAsked(const std::vector<RenderEntity>& ents, const FminimalViewInfo& vm); //KWINHELPER_PROBE=shield|inventory
