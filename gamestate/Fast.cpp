@@ -226,8 +226,11 @@ void GameState::updateDynamic() {
     //The mesh's own transform as it sits in memory (rotation, position, scale of the character's mesh)
     struct MeshXf { double q[4]; double t[3]; double padT; double s[3]; };
     static_assert(sizeof(MeshXf) == 0x58, "MeshXf must match the game's transform");
+    //The root's own transform up to its position: rotation (which way it faces), then the position at POS_PTR
+    struct RootXf { double q[4]; Vector3 pos; };
+    static_assert(sizeof(RootXf) == 0x38, "RootXf must match the game's transform");
     struct Row {
-        ptr vt = 0, root = 0, hc = 0, sc = 0; int team = 0; uint8_t destroyed = 0; Vector3 pos; double hp = 0; uint64_t shRaw = 0, shMaxRaw = 0;
+        ptr vt = 0, root = 0, hc = 0, sc = 0; int team = 0; uint8_t destroyed = 0; RootXf xf{}; double hp = 0; uint64_t shRaw = 0, shMaxRaw = 0;
         bool wantPose = false; ptr ctrl = 0, mesh = 0, boneData = 0; uint64_t rtRaw = 0; int boneNum = 0; MeshXf mx{}; std::vector<uint8_t> bones;
         const std::vector<uint8_t>* view = nullptr; bool freshBones = false; //the bone list to use: this step's read, or the cached one
         double hpMax = 0; int teamAt = -1, hpAt = -1, maxAt = -1, shAt = -1; bool teamOk = false, hpOk = false, shOk = false; //which reads worked (a failed one reads as 0)
@@ -261,7 +264,7 @@ void GameState::updateDynamic() {
     for (size_t i = 0; i < n; i++) {
         Row& r = rows[i];
         if (r.vt != dyn_[i].ent.vt || !isValidPtr(r.root)) continue;
-        queue(rq, r.root + off::POS_PTR, &r.pos);
+        queue(rq, r.root + off::POS_PTR - 0x20, &r.xf); //the rotation sits right before the position (config.h)
         if (dyn_[i].ent.type == Object::PLAYER && isValidPtr(r.mesh)) queue(rq, r.mesh + off::RENDER_TIME, &r.rtRaw);
         if (r.wantPose && isValidPtr(r.mesh)) {
             queue(rq, r.mesh + off::MESH_TRANSFORM, &r.mx);
@@ -316,10 +319,11 @@ void GameState::updateDynamic() {
     for (size_t i = 0; i < n; i++) {
         Tracked& t = dyn_[i];
         const Row& r = rows[i];
-        t.live = r.vt == t.ent.vt && isValidPtr(r.root) && plausible(r.pos);
+        t.live = r.vt == t.ent.vt && isValidPtr(r.root) && plausible(r.xf.pos);
         if (!t.live) continue;
         t.root = r.root;
-        t.ent.pos = r.pos;
+        t.ent.pos = r.xf.pos;
+        t.ent.yaw = yawFromQuat(r.xf.q);
         if (t.ent.type == Object::PLAYER) {
             if (r.hpOk) { t.ent.playerHealth = r.hp; t.hpRead = true; } //otherwise the last good value: 100 (alive) for a player not read yet
             t.ent.isDead = t.ent.playerHealth < 1;

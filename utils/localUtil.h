@@ -19,6 +19,14 @@ inline bool isValidPtr(ptr addr) {
     return true;
 }
 
+//The yaw in degrees (0 along +X, 90 along +Y) of a rotation quaternion as the game stores it (x, y, z, w). NaN when
+//the four numbers are not a rotation (a failed read, a half-built actor), so nothing is drawn from them.
+inline double yawFromQuat(const double q[4]) {
+    const double n = q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3];
+    if (!std::isfinite(n) || std::abs(n - 1.0) > 0.01) return NAN;
+    return std::atan2(2 * (q[3] * q[2] + q[0] * q[1]), 1 - 2 * (q[1] * q[1] + q[2] * q[2])) * 180.0 / 3.14159265358979;
+}
+
 enum Object {
     ARC,
     SEARCH,
@@ -38,6 +46,7 @@ struct ItemRow {
 struct RenderEntity {
     ptr actor;
     Vector3 pos;         //Position
+    double yaw = NAN;    //players and ARC: which way it faces, the game's yaw in degrees (see yawFromQuat); NaN when unknown
     double dist{};       //Dist, may not be accurate until "filterEntities(...)"
     double playerHealth = 100; //Only for players
     double shield = 0;         //Only for players, and only when the shield offset is known (utils/offsets.h)
