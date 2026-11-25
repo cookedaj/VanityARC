@@ -66,7 +66,7 @@ bool GameState::scan() {
         logThrottled("[-] Invalid Uworld (not in a raid yet?)");
         return false;
     }
-    if (uworld != lastWorld_) { camActor_ = 0; shieldSeen_.clear(); lastTeamID = -1; meActor_ = 0; } //a new world: new camera and players, your team and pawn not known yet
+    if (uworld != lastWorld_) { camActor_ = 0; shieldSeen_.clear(); lastTeamID = -1; meActor_ = 0; slots_.clear(); } //a new world: new camera, players and actors, your team and pawn not known yet
     lastWorld_ = uworld;
     //PersistentLevel at UWorld+0x170 is encrypted; the plain pointer is in LevelCollections[0] (see config.h)
     ptr levelCollection = ReadMemory<ptr>(uworld + off::LEVEL_COLLECTIONS);
@@ -80,32 +80,40 @@ bool GameState::scan() {
     std::vector<ptr> actors((size_t)count);
     ReadMemoryBuffer(actorsPtr, actors.data(), actors.size() * sizeof(ptr));
 
-    //The first word of every actor says what kind it is
-    std::vector<ptr> cand;
-    cand.reserve(actors.size());
-    for (ptr a : actors) if (isValidPtr(a)) cand.push_back(a);
-    std::vector<ptr> vts(cand.size());
+    //The first word of every actor says what kind it is. That only changes when the slot gets another actor, so it is
+    //read for slots whose pointer changed, plus a rotating 1/20 of the list (a freed address reused in the same slot
+    //is caught within about 2 s). Most scans read a few hundred vtables instead of every actor's.
+    const size_t n = actors.size();
+    slots_.resize(n);
+    const size_t slice = n / 20 + 1, from = recheck_ % n;
+    recheck_ = (from + slice) % n;
     std::vector<ReadReq> rq;
-    rq.reserve(cand.size());
-    for (size_t i = 0; i < cand.size(); i++) queue(rq, cand[i], &vts[i]);
+    for (size_t i = 0; i < n; i++) {
+        Slot& s = slots_[i];
+        if (!isValidPtr(actors[i])) { s = {}; continue; }
+        if (actors[i] == s.actor && (i + n - from) % n >= slice) continue; //unchanged, not in this scan's re-check
+        s = {actors[i], 0, 0};
+        queue(rq, s.actor, &s.vt);
+    }
     ReadScatter(rq.data(), rq.size());
 
-    struct C { ptr actor, vt, root; Object type; Vector3 pos; };
+    struct C { size_t slot; ptr actor, vt, root; Object type; Vector3 pos; };
     std::vector<C> kept;
     ptr cam = 0;
-    for (size_t i = 0; i < cand.size(); i++) {
-        const ptr vt = vts[i];
+    for (size_t i = 0; i < n; i++) {
+        Slot& s = slots_[i];
+        if (!s.vt) { s.actor = 0; continue; } //empty slot, or a read that failed: tried again at the next scan
         Object t;
-        if (vt == vtabels::PLAYER) t = Object::PLAYER;
-        else if (vt == vtabels::ARC) t = Object::ARC;
-        else if (vt == vtabels::SEARCH) t = Object::SEARCH;
-        else if (vt == vtabels::CAMMANAGER) { cam = cand[i]; continue; } //the camera only; the last one wins
+        if (s.vt == vtabels::PLAYER) t = Object::PLAYER;
+        else if (s.vt == vtabels::ARC) t = Object::ARC;
+        else if (s.vt == vtabels::SEARCH) t = Object::SEARCH;
+        else if (s.vt == vtabels::CAMMANAGER) { cam = s.actor; continue; } //the camera only; the last one wins
         else continue; //everything else (including the old PICKUP vtable) is not drawn
-        kept.push_back({cand[i], vt, 0, t, {}});
+        kept.push_back({i, s.actor, s.vt, s.root, t, {}});
     }
 
     rq.clear();
-    for (C& c : kept) queue(rq, c.actor + off::ROOT_COMPONENT_PTR, &c.root);
+    for (C& c : kept) if (!isValidPtr(c.root)) queue(rq, c.actor + off::ROOT_COMPONENT_PTR, &c.root); //known from an earlier scan otherwise
     ReadScatter(rq.data(), rq.size());
     rq.clear();
     for (C& c : kept) if (isValidPtr(c.root)) queue(rq, c.root + off::POS_PTR, &c.pos);
@@ -114,7 +122,8 @@ bool GameState::scan() {
     statics_.clear();
     dyn_.clear();
     for (const C& c : kept) {
-        if (!isValidPtr(c.root) || !plausible(c.pos)) continue;
+        slots_[c.slot].root = isValidPtr(c.root) && plausible(c.pos) ? c.root : 0; //a half-built actor: its root is read again
+        if (!slots_[c.slot].root) continue;
         Tracked t;
         t.ent.actor = c.actor;
         t.ent.vt = c.vt;
@@ -426,7 +435,7 @@ gsRet GameState::step() {
     const bool full = camActor_ == 0 || world != lastWorld_ || !isValidPtr(world) || t0 - lastScan_ >= nextScanGap();
     if (full) {
         lastScan_ = t0;
-        if (!scan()) { statics_.clear(); dyn_.clear(); camActor_ = 0; return {.fault = fault_}; }
+        if (!scan()) { statics_.clear(); dyn_.clear(); slots_.clear(); camActor_ = 0; return {.fault = fault_}; }
     }
     updateDynamic();
 
