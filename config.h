@@ -55,6 +55,8 @@ namespace config {
     inline bool hotkeysEnabled = true;     //F6 mark teammate, F7 clear marks, F10 quit
     inline bool streamHide = false;        //F8: draw nothing, so screen recordings and streams show no overlay (no startup banner)
     inline float menuOpacity = 0.94f;      //the Insert menu's background
+    inline bool soundCues = true;          //say F6/F7/F8/F10 results and near enemies out loud (needs spd-say, utils/cue.h)
+    inline double cueRange = 40;           //m, an enemy player first coming this close is said (at most one every 2 s)
 
     //Stretched resolution / gamescope (Insert menu: Game view). Auto reads gamescope's command line.
     inline bool gameViewAuto = true;

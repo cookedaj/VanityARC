@@ -304,6 +304,27 @@ int main() {
         CHECK(draw([&] { DrawToast(DrawStatusCard("live", "120 fps")); }) > 0, "status card and toast draw");
     }
 
+    //---- the spoken warning when an enemy comes close (camera at 0,0,0 looking along +x; your team is 3)
+    {
+        config::cueRange = 40;
+        const FminimalViewInfo c = camera();
+        std::vector<RenderEntity> v = {ent(Object::PLAYER, 3000, 0, 0, 5), ent(Object::PLAYER, -2000, 0, 0, 5), ent(Object::PLAYER, 0, -1500, 0, 5),
+                                       ent(Object::PLAYER, 0, 2500, 0, 5), ent(Object::PLAYER, 0, 1000, 0, 3), ent(Object::PLAYER, 500, 0, 0, 5)};
+        v[5].isDead = true;
+        for (size_t i = 0; i < v.size(); i++) v[i].actor = 0x100 + i;
+        NearCue nc;
+        CHECK(nc.update(v, c, 3, 0.0) == "Enemy left, 15 meters", "cue: the nearest enemy first, with its side (teammate and dead player skipped)");
+        CHECK(nc.update(v, c, 3, 1.0).empty(), "cue: at most one warning every 2 s");
+        CHECK(nc.update(v, c, 3, 2.5) == "Enemy behind, 20 meters", "cue: the next one once 2 s have passed");
+        CHECK(nc.update(v, c, 3, 5.0) == "Enemy right, 25 meters", "cue: right");
+        CHECK(nc.update(v, c, 3, 7.5) == "Enemy ahead, 30 meters", "cue: ahead");
+        CHECK(nc.update(v, c, 3, 10.0).empty(), "cue: each enemy is said once while he stays near");
+        v[0].pos.x = 4300; //43 m: inside the 5 m slack
+        CHECK(nc.update(v, c, 3, 12.0).empty(), "cue: no repeat while he walks along the edge of the range");
+        v[0].pos.x = 6000; nc.update(v, c, 3, 13.0); v[0].pos.x = 3000;
+        CHECK(nc.update(v, c, 3, 15.0) == "Enemy ahead, 30 meters", "cue: said again after leaving and coming back");
+    }
+
     //---- the radar panel
     {
         std::vector<RenderEntity> radarEnts = {ent(Object::PLAYER, 3000, 200, 0), ent(Object::ARC, -2500, 1000, 0)};

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -121,6 +122,42 @@ inline void DrawToast(float y) {
     if (g_toast.empty() || ImGui::GetTime() >= g_toastUntil) return;
     DrawLabelCentered((float)config::SCREEN_W * 0.5f, y, g_toast.c_str(), config::labelSize, COLOR::white, true);
 }
+
+//--- the spoken warning when an enemy player first comes within config::cueRange ("Enemy behind, 30 meters").
+//At most one every 2 s, the nearest first; one who has to wait is said at the next free moment if he is still that
+//close. He is said again only after going more than 5 m past the range, so walking along its edge does not repeat it.
+struct NearCue {
+    std::set<ptr> said; //enemies already said and still within the range (+ 5 m)
+    double last = -1e9; //when the last warning was given (seconds)
+
+    //Returns what to say this frame, "" for nothing. now: seconds.
+    std::string update(const std::vector<RenderEntity>& ents, const FminimalViewInfo& cam, int localTeam, double now) {
+        std::set<ptr> keep;
+        const RenderEntity* best = nullptr;
+        double bestD = 1e18;
+        for (const RenderEntity& e : ents) {
+            if (e.type != Object::PLAYER || e.isDead || IsTeammate(e, localTeam)) continue;
+            if (config::hideUnknownTeams && localTeam < 0) continue; //as on screen: no team to compare with
+            const double d = e.pos.Dist(cam.Location) / 100.0;
+            if (!std::isfinite(d)) continue;
+            if (said.count(e.actor) && d <= config::cueRange + 5) keep.insert(e.actor);
+            else if (d <= config::cueRange && d < bestD) { best = &e; bestD = d; }
+        }
+        std::string text;
+        if (best && now - last >= 2.0) {
+            keep.insert(best->actor);
+            last = now;
+            //Which way, flat (the camera's yaw only): ahead, behind, left or right, each a quarter of the circle
+            const double yaw = cam.Rotation.y * 3.14159265358979 / 180.0;
+            const double dx = best->pos.x - cam.Location.x, dy = best->pos.y - cam.Location.y;
+            const double f = dx * std::cos(yaw) + dy * std::sin(yaw), r = dy * std::cos(yaw) - dx * std::sin(yaw);
+            const char* dir = !std::isfinite(f + r) ? "near" : f >= std::abs(r) ? "ahead" : -f >= std::abs(r) ? "behind" : r > 0 ? "right" : "left";
+            text = std::string("Enemy ") + dir + ", " + std::to_string((long)std::lround(bestD)) + " meters";
+        }
+        said.swap(keep);
+        return text;
+    }
+};
 
 //--- labels: collected while drawing, then the ones that would overlap are moved or dropped (see Declutter.h)
 struct PendingLabel {
