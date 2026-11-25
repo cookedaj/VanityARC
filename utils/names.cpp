@@ -234,6 +234,8 @@ bool ready() {
 void clearCache() {
     std::lock_guard<std::mutex> lk(g_mutex);
     g_cache.clear();
+    g_inited = false; //a new process may use a different text key table: read it again on the next lookup
+    g_lastInitTry = -1e9;
 }
 
 uint64_t clmul64(uint64_t a, uint64_t b) { return clmulLo(a, b); }
