@@ -88,10 +88,18 @@ int main() {
     MenuFeedKeys(); for (int i = 0; i < 10; i++) frame(box);
     CHECK(std::strcmp(buf, "Cooked") == 0, "backspace deletes a character");
 
-    press(KEY_ENTER);
+    { std::lock_guard<std::mutex> lk(g_KeyMutex); g_KeyQueue.push_back({KEY_LEFTCTRL, 1}); }
+    press(KEY_A);
+    { std::lock_guard<std::mutex> lk(g_KeyMutex); g_KeyQueue.push_back({KEY_LEFTCTRL, 0}); }
+    MenuFeedKeys(); for (int i = 0; i < 10; i++) frame(box);
+    CHECK(std::strcmp(buf, "Cooked") == 0, "Ctrl+A types no 'a'");
+
+    { std::lock_guard<std::mutex> lk(g_KeyMutex); g_KeyQueue.push_back({KEY_ENTER, 1}); } //its key-up comes after typing ended, so is never queued
     MenuFeedKeys(); for (int i = 0; i < 10; i++) frame(box);
     MenuFeedKeys(); //one more pass: nothing active now
     CHECK(!io.WantTextInput && !g_TextGrab.load(), "Enter finishes typing and releases the keyboard");
+    frame(box);
+    CHECK(!ImGui::IsKeyDown(ImGuiKey_Enter), "a key held when typing ends is let go");
 
     //typed keys are ignored (and not kept) when no text box is active
     press(KEY_A);

@@ -7,6 +7,7 @@
 #include <array>
 #include <cstdio>
 #include <map>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -56,15 +57,34 @@ inline void MenuFeedKeys() {
         std::lock_guard<std::mutex> lk(g_KeyMutex);
         evs.swap(g_KeyQueue);
     }
-    static bool shift = false;
-    if (!want) { shift = false; return; }
+    static bool shift = false, ctrl = false, alt = false, caps = false;
+    //Keys ImGui was told are down. When typing ends their key-ups are no longer queued, so they are let go here,
+    //or ImGui would hold them forever. Caps Lock starts off each time: the desktop never sees the grabbed presses.
+    static std::set<ImGuiKey> down;
+    if (!want) {
+        for (ImGuiKey k : down) io.AddKeyEvent(k, false);
+        down.clear();
+        shift = ctrl = alt = caps = false;
+        return;
+    }
+    auto send = [&](ImGuiKey k, bool d) {
+        if (d) down.insert(k); else down.erase(k);
+        io.AddKeyEvent(k, d);
+    };
 
     for (const KeyEv& ev : evs) {
         if (ev.code == KEY_LEFTSHIFT || ev.code == KEY_RIGHTSHIFT) {
             shift = ev.value != 0;
-            io.AddKeyEvent(ImGuiMod_Shift, shift);
+            send(ImGuiMod_Shift, shift);
             continue;
         }
+        if (ev.code == KEY_LEFTCTRL || ev.code == KEY_RIGHTCTRL) {
+            ctrl = ev.value != 0;
+            send(ImGuiMod_Ctrl, ctrl);
+            continue;
+        }
+        if (ev.code == KEY_LEFTALT || ev.code == KEY_RIGHTALT) { alt = ev.value != 0; continue; }
+        if (ev.code == KEY_CAPSLOCK) { if (ev.value == 1) caps = !caps; continue; }
         ImGuiKey k = ImGuiKey_None;
         switch (ev.code) {
             case KEY_BACKSPACE: k = ImGuiKey_Backspace; break;
@@ -75,14 +95,18 @@ inline void MenuFeedKeys() {
             case KEY_RIGHT: k = ImGuiKey_RightArrow; break;
             case KEY_HOME: k = ImGuiKey_Home; break;
             case KEY_END: k = ImGuiKey_End; break;
+            case KEY_A: k = ImGuiKey_A; break; //with Ctrl: select all, copy, paste, cut, undo
+            case KEY_C: k = ImGuiKey_C; break;
+            case KEY_V: k = ImGuiKey_V; break;
+            case KEY_X: k = ImGuiKey_X; break;
+            case KEY_Z: k = ImGuiKey_Z; break;
             default: break;
         }
-        if (k != ImGuiKey_None) {
-            if (ev.value != 2) io.AddKeyEvent(k, ev.value != 0); //ImGui repeats held keys itself
-            continue;
-        }
-        if (ev.value >= 1) {
-            char c = KeyToChar(ev.code, shift);
+        if (k != ImGuiKey_None && ev.value != 2) send(k, ev.value != 0); //ImGui repeats held keys itself
+        //One character per press, none while Ctrl or Alt is held. The keyboard's own repeat is not used:
+        //it would double letters for a slow typist. Backspace, Enter, the arrows and so on give 0 from KeyToChar.
+        if (ev.value == 1 && !ctrl && !alt) {
+            char c = KeyToChar(ev.code, shift, caps);
             if (c) io.AddInputCharacter((unsigned)c);
         }
     }
