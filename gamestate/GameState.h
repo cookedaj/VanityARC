@@ -17,6 +17,8 @@ inline std::atomic<bool> g_skeletonOn{true};
 inline std::atomic<int> g_skeletonDist{120}; //m (also no further than players are drawn at all)
 inline std::atomic<bool> g_showTeammates{true}; //squad mates are drawn (until the drawing thread says: assumed so)
 inline std::atomic<double> g_viewSpread{4.0};    //the picture's corners (with DrawESP's margin) as a tangent per unit tan(FOV/2); until known: wide
+//The loot range plus a margin (m): containers and ground items further away are not named or put in the snapshot
+inline std::atomic<int> g_lootRange{50};
 
 struct gsRet {
     std::vector<RenderEntity> entities{};
@@ -78,6 +80,7 @@ private:
         bool live = false;  //passed this update's checks, so it is drawn
         bool hpRead = false;     //players: playerHealth came from a read that worked since the scan (not the stand-in 100)
         double shieldRead = -1;  //players: the shield from the last read that worked since the scan (-1: none)
+        bool named = false; //statics: refine/fill done since the last scan (done when it first comes within g_lootRange)
     };
     std::vector<Tracked> statics_; //containers and ground items: position read at each scan
     std::vector<Tracked> dyn_;     //players and ARC: re-read every step

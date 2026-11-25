@@ -141,6 +141,7 @@ int main() {
         g_skeletonOn = config::showSkeleton && config::showPlayers && config::espEnabled && !config::streamHide;
         g_skeletonDist = (int)std::ceil(std::min(config::skeletonMaxDist, config::maxPlayerDist));
         g_showTeammates = config::showTeammates;
+        g_lootRange = (int)config::maxLootDist + 10; //loot is named and sent only this near (10 m spare: the camera moves between reads)
 
         //Where the game's picture is on screen (differs from the screen with gamescope / a stretched resolution)
         GameViewSettings gvs;
