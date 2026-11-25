@@ -73,6 +73,7 @@ int main(int argc, char** argv) {
         labeler::refine(e);
         labeler::fill(e);
         labels_nonempty += !e.label.empty();
+        (void)labeler::kindByName(o);
 
         //random keys into the label code
         std::string key; size_t len = R(4) ? R(40) : R(300);

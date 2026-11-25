@@ -4,6 +4,7 @@
 #ifndef KWINHELPER_LABELER_H
 #define KWINHELPER_LABELER_H
 
+#include <optional>
 #include <vector>
 
 #include "localUtil.h"
@@ -12,6 +13,11 @@ namespace labeler {
 
 //Ground items share the container class in memory; this turns a SEARCH actor into PICKUP when its name says so
 void refine(RenderEntity& e);
+
+//What an actor is, judged by names only (for vtables config.h does not know): ARC when its type asset is a
+//DA_EnemyType_, PLAYER when its mesh is a CharacterMesh and it has a PlayerState, SEARCH when it is named like a
+//container or ground item, NONE otherwise. nullopt: names could not be read, so this actor tells nothing.
+std::optional<Object> kindByName(uintptr_t actor);
 
 //Sets e.label (and e.sub for players: "Rattler (held) + Stitcher")
 void fill(RenderEntity& e);

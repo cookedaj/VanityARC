@@ -84,6 +84,8 @@ To update the `ViewMatrix`: in `getRawEnt`, uncomment the line `// getViewMatrix
 You can also use a tool like `memsed`. If you find your exact health value, you can scan for it using `void FindDeepHealthOffset(ptr actor, float targetHealth)` if the pointer chain is not posted on UC.
 
 Once you find your `ViewMatrix`, you will see a BUNCH of text on the screen (hex codes like `0x14c767570`). These are the vtables. If you look at yourself, you will see the vtable for the player; a loot chest will have a different number. Once you put these hex codes into the `vtables` namespace in `config.h`, your ESP should start working.
+
+Players, ARC and containers usually work without this hunt: while object names can be read, the normal build learns vtables that `config.h` does not know from their actors' names (a `DA_EnemyType_` asset means ARC, a `CharacterMesh` with a PlayerState means a player, a container or pickup class name means loot) a few seconds into each raid. It prints a `[+] Learned vtable 0x... = PLAYER` line for each one; copy those values into `config.h` so they are known from the first second. The camera (`CAMMANAGER`) still has to be found by hand.
 ## Tests
 
 The tests use a fake in-memory "game", so no game is needed:

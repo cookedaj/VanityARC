@@ -301,6 +301,17 @@ int main() {
     RenderEntity e7 = ent(Object::PLAYER, 90.0, lone);
     labeler::fill(e7);
     CHECK(e7.label.empty() && e7.sub.empty(), "player without PlayerState has no label");
+
+    //--- what an actor is from its names alone (how vtables config.h does not know are learned)
+    addPoolName(0x2380, "CharacterMesh0");
+    u64 charMesh = makeObject(0x200, 0x2380, 0);
+    put<u64>(pawn, off::MESH, charMesh); put<u64>(lone, off::MESH, charMesh);
+    CHECK(labeler::kindByName(pawn) == Object::PLAYER, "learn: a CharacterMesh and a PlayerState is a player");
+    CHECK(labeler::kindByName(lone) == Object::NONE, "learn: a character without a PlayerState is not a player");
+    CHECK(labeler::kindByName(pop) == Object::ARC, "learn: a DA_EnemyType_ asset is ARC");
+    CHECK(labeler::kindByName(bin) == Object::SEARCH && labeler::kindByName(ferro) == Object::SEARCH, "learn: containers and ground items are loot");
+    CHECK(labeler::kindByName(makeObject(0x1400, 0x2180, 0)) == Object::NONE, "learn: anything else is nothing");
+    CHECK(!labeler::kindByName(makeObject(0x1400, 0x23C0, 0)), "learn: an actor whose name does not read tells nothing");
     labeler::endTick();
 
     //--- the game reuses memory: new ARC / item at an old address must not keep the old name

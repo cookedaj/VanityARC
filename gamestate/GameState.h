@@ -110,8 +110,13 @@ private:
     std::chrono::steady_clock::time_point lastScan_{};
     Timing timing_{};
     const char* fault_ = nullptr; //why the last scan() failed (shown on screen)
+    //Vtables config.h does not know (its constants go stale with every game patch): what their actors' names said.
+    //A kind is kept until the world changes; NONE is asked again after a while (next).
+    struct Learned { Object kind = Object::NONE; int votes = 0; bool decided = false; std::chrono::steady_clock::time_point next{}; };
+    std::unordered_map<ptr, Learned> learned_;
 
     bool scan();            //the whole actor list; false when there is no world yet
+    void learnKinds(const std::unordered_map<ptr, std::pair<int, ptr>>& unsure, std::chrono::steady_clock::time_point now);
     void updatePose(Tracked& t, const std::vector<uint8_t>& bones, const skeleton::Xform& mesh, bool freshBones);
     void updateDynamic();   //position, health, team, dead for players and ARC
     gsRet assemble(const FminimalViewInfo& vm);

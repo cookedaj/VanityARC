@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <random>
@@ -66,7 +67,7 @@ bool GameState::scan() {
         logThrottled("[-] Invalid Uworld (not in a raid yet?)");
         return false;
     }
-    if (uworld != lastWorld_) { camActor_ = 0; shieldSeen_.clear(); lastTeamID = -1; meActor_ = 0; } //a new world: new camera and players, your team and pawn not known yet
+    if (uworld != lastWorld_) { camActor_ = 0; shieldSeen_.clear(); lastTeamID = -1; meActor_ = 0; learned_.clear(); } //a new world: new camera and players, your team and pawn not known yet, vtables learned again
     lastWorld_ = uworld;
     //PersistentLevel at UWorld+0x170 is encrypted; the plain pointer is in LevelCollections[0] (see config.h)
     ptr levelCollection = ReadMemory<ptr>(uworld + off::LEVEL_COLLECTIONS);
@@ -93,6 +94,7 @@ bool GameState::scan() {
     struct C { ptr actor, vt, root; Object type; Vector3 pos; };
     std::vector<C> kept;
     ptr cam = 0;
+    std::unordered_map<ptr, std::pair<int, ptr>> unsure; //a vtable to ask about: how many of its actors were seen, one of them at random
     for (size_t i = 0; i < cand.size(); i++) {
         const ptr vt = vts[i];
         Object t;
@@ -100,9 +102,20 @@ bool GameState::scan() {
         else if (vt == vtabels::ARC) t = Object::ARC;
         else if (vt == vtabels::SEARCH) t = Object::SEARCH;
         else if (vt == vtabels::CAMMANAGER) { cam = cand[i]; continue; } //the camera only; the last one wins
-        else continue; //everything else (including the old PICKUP vtable) is not drawn
+        else { //not in config.h (stale after a game patch): what the names of this vtable's actors said
+            const auto it = learned_.find(vt);
+            if (it != learned_.end() && it->second.decided && it->second.kind != Object::NONE) t = it->second.kind;
+            else {
+                if ((it == learned_.end() || t0 >= it->second.next) && vt >= ImageBase && vt < ImageEnd) { //a real vtable is in the game image
+                    auto& u = unsure[vt];
+                    if (std::uniform_int_distribution<int>(0, u.first++)(scanJitter) == 0) u.second = cand[i];
+                }
+                continue; //everything else is not drawn
+            }
+        }
         kept.push_back({cand[i], vt, 0, t, {}});
     }
+    learnKinds(unsure, t0);
 
     rq.clear();
     for (C& c : kept) queue(rq, c.actor + off::ROOT_COMPONENT_PTR, &c.root);
@@ -155,6 +168,35 @@ bool GameState::scan() {
     timing_.statics = statics_.size();
     timing_.dynamics = dyn_.size();
     return true;
+}
+
+//Asks one actor of each unsure vtable what it is, by its names (labeler::kindByName), at most LEARN_PER_SCAN a scan.
+//LEARN_VOTES answers in a row that agree give the vtable its kind; answers that disagree (a vtable shared by different
+//things) or NONE make it NONE, asked again after NONE_FOR. An actor whose names do not read tells nothing.
+void GameState::learnKinds(const std::unordered_map<ptr, std::pair<int, ptr>>& unsure, clk::time_point now) {
+    constexpr int LEARN_PER_SCAN = 32, LEARN_VOTES = 3;
+    constexpr auto NONE_FOR = std::chrono::seconds(10);
+    int asked = 0;
+    for (const auto& [vt, pick] : unsure) {
+        if (++asked > LEARN_PER_SCAN) break;
+        Learned& L = learned_[vt];
+        const std::optional<Object> k = labeler::kindByName(pick.second);
+        if (!k) { L.next = now + std::chrono::seconds(1); continue; } //names not readable (yet): ask again in a second
+        if (L.decided) { //a NONE that ran out: still NONE keeps it, anything else starts over
+            if (*k == Object::NONE) { L.next = now + NONE_FOR; continue; }
+            L = {};
+        }
+        if (L.votes && *k != L.kind) { L.kind = Object::NONE; L.votes = LEARN_VOTES; }
+        else { L.kind = *k; L.votes++; }
+        if (L.votes < LEARN_VOTES) continue;
+        L.decided = true;
+        L.next = now + NONE_FOR;
+        if (L.kind == Object::NONE) continue;
+        const char* kind = L.kind == Object::PLAYER ? "PLAYER" : L.kind == Object::ARC ? "ARC" : "SEARCH";
+        std::printf("[+] Learned vtable 0x%llx = %s from its actors' names (put it in config.h as vtabels::%s to skip learning)\n",
+                    (unsigned long long)vt, kind, kind);
+        std::fflush(stdout);
+    }
 }
 
 //One player's stick figure for this step. The bone list is read whole only some of the time (the game rewrites it
