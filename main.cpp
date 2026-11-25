@@ -175,7 +175,7 @@ int main() {
         //The camera is read again right now: the markers follow the view exactly, not as it was a few milliseconds ago
         FminimalViewInfo vm = snap->vm;
         bool freshCam = false;
-        if (snap->valid && !config::streamHide) { //stream hide: no markers to place, so no extra camera read
+        if (snap->valid && (!config::streamHide || g_KeyMark)) { //stream hide: no camera read, except for a waiting F6
             FminimalViewInfo fresh;
             if (tracker.freshCamera(fresh)) { vm = fresh; freshCam = true; }
         }
