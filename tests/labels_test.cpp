@@ -192,6 +192,7 @@ int main() {
     CHECK(typed == "cooked", "typing c-o-o-k-e-d");
 
     //--- the game world: names in the pool
+    addPoolName(0, "None"); //the decoder checks this before it trusts the pool
     addPoolName(0x1240, "BP_PickupBase_C");
     addPoolName(0x1280, "DA_Item_BattleRifle_BreachAction_01");
     addPoolName(0x12C0, "BP_SocketContainer_Gvt_BinTrash_01_A_C");

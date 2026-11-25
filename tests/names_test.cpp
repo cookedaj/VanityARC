@@ -115,13 +115,16 @@ int main() {
     names::setBase(base);
 
     //not ready before the table exists
-    CHECK(!names::ready(), "not ready while the text key table is empty");
+    CHECK(!names::ready() && names::status() == names::Status::TableZero, "not ready while the text key table is empty");
     for (int i = 0; i < 64; i++) textTable[i] = (u16)(0x1111 * (i + 1) + i * 7 + 1);
     std::memcpy((void*)(base + TEXT_RVA), textTable, sizeof textTable);
     anchor = base + ANCHOR_RVA; keyAll = anchor * ((anchor ^ ANCHOR_XOR) | 1);
     slotXor = keyAll + SLOT_KEY_ADD; blockKey = keyAll + BLOCK_KEY_ADD;
     names::setBase(base);
-    CHECK(names::ready(), "ready once the table is there");
+    CHECK(!names::ready() && names::status() == names::Status::PoolStale, "not ready while name 0 is not \"None\" (stale pool)");
+    addPoolName(0, "None");
+    names::setBase(base);
+    CHECK(names::ready() && names::status() == names::Status::Ok, "ready once the table is there and name 0 is \"None\"");
 
     //clmul self-check against a known small case: (x+1)*(x+1) = x^2+1
     CHECK(names::clmul64(3, 3) == 5, "clmul64(3,3) == 5");

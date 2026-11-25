@@ -13,8 +13,13 @@ namespace names {
 //Where the game image is loaded. Only a test changes this.
 void setBase(uintptr_t base);
 
-//The text key table could be read and looks sane. False means object names will all come back empty.
+//The text key table could be read and name 0 decodes to "None". False means object names will all come back empty.
 bool ready();
+
+//Why ready() is false: TableZero = key table unreadable/empty, PoolStale = key table reads but name 0 is not "None"
+//(NAMES_RVA / ANCHOR_RVA / ANCHOR_XOR or the decode constants stale, or the pool not loaded yet).
+enum class Status { TableZero, PoolStale, Ok };
+Status status();
 
 //PlayerNamePrivate: pass the address of the FString (PlayerState + 0x460). Empty when unreadable.
 std::string playerName(uintptr_t fstringAddr);
