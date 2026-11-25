@@ -311,10 +311,13 @@ inline LabelRect g_listRect;
 
 //Arrows at the screen edge for players outside your squad who are not on screen (to the side, or behind you). The arrows
 //keep other labels away from them; their distance labels only appear where there is room. Nearby live ARC get the same
-//arrows, kite-shaped and in the ARC colour. cap: the most arrows drawn (the nearest ones).
+//arrows, kite-shaped and in the ARC colour. cap: the most arrows drawn (the nearest ones). An arrow whose square touches
+//one in avoid is left out. Returns each drawn arrow's square and its distance label's place.
 struct EdgeArrow { const RenderEntity* ent; double dist; ImU32 color; bool arc = false; }; //color: enemy, or teammate for a hand mark
-inline void DrawEdgeArrows(const View& v, std::vector<EdgeArrow>& edge, size_t cap = 8) {
-    if (edge.empty()) return;
+inline std::vector<LabelRect> DrawEdgeArrows(const View& v, std::vector<EdgeArrow>& edge, size_t cap = 8,
+                                             const std::vector<LabelRect>* avoid = nullptr) {
+    std::vector<LabelRect> used;
+    if (edge.empty()) return used;
     std::sort(edge.begin(), edge.end(), [](const EdgeArrow& a, const EdgeArrow& b) { return a.dist < b.dist; });
     if (edge.size() > cap) edge.resize(cap);
     const float hx = std::max(20.0f, (float)v.rw / 2 - 46), hy = std::max(20.0f, (float)v.rh / 2 - 46); //edges of the game's picture
@@ -335,8 +338,8 @@ inline void DrawEdgeArrows(const View& v, std::vector<EdgeArrow>& edge, size_t c
         float py = (float)v.cy + (float)uy * t;
         const LabelRect& L = g_listRect;
         if (L.x1 > L.x0 && px > L.x0 - 20 && px < L.x1 + 20 && py > L.y0 - 20 && py < L.y1 + 20) py = L.y0 - 20; //not under the player list: just above it
-        (e.arc ? DrawKiteArrow : DrawArrow)(px, py, (float)ux, (float)uy, as, e.color);
-        QueueReserve({px - half, py - half, px + half, py + half});
+        const LabelRect sq{px - half, py - half, px + half, py + half};
+        if (avoid && std::any_of(avoid->begin(), avoid->end(), [&](const LabelRect& r) { return RectsOverlap(sq, r); })) continue;
         std::snprintf(buf, sizeof buf, "%.0fm", e.dist);
         //Far enough back to clear the arrow's own reserved square (half + LabelAt's 2 px x pad / 1 px y pad), or a
         //wide or tall label would always be dropped; never closer than two arrow lengths (the old 30 px at k = 1)
@@ -344,8 +347,14 @@ inline void DrawEdgeArrows(const View& v, std::vector<EdgeArrow>& edge, size_t c
         const ImVec2 ts = LabelSize(buf, ls);
         const float ax = std::max(std::abs((float)ux), 1e-3f), ay = std::max(std::abs((float)uy), 1e-3f);
         const float back = std::max(2.0f * as, 1.0f + std::min((half + 2.0f + ts.x / 2) / ax, (half + 1.0f + ts.y / 2) / ay));
-        QueueLabel(px - (float)ux * back, py - (float)uy * back, buf, ls, e.arc ? 1 : 0, e.dist); //ARC: same rank as its marker labels
+        const float lx = px - (float)ux * back, ly = py - (float)uy * back;
+        (e.arc ? DrawKiteArrow : DrawArrow)(px, py, (float)ux, (float)uy, as, e.color);
+        QueueReserve(sq);
+        QueueLabel(lx, ly, buf, ls, e.arc ? 1 : 0, e.dist); //ARC: same rank as its marker labels
+        used.push_back(sq);
+        used.push_back(LabelAt(lx, ly, ts));
     }
+    return used;
 }
 
 //The stick figure: dark outline first so it shows on any background, then the colour. A line is drawn only when both of
@@ -563,8 +572,15 @@ inline void DrawESP(const std::vector<RenderEntity>& entities, FminimalViewInfo 
         }
     }
     if (g_listRect.x1 > g_listRect.x0) QueueReserve(g_listRect); //labels stay off the player list
-    DrawEdgeArrows(v, edge);
-    DrawEdgeArrows(v, arcEdge, 4); //after the players, so player arrows keep their room first
+    //ARC arrows go under the player arrows (channel 0 is drawn before channel 1), and an ARC arrow that would cover a
+    //player arrow or its distance is left out
+    ImDrawList* dl = ImGui::GetBackgroundDrawList();
+    dl->ChannelsSplit(2);
+    dl->ChannelsSetCurrent(1);
+    const std::vector<LabelRect> players = DrawEdgeArrows(v, edge);
+    dl->ChannelsSetCurrent(0);
+    DrawEdgeArrows(v, arcEdge, 4, &players);
+    dl->ChannelsMerge();
     FlushLabels();
 }
 
