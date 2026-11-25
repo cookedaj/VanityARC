@@ -441,30 +441,39 @@ inline void DrawESP(const std::vector<RenderEntity>& entities, FminimalViewInfo 
     FlushLabels();
 }
 
+//The radar panel reaches R + 14 below its centre and R + 14 to the sides, wider when the title needs it; the title strip on
+//top grows with the title, which follows Text size (never under 12 px)
+inline float RadarTitleSize() { return std::max(12.0f, config::labelSize); }
+inline std::string RadarTitle() {
+    char t[48];
+    std::snprintf(t, sizeof t, "RADAR  %.0f m", config::radarRadius * config::scale / 100.0); //metres from the centre to the edge
+    return t;
+}
+inline float RadarHalfWidth() { return std::max(config::radarRadius + 14, LabelSize(RadarTitle().c_str(), RadarTitleSize()).x / 2 + 8); }
+inline float RadarTop() { return config::radarRadius + 14 + RadarTitleSize(); } //from the centre up to the panel's top edge
+
 //Fit the saved centre to this screen, so a position saved on another monitor or scale stays visible
 inline ImVec2 RadarCenter() {
-    const float R = config::radarRadius;
-    return ImVec2(std::clamp(config::radarCenterX, R + 14, std::max(R + 14, (float)config::SCREEN_W - R - 14)),
-                  std::clamp(config::radarCenterY, R + 26, std::max(R + 26, (float)config::SCREEN_H - R - 14)));
+    const float R = config::radarRadius, hw = RadarHalfWidth(), top = RadarTop();
+    return ImVec2(std::clamp(config::radarCenterX, hw, std::max(hw, (float)config::SCREEN_W - hw)),
+                  std::clamp(config::radarCenterY, top, std::max(top, (float)config::SCREEN_H - R - 14)));
 }
 
 //The radar: a panel with three rings, your own arrow, and the edges of your view
 inline void DrawRadar(const std::vector<RenderEntity>& entities, FminimalViewInfo cameraInfo, int localPlayerTeam) {
-    const float R = config::radarRadius;
+    const float R = config::radarRadius, hw = RadarHalfWidth(), top = RadarTop(), ts = RadarTitleSize();
     const ImVec2 rc = RadarCenter();
     const float cx = rc.x, cy = rc.y;
     const double rangeM = R * config::scale / 100.0; //metres from the centre to the edge
 
     //Panel, rings, crosshairs
-    DrawRectFilled(cx - R - 14, cy - R - 26, cx + R + 14, cy + R + 14, IM_COL32(0, 0, 0, 150));
-    DrawRectOutline(cx - R - 14, cy - R - 26, cx + R + 14, cy + R + 14, IM_COL32(255, 255, 255, 70), 1.0f);
+    DrawRectFilled(cx - hw, cy - top, cx + hw, cy + R + 14, IM_COL32(0, 0, 0, 150));
+    DrawRectOutline(cx - hw, cy - top, cx + hw, cy + R + 14, IM_COL32(255, 255, 255, 70), 1.0f);
     DrawCircleFilled(cx, cy, R, IM_COL32(0, 0, 0, 110));
     for (int i = 1; i <= 3; i++) DrawCircleRing(cx, cy, R * i / 3.0f, IM_COL32(255, 255, 255, i == 3 ? 90 : 35), 1.0f);
     DrawLine(cx - R, cy, cx + R, cy, IM_COL32(255, 255, 255, 40), 1);
     DrawLine(cx, cy - R, cx, cy + R, IM_COL32(255, 255, 255, 40), 1);
-    char title[48];
-    std::snprintf(title, sizeof title, "RADAR  %.0f m", rangeM);
-    DrawLabelCentered(cx, cy - R - 13, title, 12.0f, IM_COL32(190, 190, 190, 255));
+    DrawLabelCentered(cx, cy - R - 7 - ts / 2, RadarTitle().c_str(), ts, IM_COL32(190, 190, 190, 255)); //in the middle of the title strip
 
     //What you can see: the edges of the view, drawn as two lines
     if (viewUsable(cameraInfo)) {

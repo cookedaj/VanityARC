@@ -254,6 +254,47 @@ int main() {
         CHECK(emptyRadar > 300 && radar > emptyRadar, "radar: panel, rings, title and your arrow even when empty; dots when players are near");
     }
 
+    //---- every part's text follows Text size: at 28 px its letters are clearly taller than at 10 px. Text drawn at a
+    //fixed size (the radar title used to be 12 px always) fails here.
+    {
+        ImGui::GetStyle().AntiAliasedLinesUseTex = false; //thin lines then use the white pixel too, so only letters pass the filter
+        //the tallest letter drawn: text vertices (not the atlas' white pixel) come 4 per letter
+        auto tallest = [&](auto fn) {
+            float best = 0;
+            draw([&] {
+                fn();
+                const ImVec2 wp = ImGui::GetDrawListSharedData()->TexUvWhitePixel;
+                std::vector<float> ys;
+                for (const ImDrawVert& v : ImGui::GetBackgroundDrawList()->VtxBuffer)
+                    if (std::abs(v.uv.x - wp.x) > 1e-6f || std::abs(v.uv.y - wp.y) > 1e-6f) ys.push_back(v.pos.y);
+                for (size_t i = 0; i + 4 <= ys.size(); i += 4) {
+                    const auto [lo, hi] = std::minmax_element(ys.begin() + i, ys.begin() + i + 4);
+                    best = std::max(best, *hi - *lo);
+                }
+            });
+            return best;
+        };
+        const float keep = config::labelSize;
+        auto follows = [&](const char* what, auto fn) {
+            config::labelSize = 10; const float small = tallest(fn);
+            config::labelSize = 28; const float big = tallest(fn);
+            config::labelSize = keep;
+            std::printf("      %s: tallest letter %.1f px at Text size 10, %.1f px at 28\n", what, small, big);
+            char msg[160];
+            std::snprintf(msg, sizeof msg, "Text size: the %s text is clearly larger at 28 than at 10", what);
+            CHECK(small > 0 && big >= 1.8f * small, msg);
+        };
+        Toast("Teammate marked: cooked", 5.0);
+        std::vector<RenderEntity> box = {ent(Object::SEARCH, 1500, 100, 0)};
+        box[0].label = "Trash can";
+        config::showContainerNames = true; config::showOffscreen = true;
+        follows("radar", [&] { DrawRadar(none, cam, 3); });
+        follows("status card and toast", [&] { DrawToast(DrawStatusCard("live", "120 fps")); });
+        follows("container label", [&] { DrawESP(box, cam, 3); });
+        follows("edge arrow", [&] { DrawESP(behind, cam, 3); });
+        ImGui::GetStyle().AntiAliasedLinesUseTex = true;
+    }
+
     //garbage in: NaN, infinity, zero-size camera, on the camera, FOV 0
     std::mt19937_64 rng(5);
     auto U = [&](double a, double b) { return std::uniform_real_distribution<double>(a, b)(rng); };
