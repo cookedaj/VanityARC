@@ -15,6 +15,7 @@
 #include <chrono>
 #include <cstring>
 #include <dirent.h>
+#include <exception>
 #include <mutex>
 #include <fcntl.h>
 #include <linux/input.h>
@@ -145,10 +146,12 @@ inline void OpenKeyboards(std::vector<int>& fds, std::vector<std::string>& paths
     closedir(dir);
 }
 
-inline void HotkeyThread() {
+inline void HotkeyRun() {
     int denied = 0;
     std::vector<int> fds;
     std::vector<std::string> paths; //same order as fds
+    //On the way out, also when an error leaves early: let go of the keyboards, so the game always gets them back
+    struct Release { std::vector<int>& fds; ~Release() { for (int fd : fds) { ioctl(fd, EVIOCGRAB, 0); close(fd); } } } release{fds};
     OpenKeyboards(fds, paths, &denied);
     g_KeyboardDenied = denied;
     g_KeyboardCount = (int)fds.size();
@@ -203,11 +206,27 @@ inline void HotkeyThread() {
         }
         g_KeyboardCount = (int)fds.size();
     }
-    for (int fd : fds) close(fd);
+}
+
+//An error in the hotkey thread (most likely out of memory) must not end the overlay: the keyboards are let go and the
+//hotkey starts again a second later
+inline void HotkeyThread() {
+    while (!g_HotkeyStop) {
+        try { HotkeyRun(); }
+        catch (const std::exception& e) { std::fprintf(stderr, "[-] Insert hotkey error (%s): starting it again\n", e.what()); }
+        catch (...) { std::fprintf(stderr, "[-] Insert hotkey error: starting it again\n"); }
+        for (int i = 0; i < 20 && !g_HotkeyStop; i++) std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    }
 }
 
 inline std::thread StartHotkey() { //SIGUSR1/SIGUSR2 handlers are installed in main() before InitOverlay
-    return std::thread(HotkeyThread);
+    try {
+        return std::thread(HotkeyThread);
+    } catch (const std::exception& e) { //no thread (out of threads or memory): the overlay runs on without the hotkeys
+        std::fprintf(stderr, "[!] Insert hotkey is off: its thread could not start (%s).\n"
+                             "    Toggle the menu with:  pkill -USR1 -x kwin-helper\n", e.what());
+        return std::thread(); //not joinable: main() skips the join
+    }
 }
 
 #endif //KWINHELPER_HOTKEY_H

@@ -7,6 +7,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <exception>
 #include <iostream>
 #include <random>
 
@@ -35,7 +36,30 @@ bool readDenied(pid_t pid) {
 void Tracker::start() {
     if (th_.joinable()) return;
     stop_ = false;
-    th_ = std::thread([this] { run(); });
+    try {
+        th_ = std::thread([this] {
+            //An error in here (most likely out of memory) must not end the overlay mid-raid: it is shown on screen and
+            //reading starts again from scratch (the game looked up again, the name cache emptied) a second later
+            while (!stop_) {
+                try { run(); }
+                catch (const std::exception& e) { fail(e.what(), "overlay error while reading the game: trying again"); sleepFor(1000); }
+                catch (...) { fail("unknown error", "overlay error while reading the game: trying again"); sleepFor(1000); }
+            }
+        });
+    } catch (const std::exception& e) { //no thread (out of threads or memory): the overlay runs on and says why
+        fail(e.what(), "the game reader could not start: restart the overlay");
+    }
+}
+
+void Tracker::fail(const char* what, const char* fault) noexcept {
+    try {
+        std::cerr << "[-] Reading the game failed (" << what << ")" << std::endl;
+        cam_ = 0;
+        auto s = std::make_shared<Snapshot>();
+        s->gameFound = true; //so main.cpp shows the fault in big letters, not "Waiting for ARC Raiders"
+        s->fault = fault;
+        publish(std::move(s));
+    } catch (...) {} //not even memory for that: the last snapshot stays and main.cpp ages it out
 }
 
 void Tracker::stop() {
