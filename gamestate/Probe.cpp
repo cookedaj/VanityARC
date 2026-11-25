@@ -215,7 +215,7 @@ void probeGuns(FILE* out, const std::vector<std::pair<double, const RenderEntity
 //----------------------------------------------------------------------------------------------
 struct Census { int count = 0; double nearest = 1e18; Object kind = Object::NONE; std::string text; };
 
-void probeCensus(FILE* out, const std::vector<RenderEntity>& ents, const std::vector<RenderEntity>& unknown, const FminimalViewInfo& vm) {
+void probeCensus(FILE* out, const std::vector<RenderEntity>& ents, const std::vector<RenderEntity>& unknown, size_t unknownTotal, const FminimalViewInfo& vm) {
     std::map<uint32_t, Census> census;
     int unreadable = 0, total = 0;
     auto add = [&](const RenderEntity& e) {
@@ -233,7 +233,10 @@ void probeCensus(FILE* out, const std::vector<RenderEntity>& ents, const std::ve
     std::vector<Census> rows;
     for (auto& kv : census) rows.push_back(kv.second);
     std::sort(rows.begin(), rows.end(), [](const Census& a, const Census& b) { return a.count > b.count; });
-    std::fprintf(out, "ACTOR NAMES in the level: %d actors, %d names unreadable, %zu distinct names (top 45 by count)\n", total, unreadable, rows.size());
+    const size_t dropped = unknownTotal - unknown.size(); //other-class actors too far away to be named
+    std::fprintf(out, "ACTOR NAMES in the level: %zu actors", (size_t)total + dropped);
+    if (dropped) std::fprintf(out, " (other classes: names read for the nearest %zu of %zu)", unknown.size(), unknownTotal);
+    std::fprintf(out, ", %d names unreadable, %zu distinct names (top 45 by count)\n", unreadable, rows.size());
     for (size_t i = 0; i < rows.size() && i < 45; i++)
         std::fprintf(out, "  %4d  %-9s  nearest %6.1f m  %s\n", rows[i].count, kindName(rows[i].kind), rows[i].nearest, rows[i].text.c_str());
 }
@@ -317,8 +320,16 @@ void runNameProbe(const std::vector<RenderEntity>& ents, const std::vector<Rende
     if (arc.empty()) std::fprintf(out, "  (no ARC in view)\n");
 
     probeGuns(out, players, me ? me->actor : 0);
-    probeNear(out, ents, unknown, vm);
-    probeCensus(out, ents, unknown, vm);
+    //A level holds about 10,000 other-class actors and reading every name is slow: only the 1500 nearest the camera
+    std::vector<RenderEntity> nearest(unknown);
+    if (nearest.size() > 1500) {
+        std::nth_element(nearest.begin(), nearest.begin() + 1500, nearest.end(), [&](const RenderEntity& a, const RenderEntity& b) {
+            return a.pos.Dist(vm.Location) < b.pos.Dist(vm.Location);
+        });
+        nearest.resize(1500);
+    }
+    probeNear(out, ents, nearest, vm);
+    probeCensus(out, ents, nearest, unknown.size(), vm);
 
     std::fprintf(out, "CONTAINERS\n");
     diffScan(out, "  container fields", containers, 0x300, 0x1400, 14);
