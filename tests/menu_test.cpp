@@ -74,10 +74,16 @@ int main() {
         onSlider = ImGui::GetCurrentContext()->HoveredId == sliderId;
     }
     CHECK(onSlider, "the mouse can hover the slider");
-    io.AddKeyEvent(ImGuiMod_Ctrl, true); frame(box); //the test holds Ctrl itself (in the program it comes from the keyboard)
+    //Ctrl reaches ImGui only through the key queue while the menu has the keyboard, so Ctrl+click typing needs
+    //"Keyboard controls the menu" on (with it off the overlay never learns that Ctrl is held)
+    config::menuKeyboard = true;
+    { std::lock_guard<std::mutex> lk(g_KeyMutex); g_KeyQueue.push_back({KEY_LEFTCTRL, 1}); }
+    MenuFeedKeys(); frame(box);
     io.AddMouseButtonEvent(ImGuiMouseButton_Left, true); frame(box);
     io.AddMouseButtonEvent(ImGuiMouseButton_Left, false); frame(box);
-    io.AddKeyEvent(ImGuiMod_Ctrl, false);
+    { std::lock_guard<std::mutex> lk(g_KeyMutex); g_KeyQueue.push_back({KEY_LEFTCTRL, 0}); }
+    MenuFeedKeys();
+    config::menuKeyboard = false; //the rest of the typing runs with the switch off: the open number box holds the keyboard
     int n = 0;
     while (!io.WantTextInput && n++ < 12) frame(box);
     std::printf("frames until active: %d, activeId %u\n", n, ImGui::GetCurrentContext()->ActiveId);
