@@ -377,7 +377,7 @@ void runNameProbe(const std::vector<RenderEntity>& ents, const std::vector<Rende
 
 
 //==============================================================================================
-// Live probes: KWINHELPER_PROBE=shield or KWINHELPER_PROBE=inventory, set before starting (see the README). Read only.
+// Live probes: KWINHELPER_PROBE=<names>, see announceLiveProbe; set before starting (see the README). Read only.
 //==============================================================================================
 #ifdef KWINHELPER_PROBES //the offset-finding probes: not in the release build (cmake -DKWINHELPER_PROBES=ON)
 namespace {
