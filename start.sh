@@ -42,4 +42,18 @@ if [ -z "$MON" ] && command -v kscreen-doctor >/dev/null 2>&1; then
 fi
 if [ -n "$MON" ]; then export KWINHELPER_MONITOR="$MON"; echo "[+] Overlay monitor: $MON"; fi
 
-exec "$BIN"   # exec: Ctrl+C and kill reach kwin-helper itself, so it can save and release the keyboard
+# If kwin-helper crashes, it is started again after 2 seconds. Quitting on purpose (F10, the menu's Quit, Ctrl+C,
+# pkill kwin-helper) exits with 0 and ends this script too. A stop within 20 s of starting is not retried: it would
+# only fail again (already running, no overlay, a crash at start).
+trap ':' INT   # Ctrl+C reaches kwin-helper too (same process group), so it can save and release the keyboard
+while :; do
+    t=$SECONDS
+    "$BIN" && exit 0
+    rc=$?
+    if [ $((SECONDS - t)) -lt 20 ]; then
+        echo "[-] kwin-helper stopped right after starting (exit $rc): not restarting it" >&2
+        exit "$rc"
+    fi
+    echo "[!] kwin-helper stopped unexpectedly (exit $rc): restarting it in 2 seconds" >&2
+    sleep 2
+done
