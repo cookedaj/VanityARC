@@ -55,6 +55,8 @@ constexpr auto POSE_FROZEN_AFTER = std::chrono::milliseconds(300); //a drawn, an
 constexpr auto BONE_PERIOD = std::chrono::milliseconds(16);        //a bone list is read at most about 60 times a second; between reads the last one is reused
 constexpr auto CAMERA_HOLD = std::chrono::milliseconds(250);       //a view that cannot be used is replaced by the last good one for this long
 constexpr auto WORLD_CHECK_GAP = std::chrono::milliseconds(30);    //the UWorld chain is read at least this often (every 4th step at 120 updates a second)
+constexpr auto FAR_ARC_PERIOD = std::chrono::milliseconds(66);     //ARC far beyond the ARC and radar ranges: read about 15 times a second
+constexpr double FAR_ARC_MARGIN = 2500;                            //cm past that range, so an ARC is back to every step before it can be drawn
 
 uint64_t fnv1a(const uint8_t* p, size_t n) {
     uint64_t h = 1469598103934665603ULL;
@@ -304,7 +306,8 @@ void GameState::updateDynamic(FminimalViewInfo& vm) {
         ptr vt = 0, root = 0, hc = 0, sc = 0; int team = 0; uint8_t destroyed = 0; RootXf xf{}; double hp = 0; uint64_t shRaw = 0, shMaxRaw = 0;
         bool wantPose = false; ptr ctrl = 0, mesh = 0, boneData = 0; uint64_t rtRaw = 0; int boneNum = 0; MeshXf mx{}; std::vector<uint8_t> bones;
         const std::vector<uint8_t>* view = nullptr; bool freshBones = false; //the bone list to use: this step's read, or the cached one
-        double hpMax = 0; int teamAt = -1, hpAt = -1, maxAt = -1, shAt = -1; bool teamOk = false, hpOk = false, shOk = false; //which reads worked (a failed one reads as 0)
+        double hpMax = 0; int teamAt = -1, hpAt = -1, maxAt = -1, shAt = -1, deadAt = -1; bool teamOk = false, hpOk = false, shOk = false, deadOk = false; //which reads worked (a failed one reads as 0)
+        bool skip = false; //a far ARC not due this step: it keeps what it had
     };
     const bool shieldOn = live::shieldValue >= 0;
     const bool skeletonOn = g_skeletonOn.load(std::memory_order_relaxed);
@@ -324,33 +327,43 @@ void GameState::updateDynamic(FminimalViewInfo& vm) {
         if (e.isDead || (!matesShown && lastTeamID >= 0 && e.teamID == lastTeamID)) return false; //a cross, or a hidden squad mate
         return dist <= 500.0 || d.Dot(fwd) >= cosCone * dist; //within 5 m, or in front of the camera
     };
+    const double arcNear = g_arcDrawDist.load(std::memory_order_relaxed) * 100.0 + FAR_ARC_MARGIN; //cm, flat
+    const auto stepNow = clk::now();
     std::vector<Row> rows(n);
     std::vector<ReadReq> rq;
     rq.reserve(n * 5 + 1);
     if (camActor_) queue(rq, camActor_ + off::VIEW_MATRIX, &vm); //the camera's view rides along (a failed read is zeroed: not usable)
     for (size_t i = 0; i < n; i++) {
-        const RenderEntity& e = dyn_[i].ent;
+        const Tracked& t = dyn_[i];
+        const RenderEntity& e = t.ent;
         Row& r = rows[i];
+        if (e.type == Object::ARC && stepNow - t.readAt < FAR_ARC_PERIOD &&
+            std::hypot(e.pos.x - lastView_.Location.x, e.pos.y - lastView_.Location.y) > arcNear) { r.skip = true; continue; }
+        //The components do not change while the actor lives: found once per scan, and looked for again only while missing.
+        //The vtable read on every step is the guard against an actor whose memory was reused.
+        r.root = t.root; r.hc = t.hc; r.sc = t.sc; r.mesh = t.mesh;
         queue(rq, e.actor, &r.vt); //still the same kind of actor? (the game reuses memory)
-        queue(rq, e.actor + off::ROOT_COMPONENT_PTR, &r.root);
         if (e.type == Object::PLAYER) {
-            queue(rq, e.actor + off::HEALTH_COMPONENT, &r.hc);
+            if (!isValidPtr(r.hc)) queue(rq, e.actor + off::HEALTH_COMPONENT, &r.hc);
             r.teamAt = (int)rq.size(); queue(rq, e.actor + off::TEAM_ID, &r.team);
-            if (shieldOn && live::shieldComponent >= 0) queue(rq, e.actor + (ptr)live::shieldComponent, &r.sc); //the shield lives in another component
+            if (shieldOn && live::shieldComponent >= 0 && !isValidPtr(r.sc)) queue(rq, e.actor + (ptr)live::shieldComponent, &r.sc); //the shield lives in another component
             r.wantPose = skeletonDrawn(e);
             queue(rq, e.actor + off::CONTROLLER, &r.ctrl);
-            queue(rq, e.actor + off::MESH, &r.mesh); //for the pose and for when the game last drew him
+            if (!isValidPtr(r.mesh)) queue(rq, e.actor + off::MESH, &r.mesh); //for the pose and for when the game last drew him
         } else {
-            queue(rq, e.actor + off::IS_DESTROYED, &r.destroyed);
+            r.deadAt = (int)rq.size(); queue(rq, e.actor + off::IS_DESTROYED, &r.destroyed);
         }
     }
     ReadScatter(rq.data(), rq.size());
-    for (Row& r : rows) r.teamOk = r.teamAt >= 0 && rq[(size_t)r.teamAt].ok; //before rq is reused: a failed read is 0, not team 0
+    for (Row& r : rows) { //before rq is reused: a failed read is 0, not team 0 or alive
+        r.teamOk = r.teamAt >= 0 && rq[(size_t)r.teamAt].ok;
+        r.deadOk = r.deadAt >= 0 && rq[(size_t)r.deadAt].ok;
+    }
 
     rq.clear();
     for (size_t i = 0; i < n; i++) {
         Row& r = rows[i];
-        if (r.vt != dyn_[i].ent.vt || !isValidPtr(r.root)) continue;
+        if (r.skip || r.vt != dyn_[i].ent.vt || !isValidPtr(r.root)) continue;
         queue(rq, r.root + off::POS_PTR - 0x20, &r.xf); //the rotation sits right before the position (config.h)
         if (dyn_[i].ent.type == Object::PLAYER && isValidPtr(r.mesh)) queue(rq, r.mesh + off::RENDER_TIME, &r.rtRaw);
         if (r.wantPose && isValidPtr(r.mesh)) {
@@ -412,9 +425,11 @@ void GameState::updateDynamic(FminimalViewInfo& vm) {
     for (size_t i = 0; i < n; i++) {
         Tracked& t = dyn_[i];
         const Row& r = rows[i];
+        if (r.skip) continue; //a far ARC between its reads: kept as last read
         t.live = r.vt == t.ent.vt && isValidPtr(r.root) && plausible(r.xf.pos);
-        if (!t.live) continue;
-        t.root = r.root;
+        if (!t.live) continue; //not read: tried again at the next step
+        t.readAt = clockNow;
+        t.root = r.root; t.hc = r.hc; t.sc = r.sc; t.mesh = r.mesh; //kept until the next scan
         t.ent.pos = r.xf.pos;
         t.ent.yaw = yawFromQuat(r.xf.q);
         if (t.ent.type == Object::PLAYER) {
@@ -465,7 +480,7 @@ void GameState::updateDynamic(FminimalViewInfo& vm) {
                 t.shieldRead = -1;
             }
         } else {
-            t.ent.isDead = r.destroyed == 1; //a bool is 0 or 1; any other byte means the offset moved: unknown, treated as alive
+            if (r.deadOk) t.ent.isDead = r.destroyed == 1; //a bool is 0 or 1; any other byte means the offset moved: unknown, treated as alive. Failed: as it was
         }
     }
 }

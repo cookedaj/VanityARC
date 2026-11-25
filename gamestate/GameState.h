@@ -19,6 +19,8 @@ inline std::atomic<bool> g_showTeammates{true}; //squad mates are drawn (until t
 inline std::atomic<double> g_viewSpread{4.0};    //the picture's corners (with DrawESP's margin) as a tangent per unit tan(FOV/2); until known: wide
 //The loot range plus a margin (m): containers and ground items further away are not named or put in the snapshot
 inline std::atomic<int> g_lootRange{50};
+//The larger of the ARC range and the radar range (m). ARC well beyond it are drawn nowhere, so they are read less often.
+inline std::atomic<double> g_arcDrawDist{200};
 
 struct gsRet {
     std::vector<RenderEntity> entities{};
@@ -76,14 +78,16 @@ private:
     //--- step() (gamestate/Fast.cpp)
     struct Tracked {
         RenderEntity ent;
-        ptr root = 0;       //RootComponent when last read
+        ptr root = 0;       //RootComponent, found by the scan
+        ptr hc = 0, sc = 0, mesh = 0; //a player's health, shield and mesh components: found once per scan (0: looked for again)
+        std::chrono::steady_clock::time_point readAt{}; //when updateDynamic last read it (far ARC are read less often)
         bool live = false;  //passed this update's checks, so it is drawn
         bool hpRead = false;     //players: playerHealth came from a read that worked since the scan (not the stand-in 100)
         double shieldRead = -1;  //players: the shield from the last read that worked since the scan (-1: none)
         bool named = false; //statics: refine/fill done since the last scan (done when it first comes within g_lootRange)
     };
     std::vector<Tracked> statics_; //containers and ground items: position read at each scan
-    std::vector<Tracked> dyn_;     //players and ARC: re-read every step
+    std::vector<Tracked> dyn_;     //players and ARC: re-read every step (ARC far beyond any range about 15 times a second)
     //Each slot of the actor list as the last scan saw it: the actor, its vtable and its RootComponent (0: read it again).
     //A scan reads the vtable only for slots that changed plus a rotating 1/20 of the rest (all within about 2 s).
     struct Slot { ptr actor = 0, vt = 0, root = 0; };

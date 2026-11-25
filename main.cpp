@@ -155,6 +155,7 @@ int main() {
         g_skeletonDist = (int)std::ceil(std::min(config::skeletonMaxDist, config::maxPlayerDist));
         g_showTeammates = config::showTeammates;
         g_lootRange = (int)config::maxLootDist + 10; //loot is named and sent only this near (10 m spare: the camera moves between reads)
+        g_arcDrawDist = std::max(config::maxArcDist, (double)config::radarRadius * config::scale / 100.0); //ARC beyond both are read less often
 
         //Where the game's picture is on screen (differs from the screen with gamescope / a stretched resolution)
         GameViewSettings gvs;
