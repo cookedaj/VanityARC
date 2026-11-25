@@ -24,6 +24,20 @@ if [ ! -x "$BIN" ]; then
     exit 1
 fi
 
+# After editing config.h or the code (patch day), a forgotten or failed rebuild would quietly start the OLD program.
+# So rebuild when any source is newer than the binary, and stop loudly if that build fails.
+if [ -n "$(find config.h main.cpp CMakeLists.txt draw gamestate memory utils -type f -newer "$BIN" -print -quit 2>/dev/null)" ]; then
+    BUILD_DIR="$(dirname "$BIN")"
+    echo "[+] The code changed since the last build: rebuilding $BUILD_DIR"
+    cmake --build "$BUILD_DIR" -j"$(nproc)" || {
+        echo >&2
+        echo "[-] THE BUILD FAILED. Not starting, because that would run the OLD program." >&2
+        echo "[-] Fix the first error shown above, then run: bash start.sh" >&2
+        exit 1
+    }
+    touch "$BIN"   # also when nothing needed relinking, so the next start does not rebuild again
+fi
+
 # Reading another process's memory needs the ptrace capability on the binary. It is lost every time the
 # program is rebuilt, so it is only set (and sudo only asked for) when it is missing.
 command -v getcap >/dev/null && command -v setcap >/dev/null || {
