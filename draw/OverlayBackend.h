@@ -14,6 +14,8 @@ void SetOverlayHidden(bool on);             //stream-hide: while on, nothing is 
                                              //(OverlayReady) and made again when it goes off; the normal window draws empty frames
 bool OverlayReady();                         //once per frame before RenderBegin(): the layer surface's events. False while the surface
                                              //is gone (monitor unplugged / off, compositor restart) and being made again: skip the frame
+bool OverlayNeedsFrame();                    //the surface is new or changed size: it needs a frame even if nothing in it changed
+void OverlayIdle();                          //instead of a frame that would look like the last: window events, then a ~2 ms wait
 bool OverlayShouldClose();
 void OverlayShutdown();
 const char* OverlayBackendName();            //"layer-shell" or "glfw window"

@@ -117,8 +117,10 @@ inline float DrawStatusCard(const std::string& line1, const std::string& line2, 
     return y;
 }
 
+inline bool ToastShowing() { return !g_toast.empty() && ImGui::GetTime() < g_toastUntil; }
+
 inline void DrawToast(float y) {
-    if (g_toast.empty() || ImGui::GetTime() >= g_toastUntil) return;
+    if (!ToastShowing()) return;
     DrawLabelCentered((float)config::SCREEN_W * 0.5f, y, g_toast.c_str(), config::labelSize, COLOR::white, true);
 }
 
