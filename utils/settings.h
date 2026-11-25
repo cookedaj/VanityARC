@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -99,19 +100,30 @@ inline std::string path(const std::string& dir = "") {
     return std::string(home ? home : ".") + "/.config/kwin-helper/settings.txt";
 }
 
-inline void load(const std::string& dir = "") {
+//Returns how many lines were ignored (each is printed with its line number and the expected format)
+inline int load(const std::string& dir = "") {
     defaults();
     std::ifstream f(path(dir));
     std::string line;
+    int lineNo = 0, ignored = 0;
     while (std::getline(f, line)) {
+        lineNo++;
+        if (!line.empty() && line.back() == '\r') line.pop_back(); //file edited on another system
         if (line.starts_with("\xEF\xBB\xBF")) line.erase(0, 3); //UTF-8 byte-order mark (some Windows editors add one)
         std::istringstream in(line);
         std::string name;
         double v;
-        if (!(in >> name >> v)) continue;
-        for (const Entry& e : table())
-            if (name == e.name) setValue(e, v); //out of range: pulled to the nearest allowed value; NaN: ignored
+        if (!(in >> name) || name[0] == '#') continue; //blank line or comment
+        if (name == "streamHide") continue; //no longer saved, but files from older versions still have it: not an error
+        bool known = false;
+        if ((in >> v) && std::isfinite(v))
+            for (const Entry& e : table())
+                if (name == e.name) { setValue(e, v); known = true; } //out of range: pulled to the nearest allowed value
+        if (!known && ++ignored <= 5) //a few are enough to find them; the toast gives the total
+            std::printf("[!] settings.txt line %d ignored: \"%s\" (expected: a setting name, a space, a number, e.g. \"showArc 1\")\n",
+                        lineNo, line.c_str());
     }
+    return ignored;
 }
 
 inline void save(const std::string& dir = "") {

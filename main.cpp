@@ -9,7 +9,9 @@
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
+#include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #include "gamestate/Tracker.h"
@@ -71,11 +73,17 @@ int main() {
         return 1;
     }
 
-    settings::load(); //menu settings and your own names from the last run (every value kept inside its safe range)
-    labels::load();
-    itemvalues::load();
+    //menu settings and your own names from the last run (every value kept inside its safe range)
+    const int badSettings = settings::load(), badLabels = labels::load(), badValues = itemvalues::load();
     marks::load();    //teammates you marked by hand
     live::load();     //offsets found with the probes (offsets.txt)
+    {   //hand-edited lines that were not understood: one toast at start (the terminal lists them with line numbers)
+        std::string ignored;
+        const std::pair<const char*, int> bad[] = {{"settings.txt", badSettings}, {"labels.txt", badLabels}, {"values.txt", badValues}};
+        for (const auto& [file, n] : bad)
+            if (n > 0) ignored += (ignored.empty() ? "" : ", ") + std::to_string(n) + (n == 1 ? " line in " : " lines in ") + file;
+        if (!ignored.empty()) Toast("Ignored " + ignored + " (see the terminal)", 10.0);
+    }
     std::thread hotkey = StartHotkey(); //Insert opens the menu
     ESPInit();
     if (const char* tab = std::getenv("KWINHELPER_TAB")) g_MenuTab = std::atoi(tab); //for screenshots: start on this page

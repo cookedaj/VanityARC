@@ -165,9 +165,13 @@ int main() {
     CHECK(labels::display(Cat::Player, "793381ba5d093c9f", "cooked") == "cooked", "player shows its game name");
     const std::string labelsFile = dir + "/labels.txt";
     const std::string labelsText = "\xEF\xBB\xBF" "arc\tDA_EnemyType_Runner\tSpider\n"
-                                   "Container \t BP_SocketContainer_CUL_MuseumCrate_01_A_C \t Art crate \r\n";
+                                   "Container \t BP_SocketContainer_CUL_MuseumCrate_01_A_C \t Art crate \r\n"
+                                   "# my own names\n\n"
+                                   "arc DA_EnemyType_Tick Bug\n"          //spaces instead of TABs
+                                   "monster\tDA_EnemyType_Tick\tBug\n";   //no such category
     { std::ofstream out(labelsFile, std::ios::binary); out << labelsText; }
-    labels::load();
+    CHECK(labels::load() == 2, "labels.txt: the two bad lines are counted (a comment and a blank line are not)");
+    CHECK(labels::display(Cat::Arc, "DA_EnemyType_Tick") == "Tick", "labels.txt: a bad line changes nothing");
     CHECK(labels::display(Cat::Arc, "DA_EnemyType_Runner") == "Spider", "own name wins (first line after a UTF-8 mark)");
     CHECK(labels::display(Cat::Container, "BP_SocketContainer_CUL_MuseumCrate_01_A_C") == "Art crate", "category in any case, spaces around the fields dropped");
 
