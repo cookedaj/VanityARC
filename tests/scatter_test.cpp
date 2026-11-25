@@ -2,6 +2,7 @@
 #include <sys/mman.h>
 #include <unistd.h>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <vector>
 #include "memory/memory.h"
@@ -72,6 +73,29 @@ int main() {
     CHECK(zn == 0 && zeroed, "no such process: all fail and are zeroed");
 
     CHECK(ReadScatter(nullptr, 0) == 0, "an empty list is fine");
+
+    //FindGameImage: a mapped .exe with a 64-bit PE header gives its base and build stamp; an unreadable one gives none
+    {
+        char path[] = "/tmp/kwh_peXXXXXX.exe";
+        const int fd = mkstemps(path, 4);
+        uint8_t h[0x1000] = {};
+        const uint32_t pe = 0x80, sig = 0x4550, stamp = 0x5F3A1B2C, size = 0x2000;
+        const uint16_t magic = 0x20B;
+        h[0] = 'M'; h[1] = 'Z';
+        std::memcpy(h + 0x3C, &pe, 4);
+        std::memcpy(h + pe, &sig, 4);
+        std::memcpy(h + pe + 8, &stamp, 4);
+        std::memcpy(h + pe + 0x18, &magic, 2);
+        std::memcpy(h + pe + 0x50, &size, 4);
+        const bool wrote = fd >= 0 && write(fd, h, sizeof h) == (ssize_t)sizeof h;
+        void* img = wrote ? mmap(nullptr, sizeof h, PROT_READ, MAP_PRIVATE, fd, 0) : MAP_FAILED;
+        CHECK(img != MAP_FAILED && FindGameImage(getpid()) && ImageBase == (uintptr_t)img && ImageEnd == (uintptr_t)img + size &&
+              ImageStamp == stamp, "a mapped .exe: its base, size and build stamp are read");
+        if (img != MAP_FAILED) mprotect(img, sizeof h, PROT_NONE);
+        CHECK(img != MAP_FAILED && !FindGameImage(getpid()) && ImageStamp == 0, "an unreadable header: build stamp unknown (0)");
+        if (img != MAP_FAILED) munmap(img, sizeof h);
+        if (fd >= 0) { close(fd); unlink(path); }
+    }
 
     std::printf("%s\n", fails ? "SOME TESTS FAILED" : "ALL PASSED");
     return fails;

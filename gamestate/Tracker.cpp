@@ -6,6 +6,7 @@
 #include <cerrno>
 #include <chrono>
 #include <cmath>
+#include <cstdio>
 #include <iostream>
 #include <random>
 
@@ -103,6 +104,18 @@ void Tracker::run() {
     int rateCount = 0;
     double hz = 0;
     auto next = clk::now(); //when the next step is due, in full clock precision so the set rate is the rate that runs
+    bool updated = false;   //the running build differs from the one config.h is for (an unknown build never counts)
+    auto findImage = [&] {
+        if (!FindGameImage(ProcessId)) std::cout << "[-] The game's .exe was not found in its memory map: using the usual address" << std::endl;
+        const unsigned run = ImageStamp, rec = GAME_PE_STAMP;
+        updated = run != 0 && rec != 0 && run != rec;
+        char line[200];
+        if (run == 0) std::snprintf(line, sizeof line, "[-] Game build stamp: not readable (no update check)");
+        else if (rec == 0) std::snprintf(line, sizeof line, "[+] Game build stamp 0x%08X (config.h GAME_PE_STAMP not recorded: no update check)", run);
+        else if (updated) std::snprintf(line, sizeof line, "[-] GAME UPDATED: build stamp 0x%08X, config.h GAME_PE_STAMP is 0x%08X: markers may be wrong", run, rec);
+        else std::snprintf(line, sizeof line, "[+] Game build stamp 0x%08X matches config.h", run);
+        std::cout << line << std::endl;
+    };
 
     while (!stop_) {
         const auto t0 = clk::now();
@@ -118,7 +131,7 @@ void Tracker::run() {
             ProcessId = FindGamePID();
             if (ProcessId != 0) {
                 announced = false;
-                if (!FindGameImage(ProcessId)) std::cout << "[-] The game's .exe was not found in its memory map: using the usual address" << std::endl;
+                findImage();
                 gs = GameState(ImageBase); //new process: nothing from the old one is valid any more
                 names::setBase(ImageBase); //also empties the name cache
                 labeler::reset();
@@ -138,7 +151,7 @@ void Tracker::run() {
                 std::cout << "[*] Switching from PID " << ProcessId.load() << " to PID " << p << std::endl;
                 cam_ = 0;
                 ProcessId = p;
-                if (!FindGameImage(ProcessId)) std::cout << "[-] The game's .exe was not found in its memory map: using the usual address" << std::endl;
+                findImage();
                 gs = GameState(ImageBase);
                 names::setBase(ImageBase); //also empties the name cache
                 labeler::reset();
@@ -197,6 +210,7 @@ void Tracker::run() {
         s->valid = r.valid;
         if (!r.valid) s->fault = readDenied(ProcessId) ? "no permission to read the game: start the overlay with start.sh" : r.fault;
         s->gameFound = true;
+        s->gameUpdated = updated;
         s->seq = ++seq;
         s->capturedNs = std::chrono::duration_cast<std::chrono::nanoseconds>(clk::now().time_since_epoch()).count();
         s->inventories = inventories;

@@ -108,9 +108,8 @@ inline void Toast(const std::string& text, double seconds = 3.0) {
 }
 
 //Status card at the top, in the middle. Returns where the next thing can go.
-inline float DrawStatusCard(const std::string& line1, const std::string& line2) {
+inline float DrawStatusCard(const std::string& line1, const std::string& line2, float y = 20) {
     const float x = (float)config::SCREEN_W * 0.5f, ls = config::labelSize;
-    float y = 20;
     DrawLabelCentered(x, y, line1.c_str(), ls * 0.9f, COLOR::white, true);
     y += ls + 10;
     if (!line2.empty()) { DrawLabelCentered(x, y, line2.c_str(), ls * 0.8f, COLOR::grey, true); y += ls * 0.8f + 10; }

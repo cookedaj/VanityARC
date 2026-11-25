@@ -189,14 +189,21 @@ int main() {
         }
 
         if (!snap->gameFound) DrawLabelCentered(110, 14, OBF("Waiting for ARC Raiders...").c_str(), 14.0f);
-        float below = 20;
+        float top = 12; //the next free line at the top middle of the screen
+        if (snap->gameUpdated) {
+            //The game's build differs from the one config.h is for: shown all the time, big, whatever the debug switch says
+            const float big = config::labelSize * 1.6f;
+            DrawLabelCentered((float)config::SCREEN_W * 0.5f, top + big / 2, "GAME UPDATED: MARKERS MAY BE WRONG", big, COLOR::white, true);
+            top += big + 8;
+        }
+        float below = top + 8;
         if (lost) {
             //The game runs but nothing has been live for a while: say so and why, big, whatever the debug switch says
             char why[160];
             if (snap->valid) std::snprintf(why, sizeof why, "the data stopped updating (%.1f s old)", ageMs / 1000.0);
             else std::snprintf(why, sizeof why, "%s", snap->fault ? snap->fault : "waiting for a raid");
             const float x = (float)config::SCREEN_W * 0.5f, ls = config::labelSize, big = ls * 1.6f;
-            float y = 12 + big / 2;
+            float y = top + big / 2;
             DrawLabelCentered(x, y, "NO LIVE GAME DATA", big, COLOR::white, true);
             y += big / 2 + 8 + ls / 2;
             DrawLabelCentered(x, y, why, ls, COLOR::white, true);
@@ -211,7 +218,7 @@ int main() {
             else std::snprintf(l1, sizeof l1, "live  -  %.0f Hz  -  data %.0f ms  -  %zu players", st.updatesPerSec, ageMs, players);
             std::snprintf(l2, sizeof l2, "%.0f fps   step %.2f ms   scan %.1f ms   %zu moving, %zu fixed",
                           (double)ImGui::GetIO().Framerate, st.stepMs, st.scanMs, st.dynamics, st.statics);
-            below = DrawStatusCard(l1, l2);
+            below = DrawStatusCard(l1, l2, below);
         }
         DrawToast(below);
 
