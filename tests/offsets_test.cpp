@@ -36,6 +36,14 @@ int main() {
     CHECK(live::shieldValue == -1, "a shield value that is not a number is ignored");
 
     live::reset();
+    writeFile(dir, "      if this is the shield:  shield_component 0x500  shield_value 0x100  shield_is_float 1\n"
+                   "      offsets.txt:  inv_array 0x530 0x20 0x10 item\n"); //the probes' ready lines, pasted as they are
+    live::load(dir);
+    CHECK(live::shieldComponent == 0x500 && live::shieldValue == 0x100 && live::shieldIsFloat == 1, "the shield probe's ready line is read as it is printed");
+    CHECK(live::invArrays.size() == 1 && live::invArrays[0].off == 0x530 && live::invArrays[0].stride == 0x20 && live::invArrays[0].asset == 0x10,
+          "the inventory probe's ready line is read as it is printed");
+
+    live::reset();
     std::string many;
     for (int i = 0; i < 40; i++) many += "inv_array 0x530 0x20 0x10 item\n";
     writeFile(dir, many);
