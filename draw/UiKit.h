@@ -50,7 +50,7 @@ inline void PushTheme(float opacity) {
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8, 5));
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(10, 7));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(14, 12));
-    ImGui::PushStyleVar(ImGuiStyleVar_GrabMinSize, 9.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_GrabMinSize, 16.0f);
 }
 inline void PopTheme() {
     ImGui::PopStyleVar(12);

@@ -32,6 +32,7 @@ public:
     void setInteractive(bool on);        //true: takes the mouse (the menu); false: every click goes to the game
 
     bool shouldClose() const;
+    bool hasCursor() const;              //the desktop's cursor shows over the menu (false: the menu must draw one)
     int width() const;
     int height() const;
     const std::string& monitorName() const;
