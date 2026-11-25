@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -56,6 +57,16 @@ uint64_t fnv1a(const uint8_t* p, size_t n) {
     uint64_t h = 1469598103934665603ULL;
     for (size_t i = 0; i < n; i++) { h ^= p[i]; h *= 1099511628211ULL; }
     return h;
+}
+
+//printf into a std::string (the self-check's lines)
+std::string say(const char* format, ...) {
+    char b[320];
+    va_list a;
+    va_start(a, format);
+    std::vsnprintf(b, sizeof b, format, a);
+    va_end(a);
+    return b;
 }
 } // namespace
 
@@ -486,6 +497,162 @@ void GameState::runLiveProbeIfAsked(const std::vector<RenderEntity>& ents, const
 #endif
 }
 
+//KWINHELPER_SELFCHECK=1 (the release build too): once in a raid, each game number in config.h is checked against what it
+//must look like, and PASS / FAIL / SKIP is printed per number and saved to ~/.config/kwin-helper/selfcheck.txt.
+//You are found without any vtable: the pawn whose Controller is the PlayerController the UWorld chain passes through
+//(if none, the actor nearest the camera). Two looks 1 s apart, so your draw time can be seen to go up. Reads only.
+void GameState::selfCheckIfAsked(const FminimalViewInfo& vm) {
+    const auto now = clk::now();
+    if (now - self_.at < std::chrono::seconds(1)) return; //at most one look a second (each reads the whole actor list)
+    self_.at = now;
+    auto isObj = [](ptr o) { if (!isValidPtr(o)) return false; const ptr v = ReadMemory<ptr>(o); return v >= ImageBase && v < ImageEnd; };
+
+    //The UWorld chain link by link, the level and its actor list
+    ptr link[4];
+    link[0] = ReadMemory<ptr>(baseAddr + off::UWORLD_RVA);
+    link[1] = ReadMemory<ptr>(link[0] + off::UWORLD_CHAIN_1); //the PlayerController
+    link[2] = ReadMemory<ptr>(link[1] + off::UWORLD_CHAIN_2);
+    link[3] = ReadMemory<ptr>(link[2] + off::UWORLD_CHAIN_3); //the UWorld
+    const ptr pc = link[1];
+    const ptr lc = ReadMemory<ptr>(link[3] + off::LEVEL_COLLECTIONS), level = ReadMemory<ptr>(lc + off::PERSISTENT_LEVEL);
+    const ptr arr = ReadMemory<ptr>(level + off::ACTORS_PTR);
+    const int count = ReadMemory<int>(level + off::ACTORS_PTR + 8);
+    std::vector<ptr> actors(isValidPtr(arr) && count > 0 && count < 250000 ? (size_t)count : 0);
+    if (!actors.empty()) ReadMemoryBuffer(arr, actors.data(), actors.size() * sizeof(ptr));
+    std::erase_if(actors, [](ptr a) { return !isValidPtr(a); });
+
+    //Every actor's vtable, Controller and position
+    const size_t n = actors.size();
+    std::vector<ptr> vt(n), ctrl(n), root(n);
+    std::vector<Vector3> pos(n);
+    std::vector<ReadReq> rq;
+    rq.reserve(n * 3);
+    for (size_t i = 0; i < n; i++) {
+        queue(rq, actors[i], &vt[i]);
+        queue(rq, actors[i] + off::CONTROLLER, &ctrl[i]);
+        queue(rq, actors[i] + off::ROOT_COMPONENT_PTR, &root[i]);
+    }
+    ReadScatter(rq.data(), rq.size());
+    rq.clear();
+    for (size_t i = 0; i < n; i++) if (isValidPtr(root[i])) queue(rq, root[i] + off::POS_PTR, &pos[i]);
+    ReadScatter(rq.data(), rq.size());
+
+    //You: the pawn your PlayerController controls (the nearest, should several say so); else the actor nearest the camera within 3 m
+    size_t me = n;
+    bool byController = false;
+    double best = 1e18;
+    for (size_t i = 0; i < n; i++) {
+        if (actors[i] == pc || actors[i] == camActor_) continue;
+        const bool controlled = isValidPtr(pc) && ctrl[i] == pc;
+        const double d = plausible(pos[i]) ? pos[i].Dist(vm.Location) : 1e17;
+        if (controlled && !byController) { byController = true; best = 1e18; } //a controlled pawn beats any guess by distance
+        if ((controlled || (!byController && d < 300)) && d < best) { best = d; me = i; }
+    }
+    const ptr meA = me < n ? actors[me] : 0;
+    const ptr mesh = ReadMemory<ptr>(meA + off::MESH);
+    float rt[2] = {0, 0}; //LastRenderTime, LastRenderTimeOnScreen
+    if (isValidPtr(mesh)) ReadMemoryBuffer(mesh + off::RENDER_TIME, rt, sizeof rt);
+    if (self_.stage == 1) {
+        if (!byController && ++self_.looks < 10) return; //not spawned yet: wait up to 10 s for the pawn your PlayerController controls
+        if (meA) { self_.stage = 2; self_.me = meA; self_.rt = rt[1]; return; } //the report comes at the next look, 1 s later
+    }
+    self_.stage = 0; //once per run
+
+    constexpr int FAIL = 0, PASS = 1, SKIP = 2;
+    static const char* const word[3] = {"FAIL", "PASS", "SKIP"};
+    int total[3] = {0, 0, 0};
+    std::string rep = "\n=== SELF-CHECK: the game numbers in config.h, checked live (read only) ===\n";
+    //need: what this check needs (else SKIP, saying skipWhy); ok: the number looks right
+    auto line = [&](bool need, bool ok, const std::string& name, const std::string& why, const char* skipWhy) {
+        const int st = !need ? SKIP : ok ? PASS : FAIL;
+        total[st]++;
+        rep += say("%s  %-26s %s\n", word[st], name.c_str(), need ? why.c_str() : skipWhy);
+    };
+    auto hex = [](const char* name, ptr v) { return say("%s 0x%lx", name, (unsigned long)v); };
+
+    static const char* const linkName[4] = {"UWORLD_RVA", "UWORLD_CHAIN_1", "UWORLD_CHAIN_2", "UWORLD_CHAIN_3"};
+    const ptr linkOff[4] = {off::UWORLD_RVA, off::UWORLD_CHAIN_1, off::UWORLD_CHAIN_2, off::UWORLD_CHAIN_3};
+    bool chainOk = true;
+    for (int k = 0; k < 4; k++) { //the last link must be an object (its first word a vtable inside the game image), the others pointers
+        const bool ok = k == 3 ? isObj(link[k]) : isValidPtr(link[k]);
+        line(chainOk, ok, hex(linkName[k], linkOff[k]),
+             say("-> 0x%lx%s", (unsigned long)link[k], k == 3 ? (ok ? " (an object: the UWorld)" : " is not an object, so not the UWorld") : (ok ? "" : " is not a pointer")),
+             "an earlier link failed");
+        chainOk = chainOk && ok;
+    }
+    const bool levelOk = isObj(level);
+    line(chainOk, isValidPtr(lc), hex("LEVEL_COLLECTIONS", off::LEVEL_COLLECTIONS), say("-> 0x%lx", (unsigned long)lc), "the UWorld chain failed");
+    line(isValidPtr(lc), levelOk, hex("PERSISTENT_LEVEL", off::PERSISTENT_LEVEL),
+         say("-> 0x%lx%s", (unsigned long)level, levelOk ? " (an object)" : " is not an object"), "LEVEL_COLLECTIONS failed");
+    line(levelOk, isValidPtr(arr) && count >= 1000 && count <= 30000, hex("ACTORS_PTR", off::ACTORS_PTR),
+         say("%d actors (a raid has 1000 to 30000)", count), "PERSISTENT_LEVEL failed");
+    line(true, true, hex("VIEW_MATRIX", off::VIEW_MATRIX),
+         say("camera found (CAMMANAGER vtable 0x%lx), FOV %.0f", (unsigned long)vtabels::CAMMANAGER, (double)vm.FOV), "");
+
+    const char* noMe = "you were not found";
+    line(true, byController, hex("CONTROLLER", off::CONTROLLER),
+         byController ? say("your pawn 0x%lx is controlled by the PlayerController 0x%lx", (unsigned long)meA, (unsigned long)pc)
+         : meA ? say("no pawn points to the PlayerController 0x%lx; 'you' below is a guess: the actor nearest the camera", (unsigned long)pc)
+               : say("no pawn points to the PlayerController 0x%lx, and nothing is within 3 m of the camera", (unsigned long)pc), "");
+    const ptr meVt = me < n ? vt[me] : 0, meRoot = me < n ? root[me] : 0;
+    const Vector3 mePos = me < n ? pos[me] : Vector3();
+    line(meA != 0, meVt == vtabels::PLAYER, hex("PLAYER vtable", vtabels::PLAYER),
+         meVt == vtabels::PLAYER ? std::string("your pawn has it")
+         : say("your pawn's vtable is 0x%lx%s", (unsigned long)meVt, byController ? ": put that in config.h" : " (a guess: CONTROLLER failed)"), noMe);
+    const bool rootOk = isObj(meRoot);
+    line(meA != 0, rootOk, hex("ROOT_COMPONENT_PTR", off::ROOT_COMPONENT_PTR),
+         say("your root component 0x%lx%s", (unsigned long)meRoot, rootOk ? " (an object)" : " is not an object"), noMe);
+    const double camDist = mePos.Dist(vm.Location) / 100.0;
+    line(byController && rootOk, plausible(mePos) && camDist <= 3.0, hex("POS_PTR", off::POS_PTR),
+         say("you are %.1f m from the camera (must be under 3)", camDist),
+         byController ? "ROOT_COMPONENT_PTR failed" : "CONTROLLER failed, and the guess for you already used this number");
+
+    const ptr hc = ReadMemory<ptr>(meA + off::HEALTH_COMPONENT);
+    const bool hcOk = isObj(hc);
+    const double hpMax = ReadMemory<double>(hc + off::HEALTH_MAX), hp = ReadMemory<double>(hc + off::HEALTH_CACHED);
+    const bool maxOk = hpMax >= 50 && hpMax <= 500;
+    line(meA != 0, hcOk, hex("HEALTH_COMPONENT", off::HEALTH_COMPONENT), say("-> 0x%lx%s", (unsigned long)hc, hcOk ? " (an object)" : " is not an object"), noMe);
+    line(hcOk, maxOk, hex("HEALTH_MAX", off::HEALTH_MAX), say("max health %.1f (must be 50 to 500)", hpMax), "HEALTH_COMPONENT failed");
+    line(hcOk, hp >= 0 && hp <= (maxOk ? hpMax + 1 : 500), hex("HEALTH_CACHED", off::HEALTH_CACHED),
+         say("health %.1f (must be 0 to the max health)", hp), "HEALTH_COMPONENT failed");
+
+    const int team = ReadMemory<uint8_t>(meA + off::TEAM_ID);
+    int others = 0, same = 0; //the other actors of your class (players), and how many share your team byte
+    for (size_t i = 0; i < n && meA && meVt; i++)
+        if (i != me && vt[i] == meVt) { others++; same += ReadMemory<uint8_t>(actors[i] + off::TEAM_ID) == team; }
+    line(others > 0, same <= 2, hex("TEAM_ID", off::TEAM_ID),
+         say("your team %d is shared by %d of %d other players (a squad is at most 3)", team, same, others),
+         meA ? "no other players found (found by your pawn's vtable)" : noMe);
+
+    const bool meshObj = isObj(mesh);
+    const Vector3 meshPos = ReadMemory<Vector3>(mesh + off::POS_PTR);
+    const double meshDist = meshPos.Dist(mePos) / 100.0;
+    line(meA != 0, meshObj && mesh != meRoot && plausible(meshPos) && meshDist < 3.0, hex("MESH", off::MESH),
+         say("-> 0x%lx, %.1f m from your root (must be an object under 3 m away, not the root)", (unsigned long)mesh, meshDist), noMe);
+    const ptr boneData = ReadMemory<ptr>(mesh + off::BONE_ARRAY);
+    const int boneNum = ReadMemory<int>(mesh + off::BONE_ARRAY + 8);
+    line(meshObj, isValidPtr(boneData) && boneNum == skeleton::BONES, hex("BONE_ARRAY", off::BONE_ARRAY),
+         say("%d bones (the player skeleton has %d)", boneNum, skeleton::BONES), meA ? "MESH failed" : noMe);
+    line(meshObj && self_.me == meA, std::isfinite(rt[1]) && std::isfinite(self_.rt) && rt[1] > self_.rt && rt[1] - self_.rt < 60, hex("RENDER_TIME", off::RENDER_TIME),
+         say("your last draw time went %.2f -> %.2f in about 1 s (must go up)", (double)self_.rt, (double)rt[1]),
+         !meA ? noMe : !meshObj ? "MESH failed" : "you changed between the two looks: run it again");
+
+    int arcs = 0, badFlag = 0;
+    for (size_t i = 0; i < n; i++)
+        if (vt[i] == vtabels::ARC) { arcs++; badFlag += ReadMemory<uint8_t>(actors[i] + off::IS_DESTROYED) > 1; }
+    line(arcs > 0, badFlag == 0, hex("IS_DESTROYED", off::IS_DESTROYED), say("%d of %d ARC read a byte other than 0 or 1", badFlag, arcs),
+         "no ARC found (the ARC vtable may be stale, or this map has none)");
+
+    const char* home = std::getenv("HOME");
+    const std::string path = std::string(home ? home : ".") + "/.config/kwin-helper/selfcheck.txt";
+    rep += say("=== %d PASS, %d FAIL, %d SKIP. Fix the first FAIL first: the ones after it may follow from it. Saved to %s ===\n",
+               total[PASS], total[FAIL], total[SKIP], path.c_str());
+    std::fputs(rep.c_str(), stdout);
+    std::fflush(stdout);
+    if (FILE* f = std::fopen(path.c_str(), "w")) { std::fputs(rep.c_str(), f); std::fclose(f); }
+    else std::printf("[!] Self-check: could not save %s\n", path.c_str());
+}
+
 gsRet GameState::step() {
     if (isDebugMode || probeNames) return tick(); //the diagnostic modes want the unfiltered view
 
@@ -514,6 +681,7 @@ gsRet GameState::step() {
 
     gsRet out = assemble(vm);
     runLiveProbeIfAsked(out.entities, vm);
+    if (self_.stage) selfCheckIfAsked(vm);
 
     //The same one-line status as always, every 2 s (see printStatusLine): me / players / ARC / containers / stick figures
     static auto lastStatus = clk::now() - std::chrono::seconds(10);

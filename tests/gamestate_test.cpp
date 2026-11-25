@@ -6,8 +6,13 @@
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <map>
+#include <string>
 #include <thread>
 #include <vector>
 #include "config.h"
@@ -392,6 +397,43 @@ int main() {
         CHECK(pa.valid && pb.valid && pb.vm.FOV == 70.0f && pb.vm.Location.x == cx,
               "stale CAMMANAGER vtable: both paths find the camera through the PlayerController");
         put<u64>(camActor, vtabels::CAMMANAGER);
+    }
+
+    //--- KWINHELPER_SELFCHECK: PASS / FAIL per game number; you are found through the PlayerController, not a vtable
+    {
+        const char* oldHome = std::getenv("HOME");
+        const std::string keepHome = oldHome ? oldHome : "";
+        const std::string home = "/tmp/kwinhelper_selfcheck_test"; //never your real ~/.config/kwin-helper
+        std::filesystem::create_directories(home + "/.config/kwin-helper");
+        std::filesystem::remove(home + "/.config/kwin-helper/selfcheck.txt");
+        setenv("HOME", home.c_str(), 1);
+        setenv("KWINHELPER_SELFCHECK", "1", 1);
+        GameState sc(base);
+        unsetenv("KWINHELPER_SELFCHECK");
+        const u64 objVt = 0x14d000100ULL; //a first word inside the game image makes a block an object
+        for (u64 o : {g_chain0, g_chain1, g_chain2, uworldObj, levelObj}) put<u64>(o, objVt);
+        put<u64>(get<u64>(me + off::ROOT_COMPONENT_PTR), objVt);
+        put<u64>(get<u64>(me + off::HEALTH_COMPONENT), objVt);
+        const u64 meMesh = giveMesh(me, cx + 80, cy + 120, cz - 182);
+        put<u64>(meMesh, objVt);
+        put<u64>(me + off::CONTROLLER, g_chain1);           //g_chain1 is the PlayerController the UWorld chain passes
+        put<float>(meMesh + off::RENDER_TIME + 4, 100.0f);
+        sc.step();                                          //first look: you are found
+        put<float>(meMesh + off::RENDER_TIME + 4, 101.0f);  //the game drew you again
+        put<u64>(me, 0x14d777000ULL);                       //a stale PLAYER vtable: you are still found
+        std::this_thread::sleep_for(std::chrono::milliseconds(1100));
+        sc.step();                                          //second look: the report
+        put<u64>(me, vtabels::PLAYER);
+        put<u64>(me + off::CONTROLLER, 0);
+        std::ifstream f(home + "/.config/kwin-helper/selfcheck.txt");
+        const std::string rep((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+        auto has = [&](const char* s) { return rep.find(s) != std::string::npos; };
+        CHECK(has("PASS  UWORLD_CHAIN_3") && has("PASS  PERSISTENT_LEVEL"), "self-check: the UWorld chain and the level pass (report saved)");
+        CHECK(has("FAIL  ACTORS_PTR"), "self-check: this small test level fails the actor count (a raid has 1000 or more)");
+        CHECK(has("PASS  CONTROLLER") && has("FAIL  PLAYER vtable") && has("0x14d777000"), "self-check: you are found without the PLAYER vtable, and your real vtable is named");
+        CHECK(has("PASS  POS_PTR") && has("PASS  HEALTH_MAX") && has("PASS  HEALTH_CACHED") && has("PASS  MESH") && has("PASS  BONE_ARRAY") &&
+              has("PASS  RENDER_TIME") && has("PASS  IS_DESTROYED"), "self-check: your position, health, mesh, bones, draw time and the ARC destroyed flag pass");
+        if (keepHome.empty()) unsetenv("HOME"); else setenv("HOME", keepHome.c_str(), 1);
     }
 
     //--- speed (printed; the check is only that the fast path is clearly faster)

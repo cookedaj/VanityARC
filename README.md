@@ -130,6 +130,22 @@ Insert opens the menu: black and white, tabs on the left.
 - **Safe values**: every setting has a range; a damaged `settings.txt` cannot break the overlay, and "Reset all settings" restores the defaults.
 - **Old data is not drawn**: if the tracker stalls for more than 250 ms the markers disappear instead of showing where things were.
 
+## Self-check: are the numbers in config.h still right?
+
+After a game update, this tells you which game numbers (offsets) still work, one line each. It is in the normal release build; nothing needs rebuilding.
+
+```
+KWINHELPER_SELFCHECK=1 bash start.sh
+```
+
+Start a raid and wait a few seconds after you spawn. The console then prints one report (once each time the game is started), also saved to `~/.config/kwin-helper/selfcheck.txt`. Every line starts with:
+
+- **PASS**: the number looks right.
+- **FAIL**: the number is wrong for this game version; the line says what was read. Fix the first FAIL first: the ones after it often follow from it.
+- **SKIP**: it could not be checked (the line says why, for example no ARC nearby).
+
+It checks the UWorld chain (`UWORLD_RVA` and its 3 offsets), `LEVEL_COLLECTIONS`, `PERSISTENT_LEVEL`, the actor count (`ACTORS_PTR`), `CONTROLLER`, the `PLAYER` vtable, your position (`ROOT_COMPONENT_PTR`, `POS_PTR`), your health (`HEALTH_COMPONENT`, `HEALTH_MAX`, `HEALTH_CACHED`), `TEAM_ID`, `MESH`, the bone count (`BONE_ARRAY`), `RENDER_TIME` and the ARC `IS_DESTROYED` flag. It finds your own player without any vtable (through the PlayerController of the UWorld chain), so when the `PLAYER` line fails it prints the right vtable for `config.h`. It only reads memory. If no report appears, the overlay never got into the raid: the message on screen says why (world or camera).
+
 ## Shield and inventory: probes
 
 The shield bar and the inventory window need numbers the public dumps do not have. They are found once with a probe and saved in `~/.config/kwin-helper/offsets.txt`. One raid is enough.

@@ -125,6 +125,9 @@ private:
     //A kind is kept until the world changes; NONE is asked again after a while (next).
     struct Learned { Object kind = Object::NONE; int votes = 0; bool decided = false; std::chrono::steady_clock::time_point next{}; };
     std::unordered_map<ptr, Learned> learned_;
+    //KWINHELPER_SELFCHECK (Fast.cpp). stage: 0 off or done, 1 looking for you, 2 first look taken (the report comes 1 s later)
+    struct SelfCheck { int stage = 0; int looks = 0; ptr me = 0; float rt = 0; std::chrono::steady_clock::time_point at{}; };
+    SelfCheck self_;
 
     bool scan();            //the whole actor list; false when there is no world yet
     void learnKinds(const std::unordered_map<ptr, std::pair<int, ptr>>& unsure, std::chrono::steady_clock::time_point now);
@@ -132,6 +135,7 @@ private:
     void updateDynamic();   //position, health, team, dead for players and ARC
     gsRet assemble(const FminimalViewInfo& vm);
     void runLiveProbeIfAsked(const std::vector<RenderEntity>& ents, const FminimalViewInfo& vm); //KWINHELPER_PROBE=shield|inventory
+    void selfCheckIfAsked(const FminimalViewInfo& vm); //KWINHELPER_SELFCHECK=1: PASS / FAIL per game number, once in a raid
 };
 
 #endif //KWINHELPER_GAMESTATE_H
