@@ -30,13 +30,21 @@ add_custom_command(OUTPUT ${GEN_DIR}/wlr-layer-shell-client.c
 # --- 1. DEFINE SOURCES FIRST ---
 set(IMGUI_DIR "${CMAKE_SOURCE_DIR}/imgui")
 
-set(IMGUI_SOURCES
+# Compiler warnings for our own code (kwin-helper and the tests). No -Werror yet: the existing warnings come first.
+set(KWINHELPER_WARNINGS -Wall -Wextra -Wformat=2 -Wuninitialized)
+# The vendored imgui sources and the generated Wayland protocol code are not ours: build them without warnings
+set(IMGUI_LIB_SOURCES
         ${IMGUI_DIR}/imgui.cpp
         ${IMGUI_DIR}/imgui_draw.cpp
         ${IMGUI_DIR}/imgui_tables.cpp
         ${IMGUI_DIR}/imgui_widgets.cpp
         ${IMGUI_DIR}/backends/imgui_impl_glfw.cpp
         ${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp
+)
+set_source_files_properties(${IMGUI_LIB_SOURCES} ${GEN_DIR}/wlr-layer-shell-client.c PROPERTIES COMPILE_OPTIONS -w)
+
+set(IMGUI_SOURCES
+        ${IMGUI_LIB_SOURCES}
         gamestate/GameState.cpp
         gamestate/Fast.cpp
         gamestate/Tracker.cpp
@@ -90,6 +98,7 @@ target_include_directories(kwin-helper PRIVATE
 )
 
 target_link_libraries(kwin-helper PRIVATE glfw OpenGL::GL PkgConfig::WAYLAND)
+target_compile_options(kwin-helper PRIVATE ${KWINHELPER_WARNINGS})
 if(KWINHELPER_PROBES)
     target_compile_definitions(kwin-helper PRIVATE KWINHELPER_PROBES)
 endif()
@@ -105,6 +114,7 @@ if(KWINHELPER_TESTS)
         add_executable(${name} tests/${name}.cpp ${ARGN})
         target_include_directories(${name} PRIVATE ${CMAKE_SOURCE_DIR} ${IMGUI_DIR} ${IMGUI_DIR}/backends)
         target_compile_definitions(${name} PRIVATE KWINHELPER_PROBES) #the tests always exercise the probes
+        target_compile_options(${name} PRIVATE ${KWINHELPER_WARNINGS})
         add_test(NAME ${name} COMMAND ${name})
     endfunction()
     kwinhelper_test(key_test)
