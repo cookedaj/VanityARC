@@ -18,6 +18,6 @@ bool OverlayNeedsFrame();                    //the surface is new or changed siz
 void OverlayIdle();                          //instead of a frame that would look like the last: window events, then a ~2 ms wait
 bool OverlayShouldClose();
 void OverlayShutdown();
-const char* OverlayBackendName();            //"layer-shell" or "glfw window"
+const char* OverlayBackendName();            //"layer-shell, shows over fullscreen" or "normal window"
 
 #endif //KWINHELPER_OVERLAYBACKEND_H
