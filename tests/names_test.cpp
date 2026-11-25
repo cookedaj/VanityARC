@@ -213,8 +213,12 @@ int main() {
         };
         std::string first = run("shield");
         CHECK(first.find("SHIELD PROBE") != std::string::npos && first.find("nothing is printed until a number changes") != std::string::npos, "shield probe: first pass only watches");
-        put<double>(health, 0x708, 90.0); put<double>(health, 0x710, 45.0); put<float>(other, 0x100, 35.0f);
+        std::string warm;
+        for (int i = 1; i <= 3; i++) { put<float>(other, 0x300, (float)i); warm += run("shield"); } //warm-up: a clock ticks by itself
+        CHECK(warm.find("NOW take a hit") != std::string::npos && warm.find("shield_value") == std::string::npos, "shield probe: the warm-up prints nothing, then asks for the hit");
+        put<double>(health, 0x708, 90.0); put<double>(health, 0x710, 45.0); put<float>(other, 0x100, 35.0f); put<float>(other, 0x300, 4.0f);
         std::string second = run("shield");
+        CHECK(second.find("shield_value 0x300  ") == std::string::npos, "shield probe: a number that changed by itself during the warm-up is never printed");
         std::printf("%s", second.c_str());
         CHECK(second.find("known: health") != std::string::npos, "shield probe: the known health number is marked");
         CHECK(second.find("60.000 -> 45.000") != std::string::npos && second.find("shield_component -1  shield_value 0x710  shield_is_float 0") != std::string::npos,

@@ -343,7 +343,7 @@ std::vector<Comp> componentsOf(ptr pawn) {
     return comps;
 }
 
-struct FieldState { double last = 0; int changes = 0; };
+struct FieldState { double last = 0; int changes = 0; bool noisy = false; };
 
 //Shield: every number in every component of your pawn is remembered; the ones that CHANGE (a few times, not every
 //moment like a clock) are printed. Take a hit, let the shield drain or recharge, and the shield number shows up
@@ -354,7 +354,8 @@ void shieldProbe(ptr pawn, FILE* out) {
     static int cycle = 0;
     if (pawn != lastPawn) { st.clear(); lastPawn = pawn; cycle = 0; }
     cycle++;
-    if (cycle == 1) std::fprintf(out, "\n=== SHIELD PROBE: watching your pawn 0x%lx. Take a hit (or let the shield drain / recharge), then copy the lines below ===\n", (unsigned long)pawn);
+    const bool warmUp = cycle <= 4; //pass 1 remembers, passes 2-4 (about 6 s) mark every number that changes by itself (clocks, positions) as noise
+    if (cycle == 1) std::fprintf(out, "\n=== SHIELD PROBE: watching your pawn 0x%lx. Move around, but keep your shield full and take NO damage until '=== NOW take a hit ===' appears (about 6 s) ===\n", (unsigned long)pawn);
 
     int printed = 0;
     std::unordered_set<uint64_t> doubleChanged; //doubles that changed in this pass: their two 4-byte halves are not separate numbers
@@ -372,11 +373,11 @@ void shieldProbe(ptr pawn, FILE* out) {
                 if (it == st.end()) { st[key] = {v, 0}; continue; }
                 FieldState& f = it->second;
                 if (v >= 0 && f.last >= 0 && std::fabs(v - f.last) > 1e-6) {
-                    f.changes++;
                     const uint64_t doubleKey = ((uint64_t)c.pawnOff << 32) | (isFloat ? (o & ~(size_t)7) : o);
                     if (!isFloat) doubleChanged.insert(doubleKey);
                     const bool halfOfDouble = isFloat && doubleChanged.count(doubleKey) > 0; //the same bytes as a double above: not a new finding
-                    if (f.changes <= 3 && printed < 50 && !halfOfDouble) {
+                    if (warmUp) f.noisy = true; //changed by itself before the hit: never printed
+                    else if (!f.noisy && !halfOfDouble && printed < 50 && ++f.changes <= 3) { //counted only when printed: the 50-line cap cannot use up a number's 3 lines
                         const bool isHealth = c.pawnOff == (int)off::HEALTH_COMPONENT && o == (size_t)off::HEALTH_CACHED;
                         std::fprintf(out, "  pawn+0x%x (%s)  +0x%zx  %s  %.3f -> %.3f%s\n", c.pawnOff, nm(c.obj).c_str(), o, isFloat ? "float " : "double", f.last, v,
                                     isHealth ? "   <- known: health" : "");
@@ -394,6 +395,7 @@ void shieldProbe(ptr pawn, FILE* out) {
         }
     }
     if (cycle == 1) std::fprintf(out, "  (watching %zu components; nothing is printed until a number changes)\n", st.size());
+    if (cycle == 4) std::fprintf(out, "\n=== NOW take a hit === (or let the shield drain / recharge), then copy the lines below\n");
     std::fflush(out);
 }
 
