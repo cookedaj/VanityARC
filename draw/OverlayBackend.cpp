@@ -154,7 +154,7 @@ void RenderBegin() {
         ImGui_ImplOpenGL3_NewFrame();
         ImGuiIO& io = ImGui::GetIO();
         io.DisplaySize = ImVec2((float)g_layer->width(), (float)g_layer->height());
-        io.DisplayFramebufferScale = ImVec2(1, 1);
+        io.DisplayFramebufferScale = ImVec2((float)g_layer->scale(), (float)g_layer->scale());
         const auto now = std::chrono::steady_clock::now();
         io.DeltaTime = std::min(0.1f, std::max(0.001f, std::chrono::duration<float>(now - g_last).count()));
         g_last = now;
@@ -199,7 +199,7 @@ void RenderEnd(void (*extra)()) {
     if (extra && !hidden) extra(); //the menu is not drawn while hidden
     ImGui::Render();
     int w, h;
-    if (g_kind == Kind::Layer) { w = g_layer->width(); h = g_layer->height(); }
+    if (g_kind == Kind::Layer) { w = g_layer->width() * g_layer->scale(); h = g_layer->height() * g_layer->scale(); }
     else glfwGetFramebufferSize(g_glfw, &w, &h);
     glViewport(0, 0, w, h);
     glClearColor(0, 0, 0, 0);

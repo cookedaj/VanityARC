@@ -34,7 +34,8 @@ public:
     bool shouldClose() const;
     bool hasCursor() const;              //the desktop's cursor shows over the menu (false: the menu must draw one)
     int width() const;
-    int height() const;
+    int height() const;                  //width and height are in surface (logical) pixels
+    int scale() const;                   //buffer pixels per surface pixel (the output's scale)
     const std::string& monitorName() const;
     std::vector<LayerInput> takeInput(); //pointer events since the last call (only arrive while interactive)
 

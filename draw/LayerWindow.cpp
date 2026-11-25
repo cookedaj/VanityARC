@@ -26,8 +26,10 @@ struct LayerWindow::Impl {
     wl_cursor_theme* cursorTheme = nullptr; //the desktop's cursor, shown while the menu has the mouse
     wl_cursor_image* cursorImg = nullptr;
     wl_surface* cursorSurf = nullptr;
-    struct Out { wl_output* o; std::string name; };
+    struct Out { wl_output* o; std::string name; int scale = 1; };
     std::vector<Out> outs;
+    wl_output* on = nullptr; //the output the overlay is on
+    int scale = 1;           //buffer pixels per surface pixel (that output's wl_output.scale)
 
     wl_surface* surf = nullptr;
     zwlr_layer_surface_v1* ls = nullptr;
@@ -61,11 +63,15 @@ struct LayerWindow::Impl {
     }
     static void onGlobalRemove(void*, wl_registry*, uint32_t) {}
 
-    //--- outputs: only the name matters
+    //--- outputs: only the name and the scale matter
     static void onOutGeometry(void*, wl_output*, int32_t, int32_t, int32_t, int32_t, int32_t, const char*, const char*, int32_t) {}
     static void onOutMode(void*, wl_output*, uint32_t, int32_t, int32_t, int32_t) {}
     static void onOutDone(void*, wl_output*) {}
-    static void onOutScale(void*, wl_output*, int32_t) {}
+    static void onOutScale(void* d, wl_output* o, int32_t scale) {
+        Impl* s = (Impl*)d;
+        for (Out& x : s->outs) if (x.o == o) x.scale = scale;
+        s->applyScale();
+    }
     static void onOutName(void* d, wl_output* o, const char* name) {
         for (Out& x : ((Impl*)d)->outs) if (x.o == o) x.name = name;
     }
@@ -130,11 +136,23 @@ struct LayerWindow::Impl {
         if (w > 0 && h > 0) {
             s->w = (int)w;
             s->h = (int)h;
-            if (s->ew) wl_egl_window_resize(s->ew, s->w, s->h, 0, 0);
+            if (s->ew) wl_egl_window_resize(s->ew, s->w * s->scale, s->h * s->scale, 0, 0);
         }
         s->configured = true;
     }
     static void onClosed(void* d, zwlr_layer_surface_v1*) { ((Impl*)d)->closed = true; }
+
+    //--- the output scale: draw at the output's pixel density so the compositor does not stretch (blur) the overlay
+    static void onSurfEnter(void* d, wl_surface*, wl_output* o) { Impl* s = (Impl*)d; s->on = o; s->applyScale(); }
+    static void onSurfLeave(void*, wl_surface*, wl_output*) {}
+    void applyScale() {
+        int sc = 1;
+        for (const Out& x : outs) if (x.o == on && x.scale > 1) sc = x.scale;
+        if (!surf || sc == scale || wl_surface_get_version(surf) < WL_SURFACE_SET_BUFFER_SCALE_SINCE_VERSION) return;
+        scale = sc;
+        wl_surface_set_buffer_scale(surf, scale); //applies with the next commit, which carries the resized buffer
+        if (ew) wl_egl_window_resize(ew, w * scale, h * scale, 0, 0);
+    }
 
     void setRegion(bool full) {
         wl_region* r = wl_compositor_create_region(comp);
@@ -188,6 +206,10 @@ bool LayerWindow::create(const std::string& monitor, std::string* error) {
     if (!monitor.empty() && !out) std::fprintf(stderr, "[!] Monitor '%s' not found (have: %s). The compositor will choose.\n", monitor.c_str(), have.c_str());
 
     d.surf = wl_compositor_create_surface(d.comp);
+    static const wl_surface_listener sl = {Impl::onSurfEnter, Impl::onSurfLeave};
+    wl_surface_add_listener(d.surf, &sl, &d);
+    d.on = out; //nullptr: learned from the surface's enter event
+    d.applyScale();
     d.ls = zwlr_layer_shell_v1_get_layer_surface(d.shell, d.surf, out, ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY, "kwin-helper");
     static const zwlr_layer_surface_v1_listener ll = {Impl::onConfigure, Impl::onClosed};
     zwlr_layer_surface_v1_add_listener(d.ls, &ll, &d);
@@ -221,7 +243,7 @@ bool LayerWindow::create(const std::string& monitor, std::string* error) {
     const EGLint ctxAttr[] = {EGL_CONTEXT_MAJOR_VERSION, 3, EGL_CONTEXT_MINOR_VERSION, 0, EGL_NONE};
     d.ectx = eglCreateContext(d.edpy, cfg, EGL_NO_CONTEXT, ctxAttr);
     if (d.ectx == EGL_NO_CONTEXT) return fail("EGL could not create an OpenGL 3.0 context");
-    d.ew = wl_egl_window_create(d.surf, d.w, d.h);
+    d.ew = wl_egl_window_create(d.surf, d.w * d.scale, d.h * d.scale);
     if (!d.ew) return fail("could not create the Wayland EGL window");
     d.esurf = eglCreateWindowSurface(d.edpy, cfg, (EGLNativeWindowType)d.ew, nullptr);
     if (d.esurf == EGL_NO_SURFACE) return fail("EGL could not create the window surface");
@@ -253,6 +275,7 @@ void LayerWindow::destroy() {
     if (d.dpy) { wl_display_flush(d.dpy); wl_display_disconnect(d.dpy); }
     d.dpy = nullptr; d.reg = nullptr; d.comp = nullptr; d.shell = nullptr; d.seat = nullptr; d.shm = nullptr;
     d.outs.clear();
+    d.on = nullptr; d.scale = 1;
 }
 
 bool LayerWindow::pump() {
@@ -284,6 +307,7 @@ bool LayerWindow::shouldClose() const { return p_->closed; }
 bool LayerWindow::hasCursor() const { return p_->cursorSurf != nullptr; }
 int LayerWindow::width() const { return p_->w; }
 int LayerWindow::height() const { return p_->h; }
+int LayerWindow::scale() const { return p_->scale; }
 const std::string& LayerWindow::monitorName() const { return p_->monitor; }
 
 std::vector<LayerInput> LayerWindow::takeInput() {
