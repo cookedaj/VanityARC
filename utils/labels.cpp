@@ -246,6 +246,8 @@ std::string defaultName(Cat c, const std::string& key) {
             if (best) return best->name;
             const std::string w = wikiItem(t);
             if (!w.empty()) return w;
+            const std::string w2 = wikiItem(norm(cleanName(itemToken(key)))); //without the _01 variant suffix
+            if (!w2.empty()) return w2;
             break;
         }
         case Cat::Player: return key;
