@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <map>
 #include <string>
@@ -25,6 +26,8 @@ void FindDeepHealthOffset(ptr actor, float targetHealth);
 
 GameState::GameState(uintptr_t base) {
     this->baseAddr = base;
+    const char* sc = std::getenv("KWINHELPER_SELFCHECK"); //set and not "0": check the numbers in config.h once in a raid
+    if (sc && *sc && std::strcmp(sc, "0") != 0) self_.stage = 1;
 }
 
 gsRet GameState::tick() {

@@ -106,12 +106,16 @@ private:
     std::chrono::steady_clock::time_point lastScan_{};
     Timing timing_{};
     const char* fault_ = nullptr; //why the last scan() failed (shown on screen)
+    //KWINHELPER_SELFCHECK (Fast.cpp). stage: 0 off or done, 1 looking for you, 2 first look taken (the report comes 1 s later)
+    struct SelfCheck { int stage = 0; int looks = 0; ptr me = 0; float rt = 0; std::chrono::steady_clock::time_point at{}; };
+    SelfCheck self_;
 
     bool scan();            //the whole actor list; false when there is no world yet
     void updatePose(Tracked& t, const std::vector<uint8_t>& bones, const skeleton::Xform& mesh, bool freshBones);
     void updateDynamic();   //position, health, team, dead for players and ARC
     gsRet assemble(const FminimalViewInfo& vm);
     void runLiveProbeIfAsked(const std::vector<RenderEntity>& ents, const FminimalViewInfo& vm); //KWINHELPER_PROBE=shield|inventory
+    void selfCheckIfAsked(const FminimalViewInfo& vm); //KWINHELPER_SELFCHECK=1: PASS / FAIL per game number, once in a raid
 };
 
 #endif //KWINHELPER_GAMESTATE_H
