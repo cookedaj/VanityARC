@@ -31,6 +31,18 @@ struct Snapshot {
     double selfHealth = -1, selfShield = -1; //your own health and shield (-1: not read, nothing is shown)
 };
 
+//Data older than this is not drawn: after a stall the markers would be where things were, not where they are
+constexpr double STALE_MS = 250.0;
+//Without the live camera only this new: through the snapshot's own (old) camera the markers would slide off what they mark
+constexpr double NO_CAMERA_MS = 50.0;
+
+//How old a snapshot is at nowNs (steady_clock ns), in ms. One never read (capturedNs 0) counts as very old.
+inline double snapshotAgeMs(const Snapshot& s, int64_t nowNs) { return s.capturedNs ? (nowNs - s.capturedNs) / 1e6 : 1e9; }
+//In a raid and new enough to draw (the draw loop shows no entities otherwise)
+inline bool snapshotIsLive(const Snapshot& s, double ageMs, bool freshCam) {
+    return s.valid && ageMs <= (freshCam ? STALE_MS : NO_CAMERA_MS);
+}
+
 class Tracker {
 public:
     ~Tracker() { stop(); }

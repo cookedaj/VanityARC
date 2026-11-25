@@ -33,11 +33,6 @@
 inline std::atomic<bool> g_Running(true);
 void SignalHandler(int) {g_Running = false;}
 
-//Data older than this is not drawn: after a stall the markers would be where things were, not where they are
-constexpr double STALE_MS = 250.0;
-//Without the live camera only this new: through the snapshot's own (old) camera the markers would slide off what they mark
-constexpr double NO_CAMERA_MS = 50.0;
-
 //What the picture shows apart from the menu, the cards and the toasts (those draw every frame). The same as for the
 //last frame: the new frame would look exactly like it, so it is not drawn and not sent to the compositor.
 struct FrameKey {
@@ -184,9 +179,9 @@ int main() {
             FminimalViewInfo fresh;
             if (tracker.freshCamera(fresh)) { vm = fresh; freshCam = true; }
         }
-        const double ageMs = snap->capturedNs ? (std::chrono::duration_cast<std::chrono::nanoseconds>(
-                                 std::chrono::steady_clock::now().time_since_epoch()).count() - snap->capturedNs) / 1e6 : 1e9;
-        const bool live = snap->valid && ageMs <= (freshCam ? STALE_MS : NO_CAMERA_MS); //in a raid and the data is current
+        const double ageMs = snapshotAgeMs(*snap, std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                 std::chrono::steady_clock::now().time_since_epoch()).count());
+        const bool live = snapshotIsLive(*snap, ageMs, freshCam); //in a raid and the data is current
         const std::vector<RenderEntity>& ents = live ? snap->entities : noEntities;
         const auto frameNow = std::chrono::steady_clock::now();
         if (live || !snap->gameFound) lastLive = frameNow;
