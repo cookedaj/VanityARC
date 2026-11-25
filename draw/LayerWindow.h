@@ -27,8 +27,8 @@ public:
     bool create(const std::string& monitor, std::string* error);
     void destroy();
 
-    bool pump();                         //handle waiting events without blocking; false when the connection is gone
-    void swap();                         //show the frame (waits for the display's refresh)
+    bool pump();                         //handle waiting events; waits (100 ms at most) until the last frame is shown; false when the connection is gone
+    void swap();                         //show the frame (does not wait: pump() paces the frames)
     void setInteractive(bool on);        //true: takes the mouse (the menu); false: every click goes to the game
 
     bool shouldClose() const;

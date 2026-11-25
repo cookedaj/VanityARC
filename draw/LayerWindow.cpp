@@ -7,6 +7,7 @@
 #include <wayland-client.h>
 #include <wayland-egl.h>
 
+#include <algorithm>
 #include <chrono>
 #include <cstdio>
 #include <cstring>
@@ -35,6 +36,13 @@ struct LayerWindow::Impl {
     std::string monitor;
     std::vector<LayerInput> input;
     bool inside = false;
+    wl_callback* frameCb = nullptr; //the compositor's "last frame is shown" signal, waited for in pump()
+
+    static void onFrameDone(void* d, wl_callback* cb, uint32_t) {
+        Impl* s = (Impl*)d;
+        wl_callback_destroy(cb);
+        if (s->frameCb == cb) s->frameCb = nullptr;
+    }
 
     //--- registry
     static void onGlobal(void* d, wl_registry* r, uint32_t name, const char* iface, uint32_t ver) {
@@ -195,7 +203,9 @@ bool LayerWindow::create(const std::string& monitor, std::string* error) {
     d.esurf = eglCreateWindowSurface(d.edpy, cfg, (EGLNativeWindowType)d.ew, nullptr);
     if (d.esurf == EGL_NO_SURFACE) return fail("EGL could not create the window surface");
     if (!eglMakeCurrent(d.edpy, d.esurf, d.esurf, d.ectx)) return fail("EGL could not make the context current");
-    eglSwapInterval(d.edpy, 1);
+    //0: eglSwapBuffers never waits (with 1 it can wait forever while the screen is locked or asleep, and then F10 and
+    //SIGTERM are never seen). Frames are paced on the frame callback in pump() instead, with a time limit.
+    eglSwapInterval(d.edpy, 0);
     return true;
 }
 
@@ -208,6 +218,8 @@ void LayerWindow::destroy() {
         eglTerminate(d.edpy);
     }
     d.esurf = EGL_NO_SURFACE; d.ectx = EGL_NO_CONTEXT; d.edpy = EGL_NO_DISPLAY;
+    if (d.frameCb) wl_callback_destroy(d.frameCb);
+    d.frameCb = nullptr;
     if (d.ew) wl_egl_window_destroy(d.ew);
     d.ew = nullptr;
     if (d.ls) zwlr_layer_surface_v1_destroy(d.ls);
@@ -224,17 +236,32 @@ void LayerWindow::destroy() {
 bool LayerWindow::pump() {
     Impl& d = *p_;
     if (!d.dpy) return false;
-    while (wl_display_prepare_read(d.dpy) != 0) wl_display_dispatch_pending(d.dpy);
-    wl_display_flush(d.dpy);
-    pollfd pfd{wl_display_get_fd(d.dpy), POLLIN, 0};
-    if (poll(&pfd, 1, 0) > 0) wl_display_read_events(d.dpy);
-    else wl_display_cancel_read(d.dpy);
-    wl_display_dispatch_pending(d.dpy);
-    return wl_display_get_error(d.dpy) == 0;
+    //While the last frame is not shown yet, wait for it (this paces the frames to the display), but at most 100 ms:
+    //a locked or sleeping screen sends no frame callbacks, and the main loop must still see F10 and SIGTERM
+    const auto until = std::chrono::steady_clock::now() + std::chrono::milliseconds(100);
+    for (;;) {
+        while (wl_display_prepare_read(d.dpy) != 0) wl_display_dispatch_pending(d.dpy);
+        wl_display_flush(d.dpy);
+        int wait = 0;
+        if (d.frameCb) wait = (int)std::max<long long>(0, std::chrono::duration_cast<std::chrono::milliseconds>(until - std::chrono::steady_clock::now()).count());
+        pollfd pfd{wl_display_get_fd(d.dpy), POLLIN, 0};
+        if (poll(&pfd, 1, wait) > 0) wl_display_read_events(d.dpy);
+        else wl_display_cancel_read(d.dpy);
+        wl_display_dispatch_pending(d.dpy);
+        if (wl_display_get_error(d.dpy) != 0) return false;
+        if (!d.frameCb || wait == 0) return true;
+    }
 }
 
 void LayerWindow::swap() {
-    if (p_->edpy != EGL_NO_DISPLAY) eglSwapBuffers(p_->edpy, p_->esurf);
+    Impl& d = *p_;
+    if (d.edpy == EGL_NO_DISPLAY) return;
+    if (!d.frameCb) { //goes out with the commit eglSwapBuffers makes
+        static const wl_callback_listener fl = {Impl::onFrameDone};
+        d.frameCb = wl_surface_frame(d.surf);
+        wl_callback_add_listener(d.frameCb, &fl, &d);
+    }
+    eglSwapBuffers(d.edpy, d.esurf);
 }
 
 void LayerWindow::setInteractive(bool on) {
