@@ -13,6 +13,8 @@ void RenderEnd(void (*extra)() = nullptr);   //extra: more UI on top (the Insert
 void SetOverlayHidden(bool on);             //stream-hide: while on, every frame is empty (transparent), so nothing is shown
 bool OverlayReady();                         //once per frame before RenderBegin(): the layer surface's events. False while the surface
                                              //is gone (monitor unplugged / off, compositor restart) and being made again: skip the frame
+bool OverlayNeedsFrame();                    //the surface is new or changed size: it needs a frame even if nothing in it changed
+void OverlayIdle();                          //instead of a frame that would look like the last: window events, then a ~2 ms wait
 bool OverlayShouldClose();
 void OverlayShutdown();
 const char* OverlayBackendName();            //"layer-shell" or "glfw window"

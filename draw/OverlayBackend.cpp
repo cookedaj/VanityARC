@@ -3,6 +3,7 @@
 
 #include <GLFW/glfw3.h>
 
+#include <array>
 #include <cfloat>
 #include <atomic>
 #include <chrono>
@@ -11,6 +12,7 @@
 #include <filesystem>
 #include <iostream>
 #include <string>
+#include <thread>
 
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
@@ -33,6 +35,15 @@ std::string g_downErr;       //why the last try failed (printed once, not every 
 bool g_interactive = false;
 std::chrono::steady_clock::time_point g_last;
 std::string g_iniPath;
+std::array<int, 4> g_drawnSize{}; //the size the last frame was drawn at; zeros: this surface has no frame yet
+
+//The overlay's size now: width and height in surface units (what ImGui lays out in), then in buffer pixels
+std::array<int, 4> sizeNow() {
+    std::array<int, 4> s{};
+    if (g_kind == Kind::Layer) s = {g_layer->width(), g_layer->height(), g_layer->width() * g_layer->scale(), g_layer->height() * g_layer->scale()};
+    else if (g_kind == Kind::Glfw) { glfwGetWindowSize(g_glfw, &s[0], &s[1]); glfwGetFramebufferSize(g_glfw, &s[2], &s[3]); }
+    return s;
+}
 
 void setInteractive(bool on) {
     g_interactive = on;
@@ -213,15 +224,21 @@ void RenderEnd(void (*extra)()) {
     const bool hidden = g_overlayHidden.load();
     if (extra && !hidden) extra(); //the menu is not drawn while hidden
     ImGui::Render();
-    int w, h;
-    if (g_kind == Kind::Layer) { w = g_layer->width() * g_layer->scale(); h = g_layer->height() * g_layer->scale(); }
-    else glfwGetFramebufferSize(g_glfw, &w, &h);
-    glViewport(0, 0, w, h);
+    const std::array<int, 4> sz = sizeNow();
+    glViewport(0, 0, sz[2], sz[3]);
     glClearColor(0, 0, 0, 0);
     glClear(GL_COLOR_BUFFER_BIT);
     if (!hidden) ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
     if (g_kind == Kind::Layer) g_layer->swap();
     else glfwSwapBuffers(g_glfw);
+    g_drawnSize = sz;
+}
+
+bool OverlayNeedsFrame() { return sizeNow() != g_drawnSize; }
+
+void OverlayIdle() {
+    if (g_kind == Kind::Glfw) glfwWaitEventsTimeout(0.002); //the window's events, as RenderBegin would handle them
+    else std::this_thread::sleep_for(std::chrono::milliseconds(2)); //the layer surface's events: OverlayReady()
 }
 
 //The compositor closes the layer surface when its monitor is unplugged, switched off or reconfigured, and the connection
@@ -254,6 +271,7 @@ bool OverlayReady() {
     }
     ImGui_ImplOpenGL3_Init("#version 130"); //new GL context: shaders and the font texture are made again
     g_layer->setInteractive(g_interactive);  //the menu is open: the new surface takes the mouse too
+    g_drawnSize = {};                        //the new surface shows nothing until it gets a frame
     g_down = false;
     g_last = now;
     std::cout << "[+] Overlay back (" << g_layer->width() << "x" << g_layer->height()

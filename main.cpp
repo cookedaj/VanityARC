@@ -33,6 +33,17 @@ constexpr double STALE_MS = 250.0;
 //Without the live camera only this new: through the snapshot's own (old) camera the markers would slide off what they mark
 constexpr double NO_CAMERA_MS = 50.0;
 
+//What the picture shows apart from the menu, the cards and the toasts (those draw every frame). The same as for the
+//last frame: the new frame would look exactly like it, so it is not drawn and not sent to the compositor.
+struct FrameKey {
+    uint64_t seq = 0; //the tracker's snapshot; 0 while nothing from it is drawn (no live data)
+    double x = 0, y = 0, z = 0, pitch = 0, yaw = 0, roll = 0; float fov = 0; //the camera
+    bool live = false, valid = false, gameFound = false, lost = false, hidden = false;
+    const char* fault = nullptr; //the reason under "NO LIVE GAME DATA" (always a fixed text)
+    int renderW = 0, renderH = 0; float dx = 0, dy = 0, dw = 0, dh = 0; //where the game's picture is (g_gameView)
+    bool operator==(const FrameKey&) const = default;
+};
+
 //Settings used to live in ~/.config/vanityarc. Copy that folder across once; never overwrite or delete anything.
 void migrateConfigDir() {
     const char* home = std::getenv("HOME");
@@ -89,6 +100,8 @@ int main() {
     auto lastLive = std::chrono::steady_clock::now(); //the last frame with live data (or with no game running)
     double quitArmedUntil = 0, clearArmedUntil = 0; //F10 and F7 act only on a second press within 2 s
     int lastKeyboards = -1; //what g_KeyboardCount was last frame
+    FrameKey lastKey{};
+    bool lastChanged = true; //the last frame changed something: one more follows it (ImGui windows settle a frame late)
     while (g_Running && !OverlayShouldClose()) {
         MenuPollToggle();
         //Stream-hide (F8, SIGUSR2 or the menu switch): while on, the overlay draws nothing and takes no mouse, so a screen
@@ -116,7 +129,6 @@ int main() {
             continue;
         }
         MenuFeedKeys(); //typing into the menu's text boxes
-        RenderBegin();
 
         g_trackerHz = (int)config::trackerHz; //the tracker thread reads the update rate from here
         g_skeletonOn = config::showSkeleton && config::showPlayers && config::espEnabled; //poses are read only when they will be drawn
@@ -145,6 +157,23 @@ int main() {
         const auto frameNow = std::chrono::steady_clock::now();
         if (live || !snap->gameFound) lastLive = frameNow;
         const bool lost = snap->gameFound && !live && frameNow - lastLive > std::chrono::milliseconds(1500); //the game runs, but no live data for a while
+
+        //A frame that would look exactly like the last one is skipped: less work for the compositor on top of the game.
+        //The menu, a toast, the cards whose numbers move and waiting hotkeys always draw, and one frame follows every change.
+        const int keyboards = g_KeyboardCount;
+        const bool busy = OverlayNeedsFrame() || g_MenuOpen || ToastShowing() || g_KeyQuit || g_KeyClear || g_KeyMark ||
+                          keyboards != lastKeyboards ||
+                          (!config::streamHide && ((lost && snap->valid) || (snap->gameFound && config::showDebugInfo)));
+        const FrameKey key = config::streamHide ? FrameKey{.hidden = true} : FrameKey{
+            live ? snap->seq : 0, vm.Location.x, vm.Location.y, vm.Location.z, vm.Rotation.x, vm.Rotation.y, vm.Rotation.z, vm.FOV,
+            live, snap->valid, snap->gameFound, lost, false, snap->fault,
+            g_gameView.renderW, g_gameView.renderH, g_gameView.dx, g_gameView.dy, g_gameView.dw, g_gameView.dh};
+        const bool changed = busy || key != lastKey;
+        if (!changed && !lastChanged) { OverlayIdle(); continue; }
+        lastChanged = changed;
+        lastKey = key;
+
+        RenderBegin();
 
         //What the player list, the inventory windows and the F6 key work with
         g_ui.ents = &ents;
@@ -181,7 +210,6 @@ int main() {
             g_KeyQuit = g_KeyClear = g_KeyMark = false;
         }
         //Insert and the F-keys need a keyboard: say so when the last one goes away (Bluetooth sleep, unplugged) and when one is back
-        const int keyboards = g_KeyboardCount;
         if (keyboards != lastKeyboards) {
             if (keyboards == 0 && lastKeyboards > 0) Toast("Keyboard lost: Insert will not work", 5.0);
             else if (keyboards > 0 && lastKeyboards == 0) Toast("Keyboard found");
