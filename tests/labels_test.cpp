@@ -337,6 +337,18 @@ int main() {
     labeler::fill(e6);
     CHECK(e6.sub.find("held") == std::string::npos, "non-weapon record is not a held gun");
 
+    //an amplified gun: held upgraded Canto and a stowed Ascended Stitcher get AMP, and the name tables still find them
+    addPoolName(0x2600, "DA_Item_SMG_Medium_01_Carbine");
+    addPoolName(0x2640, "DA_WeaponVisuals_SMG_LowTier_01_Ascended_Default_A");
+    u64 ampInv = makeObject(0x800, 0x2000, 0);
+    put<u64>(ampInv, 0x3B0 + 0x18, makeObject(0x400, 0x2640, 0));
+    u64 ampRec = alloc(0x40); put<u64>(ampRec, 0x0, heldActor); put<u64>(ampRec, 0x10, makeObject(0x400, 0x2600, 0));
+    put<u64>(ampInv, 0x530, ampRec); put<int>(ampInv, 0x538, 1);
+    u64 ampPawn = makeObject(0x1400, 0x2000, 1); put<u64>(ampPawn, 0x3E8, ps); put<u64>(ampPawn, 0xCB0, ampInv);
+    RenderEntity eAmp = ent(Object::PLAYER, 50.0, ampPawn);
+    labeler::fill(eAmp);
+    CHECK(eAmp.sub == "AMP Canto (held) + AMP Stitcher", "player guns: amplified guns show AMP before the name");
+
     //player with no PlayerState: no name, no crash
     u64 lone = makeObject(0x1400, 0x2000, 2);
     RenderEntity e7 = ent(Object::PLAYER, 90.0, lone);

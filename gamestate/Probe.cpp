@@ -3,6 +3,7 @@
 //of OK / CHECK per group, then which player names / object names / gun names can be read in this build, and what
 //the actors around you are called. It reads memory only and draws nothing.
 #include "config.h"
+#include "utils/amp.h"
 #include "utils/localUtil.h"
 #include "utils/names.h"
 #include "utils/skeleton.h"
@@ -58,6 +59,20 @@ std::string tag(uint64_t v) {
 }
 
 bool isDA(ptr p) { return nm(p).rfind("DA_", 0) == 0; }
+
+//tag() plus, for a gun asset, the level the overlay reads from its raw name (utils/amp.h): "[level 4]", "[AMP]" or
+//"[no level in name]". One probe raid with guns of known levels shows whether the game puts the level in these names.
+std::string gunTag(uint64_t v) {
+    std::string s = tag(v);
+    const std::string n = ptrLike(v) && isObject((ptr)v) ? names::name((ptr)v) : std::string();
+    for (const char* p : {"DA_Item_", "BP_WeaponActor_", "DA_WeaponVisuals_"})
+        if (n.rfind(p, 0) == 0) {
+            const int l = amp::gunLevel(n).level;
+            s += l >= 5 ? " [AMP]" : l > 0 ? " [level " + std::to_string(l) + "]" : std::string(" [no level in name]");
+            break;
+        }
+    return s;
+}
 
 //One SUMMARY row. OK when at least half read fine (a far-away or dying player can miss); a stale offset reads none.
 struct Tally { int ok = 0, total = 0; };
@@ -190,7 +205,7 @@ bool printSlot(FILE* out, const char* label, ptr inv, int base) {
     ptr asset = ReadMemory<ptr>(inv + base + 0x18);
     int q = ReadMemory<int>(inv + base + 0x38);
     if (!asset) { std::fprintf(out, " %s empty |", label); return false; }
-    std::fprintf(out, " %s asset %s actor %s q %d |", label, tag(asset).c_str(), tag(actor).c_str(), q);
+    std::fprintf(out, " %s asset %s actor %s q %d |", label, gunTag(asset).c_str(), gunTag(actor).c_str(), q);
     return isDA(asset);
 }
 
@@ -205,7 +220,7 @@ void printItemArray(FILE* out, const char* label, ptr inv, int off) {
         std::fprintf(out, "        [%d]", i);
         for (int k = 0; k < 4; k++) {
             uint64_t v = (uint64_t)ReadMemory<ptr>(data + i * 0x20 + k * 8);
-            if (v) std::fprintf(out, " +0x%x=%s", k * 8, tag(v).c_str());
+            if (v) std::fprintf(out, " +0x%x=%s", k * 8, gunTag(v).c_str());
         }
         std::fprintf(out, "\n");
     }

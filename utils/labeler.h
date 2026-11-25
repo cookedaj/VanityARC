@@ -19,7 +19,7 @@ void refine(RenderEntity& e);
 //container or ground item, NONE otherwise. nullopt: names could not be read, so this actor tells nothing.
 std::optional<Object> kindByName(uintptr_t actor);
 
-//Sets e.label (and e.sub for players: "Rattler (held) + Stitcher")
+//Sets e.label (and e.sub for players: "Rattler (held) + Stitcher", with a level when the gun's name has one: "AMP Canto (held)")
 void fill(RenderEntity& e);
 
 //Everything we can read in a player's inventory: the lists named in offsets.txt (utils/offsets.h). Empty until those
