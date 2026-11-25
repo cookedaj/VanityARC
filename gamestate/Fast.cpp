@@ -50,12 +50,6 @@ double ms(clk::time_point a, clk::time_point b) { return std::chrono::duration<d
 constexpr auto POSE_FROZEN_AFTER = std::chrono::milliseconds(300); //a drawn, animated player's bones change every game tick
 constexpr auto BONE_PERIOD = std::chrono::milliseconds(16);        //a bone list is read at most about 60 times a second; between reads the last one is reused
 constexpr auto CAMERA_HOLD = std::chrono::milliseconds(250);       //a view that cannot be used is replaced by the last good one for this long
-
-uint64_t fnv1a(const uint8_t* p, size_t n) {
-    uint64_t h = 1469598103934665603ULL;
-    for (size_t i = 0; i < n; i++) { h ^= p[i]; h *= 1099511628211ULL; }
-    return h;
-}
 } // namespace
 
 bool GameState::scan() {
@@ -192,14 +186,14 @@ void GameState::updatePose(Tracked& t, const std::vector<uint8_t>& bones, const 
         skeleton::decode(bones.data(), local);
         readOk = skeleton::componentPose(local, comp);
         if (freshBones && readOk) { //a whole list read just now: compare it with the last one, and keep it for the next steps
-            const uint64_t h = fnv1a(bones.data(), bones.size());
-            if (ps.hash && h != ps.hash) ps.changed = now; //the first list has nothing to differ from
-            ps.hash = h;
-            ps.bones.assign(bones.begin(), bones.end());
+            if (ps.bones != bones) { //a byte compare with the list kept last time; an unchanged list is not copied again
+                if (!ps.bones.empty()) ps.changed = now; //the first list has nothing to differ from
+                ps.bones = bones;
+            }
             ps.bonesAt = now;
         }
     }
-    const bool animated = now - ps.changed < POSE_FROZEN_AFTER; //a failed read leaves the hash alone: still animated if it was
+    const bool animated = now - ps.changed < POSE_FROZEN_AFTER; //a failed read leaves the kept list alone: still animated if it was
     if (readOk) {
         ps.good = comp; ps.haveGood = true; ps.goodAt = now;
         //Learn what this stance looks like from a clean, animated, living player

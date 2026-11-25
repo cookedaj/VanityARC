@@ -77,12 +77,11 @@ private:
     Vector3 lastCamPos_;  //where the camera was at the last step: only players near it get their pose read
     std::unordered_map<ptr, double> shieldSeen_; //highest shield seen per player: the bar's full length when the game keeps no maximum
     double shieldCap_ = 0; //highest shield any player held still on two steps in a row (under 1000), for the whole session
-    //The game stops animating a player it is not drawing: his bone list then stops changing. Per player: a hash of the
-    //list as last read and when it last differed (a list that has not changed for a while is "frozen"), how fast he
+    //The game stops animating a player it is not drawing: his bone list then stops changing. Per player: the list as
+    //last read whole and when it last differed (a list that has not changed for a while is "frozen"), how fast he
     //moves, and the last pose that could be read whole (a half-written list is replaced by it for a moment).
     struct PoseState {
         bool init = false;
-        uint64_t hash = 0;
         std::chrono::steady_clock::time_point changed{};
         bool havePos = false;
         Vector3 lastPos;
