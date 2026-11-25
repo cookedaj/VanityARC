@@ -187,7 +187,13 @@ bool FindGameImage(pid_t pid) {
     //and keep only a read-only view of the .exe file somewhere else (proton-cachyos 11): choosing by the .exe name
     //picked that view, and every read missed.
     if (peHeader(pid, DEFAULT_IMAGE_BASE, size, stamp)) return take(DEFAULT_IMAGE_BASE);
-    std::ifstream maps("/proc/" + std::to_string(pid) + "/maps");
+    const std::string mapsPath = "/proc/" + std::to_string(pid) + "/maps";
+    //Something sits at the usual base but its header cannot be read: that is still the game, so keep the usual address
+    //rather than take a .exe view somewhere else
+    std::ifstream first(mapsPath);
+    for (std::string line; std::getline(first, line);)
+        if (line.starts_with("140000000-")) return false;
+    std::ifstream maps(mapsPath);
     for (std::string line; std::getline(maps, line);) {
         //"start-end perms offset dev inode path": the first page of a mapped .exe is its PE header
         if (line.size() < 4 || strncasecmp(line.c_str() + line.size() - 4, ".exe", 4) != 0) continue;

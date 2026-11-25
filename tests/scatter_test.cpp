@@ -123,6 +123,10 @@ int main() {
               ImageEnd == 0x140000000ULL + runSize && ImageStamp == runStamp,
               "the image at the usual base wins over a .exe view of the file elsewhere, whatever it is called");
         if (run != MAP_FAILED) munmap(run, sizeof h);
+        void* hidden = mmap((void*)0x140000000ULL, sizeof h, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED_NOREPLACE, -1, 0);
+        CHECK(hidden == (void*)0x140000000ULL && !FindGameImage(getpid()) && ImageBase == 0x140000000ULL,
+              "an unreadable image at the usual base: that address is kept, not a .exe view elsewhere");
+        if (hidden != MAP_FAILED) munmap(hidden, sizeof h);
         if (img != MAP_FAILED) mprotect(img, sizeof h, PROT_NONE);
         CHECK(img != MAP_FAILED && !FindGameImage(getpid()) && ImageStamp == 0, "an unreadable header: build stamp unknown (0)");
         if (img != MAP_FAILED) munmap(img, sizeof h);

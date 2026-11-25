@@ -583,8 +583,9 @@ void GameState::selfCheckIfAsked(const FminimalViewInfo& vm) {
     const ptr lc = ReadMemory<ptr>(link[3] + off::LEVEL_COLLECTIONS), level = ReadMemory<ptr>(lc + off::PERSISTENT_LEVEL);
     const ptr arr = ReadMemory<ptr>(level + off::ACTORS_PTR);
     const int count = ReadMemory<int>(level + off::ACTORS_PTR + 8);
-    //A menu or lobby has far fewer actors than a raid: after a report there (stage 3), wait for the raid and run again
-    constexpr int RAID_ACTORS = 1000;
+    //A menu or lobby has far fewer actors than a raid (35 seen in the menu, about 1000 and up in raids): after a report
+    //there (stage 3), wait for the raid and run again
+    constexpr int RAID_ACTORS = 300;
     if (self_.stage == 3) {
         if (count < RAID_ACTORS) return;
         self_.stage = 1;
@@ -630,13 +631,14 @@ void GameState::selfCheckIfAsked(const FminimalViewInfo& vm) {
         if (meA) { self_.stage = 2; self_.me = meA; self_.rt = rt[1]; return; } //the report comes at the next look, 1 s later
     }
     const bool raid = count >= RAID_ACTORS;
-    self_.stage = raid ? 0 : 3; //once per run in a raid; a menu or lobby report is followed by one in the raid
+    //final only for a raid with you in your pawn; a menu report, or one before you spawned, is run again
+    self_.stage = raid && byController ? 0 : 3;
 
     constexpr int FAIL = 0, PASS = 1, SKIP = 2;
     static const char* const word[3] = {"FAIL", "PASS", "SKIP"};
     int total[3] = {0, 0, 0};
     std::string rep = "\n=== SELF-CHECK: the game numbers in config.h, checked live (read only) ===\n";
-    if (!raid) rep += say("NOT A RAID: only %d actors (menu, lobby or hideout). Don't put these numbers in config.h: it runs again in a raid.\n", count);
+    if (!raid) rep += say("NOT A RAID: only %d actors (menu, lobby or hideout). Don't put these numbers in config.h: it runs again in a raid. (In a raid now? Then ACTORS_PTR is stale.)\n", count);
     //need: what this check needs (else SKIP, saying skipWhy); ok: the number looks right
     auto line = [&](bool need, bool ok, const std::string& name, const std::string& why, const char* skipWhy) {
         const int st = !need ? SKIP : ok ? PASS : FAIL;
@@ -659,14 +661,16 @@ void GameState::selfCheckIfAsked(const FminimalViewInfo& vm) {
     line(chainOk, isValidPtr(lc), hex("LEVEL_COLLECTIONS", off::LEVEL_COLLECTIONS), say("-> 0x%lx", (unsigned long)lc), "the UWorld chain failed");
     line(isValidPtr(lc), levelOk, hex("PERSISTENT_LEVEL", off::PERSISTENT_LEVEL),
          say("-> 0x%lx%s", (unsigned long)level, levelOk ? " (an object)" : " is not an object"), "LEVEL_COLLECTIONS failed");
-    line(levelOk, isValidPtr(arr) && count >= 1000 && count <= 30000, hex("ACTORS_PTR", off::ACTORS_PTR),
-         say("%d actors (a raid has 1000 to 30000)", count), "PERSISTENT_LEVEL failed");
+    line(levelOk, isValidPtr(arr) && raid && count <= 30000, hex("ACTORS_PTR", off::ACTORS_PTR),
+         say("%d actors (a raid has %d to 30000)", count, RAID_ACTORS), "PERSISTENT_LEVEL failed");
+    //Numbers from a menu or lobby must never be copied into config.h
+    const char* copyIt = raid ? ": put that in config.h" : " (not a raid: not for config.h)";
     //The camera in use came from the CAMMANAGER vtable, or (that vtable stale) through the PlayerController fallback
     const ptr camVt = ReadMemory<ptr>(camActor_);
     const bool camByVt = camVt == vtabels::CAMMANAGER;
     line(true, camByVt, hex("CAMMANAGER vtable", vtabels::CAMMANAGER),
          camByVt ? std::string("the camera has it")
-                 : say("stale: the camera was found only through the PlayerController; its vtable is 0x%lx: put that in config.h", (unsigned long)camVt), "");
+                 : say("stale: the camera was found only through the PlayerController; its vtable is 0x%lx%s", (unsigned long)camVt, copyIt), "");
     line(true, true, hex("VIEW_MATRIX", off::VIEW_MATRIX),
          say("camera found (%s), FOV %.0f", camByVt ? "by the CAMMANAGER vtable" : "through off::PC_CAMERA_MANAGER", (double)vm.FOV), "");
 
@@ -679,7 +683,7 @@ void GameState::selfCheckIfAsked(const FminimalViewInfo& vm) {
     const Vector3 mePos = me < n ? pos[me] : Vector3();
     line(meA != 0, meVt == vtabels::PLAYER, hex("PLAYER vtable", vtabels::PLAYER),
          meVt == vtabels::PLAYER ? std::string("your pawn has it")
-         : say("your pawn's vtable is 0x%lx%s", (unsigned long)meVt, byController ? ": put that in config.h" : " (a guess: CONTROLLER failed)"), noMe);
+         : say("your pawn's vtable is 0x%lx%s", (unsigned long)meVt, byController ? copyIt : " (a guess: CONTROLLER failed)"), noMe);
     const bool rootOk = isObj(meRoot);
     line(meA != 0, rootOk, hex("ROOT_COMPONENT_PTR", off::ROOT_COMPONENT_PTR),
          say("your root component 0x%lx%s", (unsigned long)meRoot, rootOk ? " (an object)" : " is not an object"), noMe);
@@ -726,8 +730,9 @@ void GameState::selfCheckIfAsked(const FminimalViewInfo& vm) {
 
     const char* home = std::getenv("HOME");
     const std::string path = std::string(home ? home : ".") + "/.config/kwin-helper/selfcheck.txt";
-    rep += say("=== %d PASS, %d FAIL, %d SKIP. Fix the first FAIL first: the ones after it may follow from it. Saved to %s ===\n",
-               total[PASS], total[FAIL], total[SKIP], path.c_str());
+    rep += say("=== %d PASS, %d FAIL, %d SKIP. %s Saved to %s ===\n", total[PASS], total[FAIL], total[SKIP],
+               raid ? "Fix the first FAIL first: the ones after it may follow from it." : "NOT A RAID: the report in a raid replaces this one.",
+               path.c_str());
     std::fputs(rep.c_str(), stdout);
     std::fflush(stdout);
     if (FILE* f = std::fopen(path.c_str(), "w")) { std::fputs(rep.c_str(), f); std::fclose(f); }
@@ -737,7 +742,8 @@ void GameState::selfCheckIfAsked(const FminimalViewInfo& vm) {
 //No game world yet (menu, loading screen, or stale offsets): where the UWorld chain stops, link by link, saved to
 //~/.config/kwin-helper/selfcheck.txt about once a second. It needs no raid, so it is the check that works before one.
 void GameState::chainReportIfAsked() {
-    if (chainStop_ < 0) return; //the chain reached the UWorld: the full self-check (selfCheckIfAsked) takes over
+    //Not over a full report that is waiting for the raid (stage 3): a loading screen would leave this one in the file
+    if (chainStop_ < 0 || self_.stage == 3) return; //a reached UWorld: the full self-check (selfCheckIfAsked) takes over
     const auto now = clk::now();
     if (now - self_.chainAt < std::chrono::seconds(1)) return;
     self_.chainAt = now;

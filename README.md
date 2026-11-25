@@ -147,13 +147,13 @@ After a game update, this tells you which game numbers (offsets) still work, one
 KWINHELPER_SELFCHECK=1 bash start.sh
 ```
 
-Start a raid and wait a few seconds after you spawn. The console then prints one report (once each time the game is started; if it ran in a menu or lobby, under 1000 actors, it says NOT A RAID and runs again by itself once you are in a raid), also saved to `~/.config/kwin-helper/selfcheck.txt`. Every line starts with:
+Start a raid and wait a few seconds after you spawn. The console then prints one report (once each time the game is started; if it ran in a menu or lobby, under 300 actors, or before you were in your character, it runs again by itself in the raid), also saved to `~/.config/kwin-helper/selfcheck.txt`. Every line starts with:
 
 - **PASS**: the number looks right.
 - **FAIL**: the number is wrong for this game version; the line says what was read. Fix the first FAIL first: the ones after it often follow from it.
 - **SKIP**: it could not be checked (the line says why, for example no ARC nearby).
 
-It checks the UWorld chain (`UWORLD_RVA` and its 3 offsets), `LEVEL_COLLECTIONS`, `PERSISTENT_LEVEL`, the actor count (`ACTORS_PTR`), `CONTROLLER`, the `PLAYER` vtable, your position (`ROOT_COMPONENT_PTR`, `POS_PTR`), your health (`HEALTH_COMPONENT`, `HEALTH_MAX`, `HEALTH_CACHED`), `TEAM_ID`, `MESH`, the bone count (`BONE_ARRAY`), `RENDER_TIME` and the ARC `IS_DESTROYED` flag. It finds your own player without any vtable (through the PlayerController of the UWorld chain), so when the `PLAYER` line fails it prints the right vtable for `config.h`. It only reads memory. If no full report appears, the overlay never got into the raid. Until then `selfcheck.txt` shows where the UWorld chain stops (`UWORLD_RVA` to `UWORLD_CHAIN_3`, each PASS or FAIL), and the message on screen names the same link. A stop in the main menu is normal; still stopping in a raid means those offsets are stale for the game's build.
+It checks the UWorld chain (`UWORLD_RVA` and its 3 offsets), `LEVEL_COLLECTIONS`, `PERSISTENT_LEVEL`, the actor count (`ACTORS_PTR`), `CONTROLLER`, the `PLAYER` vtable, your position (`ROOT_COMPONENT_PTR`, `POS_PTR`), your health (`HEALTH_COMPONENT`, `HEALTH_MAX`, `HEALTH_CACHED`), `TEAM_ID`, `MESH`, the bone count (`BONE_ARRAY`), `RENDER_TIME` and the ARC `IS_DESTROYED` flag. It finds your own player without any vtable (through the PlayerController of the UWorld chain), so when the `PLAYER` line fails it prints the right vtable for `config.h`. It only reads memory. If no full report appears at all, the overlay never found a game world. Until then `selfcheck.txt` shows where the UWorld chain stops (`UWORLD_RVA` to `UWORLD_CHAIN_3`, each PASS or FAIL), and the message on screen names the same link. A stop in the main menu is normal; still stopping in a raid means those offsets are stale for the game's build.
 
 ## Shield and inventory: probes
 

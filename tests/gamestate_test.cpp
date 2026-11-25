@@ -508,20 +508,31 @@ int main() {
         CHECK(has("PASS  POS_PTR") && has("PASS  HEALTH_MAX") && has("PASS  HEALTH_CACHED") && has("PASS  MESH") && has("PASS  BONE_ARRAY") &&
               has("PASS  RENDER_TIME") && has("PASS  IS_DESTROYED"), "self-check: your position, health, mesh, bones, draw time and the ARC destroyed flag pass");
         CHECK(has("NOT A RAID"), "self-check: a small level (menu, lobby) is marked as not a raid");
-        //then the raid: a second report by itself, once the level has a raid's number of actors
+        CHECK(!has("put that in config.h"), "self-check: a report outside a raid never says to copy a number into config.h");
+        const std::string repFile = home + "/.config/kwin-helper/selfcheck.txt";
+        auto look = [&] { std::this_thread::sleep_for(std::chrono::milliseconds(1100)); sc.step(); };
+        std::filesystem::remove(repFile);
+        look();
+        breakWorld(); look(); fixWorld(); look(); //a loading screen, then the menu again
+        CHECK(!std::filesystem::exists(repFile), "self-check: outside a raid nothing rewrites the report, not even a loading screen");
+        //the raid, before you are in your pawn: after 10 looks a report from a guess, which must not be the last one
         const std::vector<u64> smallLevel = actorList;
         while (actorList.size() < 1200) actorList.push_back(0);
         publishActors();
-        put<u64>(me + off::CONTROLLER, g_chain1);
-        for (int i = 0; i < 2; i++) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(1100));
+        for (int i = 0; i < 12; i++) look();
+        CHECK(std::filesystem::exists(repFile), "self-check: a raid gets a report even before you are in your pawn");
+        put<u64>(me + off::CONTROLLER, g_chain1); //now you are in it
+        for (int i = 0; i < 3; i++) {
             put<float>(meMesh + off::RENDER_TIME + 4, 102.0f + i);
-            sc.step();
+            look();
         }
-        std::ifstream f2(home + "/.config/kwin-helper/selfcheck.txt");
+        std::ifstream f2(repFile);
         const std::string raidRep((std::istreambuf_iterator<char>(f2)), std::istreambuf_iterator<char>());
-        CHECK(raidRep.find("PASS  ACTORS_PTR") != std::string::npos && raidRep.find("NOT A RAID") == std::string::npos,
-              "self-check: entering a raid writes a new report without a restart");
+        CHECK(raidRep.find("PASS  ACTORS_PTR") != std::string::npos && raidRep.find("PASS  CONTROLLER") != std::string::npos &&
+              raidRep.find("NOT A RAID") == std::string::npos, "self-check: entering a raid writes a new report without a restart");
+        std::filesystem::remove(repFile);
+        look(); look();
+        CHECK(!std::filesystem::exists(repFile), "self-check: the raid report with your pawn is the last one");
         actorList = smallLevel;
         publishActors();
         put<u64>(me + off::CONTROLLER, 0);

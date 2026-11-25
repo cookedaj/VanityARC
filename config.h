@@ -110,7 +110,7 @@ inline constexpr bool probeNames = false;
 //The game build the offsets below are for: its .exe's PE TimeDateStamp, printed as "Game build stamp 0x..." when the
 //overlay finds the game. 0 = not recorded (no check). When set and the running game's stamp differs, the overlay says
 //"GAME UPDATED" on screen. Copy the printed value in here once the offsets are confirmed for that build.
-inline constexpr uint32_t GAME_PE_STAMP = 0;
+inline constexpr uint32_t GAME_PE_STAMP = 0x6AF5C6FC; //self-check on this build 2026-11-25: 21 PASS, 0 FAIL
 //----------------------------------------------
 
 
