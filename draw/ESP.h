@@ -504,8 +504,10 @@ inline void DrawESP(const std::vector<RenderEntity>& entities, FminimalViewInfo 
             const double toHim = std::atan2(ent.pos.y - vm.Location.y, ent.pos.x - vm.Location.x) * 180.0 / 3.14159265358979;
             if (config::showFacing && FacingOnScreen(ent.yaw, toHim, fx, fy)) {
                 const float mxs = (float)sHead.x, mys = y0 + h / 2;
-                const float len = std::clamp(std::min(w, h) * 0.4f, 12.0f, 40.0f), tip = std::max(7.0f, len * 0.45f);
-                DrawFacingLine(mxs, mys, fx, fy, 0.0f, len - tip * 0.5f, color, std::max(3.0f, th + 1.0f));
+                //The head grows with the shaft (1.1 * tip wide vs lineT + 2 with the dark edge), so thick lines still read as an arrow
+                const float lineT = std::max(3.0f, th + 1.0f), len0 = std::clamp(std::min(w, h) * 0.4f, 12.0f, 40.0f);
+                const float tip = std::max({7.0f, len0 * 0.45f, 1.6f * (lineT + 2.0f)}), len = std::max(len0, tip);
+                DrawFacingLine(mxs, mys, fx, fy, 0.0f, len - tip * 0.5f, color, lineT);
                 DrawArrow(mxs + fx * len, mys + fy * len, fx, fy, tip, color);
             }
 
