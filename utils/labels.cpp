@@ -105,15 +105,16 @@ const Rule ARC_NAMES[] = {
     {"bullcrab", "Leaper"}, {"peppermint", "Queen"}, {"runner", "Shredder"}, {"spearmint", "Matriarch"},
     {"elitedroneflamethrower", "Firefly"}, {"rollbotboom", "Comet"}, {"heavydronelaser", "Vaporizer"},
     {"monolith", "ARC Turbine"}, {"tarragon01", "Bully"}, {"meerkat", "Skulker"}, {"kebabgatling", "Hydra"},
-    {"courier", "ARC Reclaimer"},
+    {"courier", "ARC Reclaimer"}, {"rose", "Frigate Cannon"}, //Rose: the ARC Frigate's big gun (game text)
 };
 
 //Containers: the first rule whose key appears inside the name wins, so specific ones come first
-//Names from the game's text where it has one, else the ARC Raiders wiki (November 2026). Some furniture names have no
-//source yet (Closet and Drawer, Terminals, Trash Can); they stay until checked in the game.
+//Names from the game's text where it has one, else the ARC Raiders wiki (November 2026). The game names no furniture:
+//Residential Closet, Terminal, Medical Drawer and Refrigerator are the wiki's; Trash Can has no source yet.
 const Rule CONTAINER_RULES[] = {
     {"whitemedicaldrawer", "White Medical Drawer"},
     {"medicaldrawer", "Medical Drawer"},
+    {"drawermedical", "Medical Drawer"}, //Res_DrawerMedical_01_A
     {"bluemultidrawer", "Blue Multi Drawers"},
     {"medicalbag", "Medical Bag"},
     {"computerpaneldrawer", "Computer Panel Drawer"},
@@ -125,7 +126,7 @@ const Rule CONTAINER_RULES[] = {
     {"server", "Server Rack"},
     {"computer", "Computer"},
     {"android", "Android"},
-    {"terminal", "Terminals"},
+    {"terminal", "Terminal"},
     {"carhood", "Car Hood"},
     {"cartoolcabinet", "Car Tool Cabinet"},
     {"industrialdrawer", "Industrial Drawer"},
@@ -139,21 +140,24 @@ const Rule CONTAINER_RULES[] = {
     {"greenlocker", "Green Locker"},
     {"locker", "Locker"},
     {"residentialcabinet", "Residential Cabinet"},
-    {"closet", "Closet and Drawer"},
+    {"closet", "Residential Closet"},
     {"fridge", "Fridge"},
+    {"refrigerator", "Refrigerator"},
     {"dumpster", "Dumpster"},
     {"trash", "Trash Can"},
     {"suitcase", "Suitcase"},
     {"weaponcase", "Weapon Case"},
     {"ammocase", "Ammo Case"},
     {"ammobox", "Ammo Box"},
-    {"backpack", "Backpack"},
+    {"backpack", "Worn Backpack"},
     {"grenadetube", "Grenade Tube"},
     {"grenadecontainer", "Grenade Tube"},
     {"raidercache", "Raider Cache"},
     {"wickerbasket", "Wicker Basket"},
     {"fruitbasket", "Basket of Fruit"},
     {"snowpile", "Snow Pile"},
+    {"candleberries", "Candleberry Bush"},
+    {"volcanicrock", "Volcanic Rock"},
     {"crashedarcprobe", "Crashed ARC Probe"},
     {"arcprobe", "ARC Probe"},
     {"arcassessor", "ARC Assessor"},
@@ -173,7 +177,7 @@ const Rule CONTAINER_RULES[] = {
 //Item names as the game spells them (game text 2.4.0, the ARC Raiders wiki and MetaForge, November 2026; Pickaxe as
 //the player confirmed). An item whose internal name matches one of these, letters and digits only and in any case,
 //gets this spelling. Anything else keeps the cleaned internal name.
-const char* const WIKI_ITEMS = "\"Leviathan's Crown\" Ship Model|\"Sirena Dorata\" Ship Model|\"Twilight Compass\" Ship Model|\"Velocity\" Ship Model|\"Wind Sprite\" Ship Model|Acoustic Guitar|Adrenaline Shot|Advanced ARC Powercell|Advanced Camera|Advanced Electrical Components|Advanced Mechanical Components|Agave|Agave Juice|Air Freshener|Alarm Clock|Alien Duck|Amplification Module MK. I|Amplification Module MK. II|Amplification Module MK. III|Amplification Module MK. IV|Amplification Module MK. V|Amplified Fragments|Ancient Fort Security Code|Angled Grip I|Angled Grip II|Angled Grip III|Antiseptic|Anvil Splitter|Aphelion|Apricot|ARC Alloy|ARC Circuitry|ARC Conductive Coupler|ARC Coolant|ARC Data Module|ARC Flex Rubber|ARC Insulated Coupler|ARC Motion Core|ARC Performance Steel|ARC Plated Coupler|ARC Powercell|ARC Synthetic Resin|ARC Thermo Lining|Arcade Duck|Archive Desk Lamp|Assessor Matrix|Assorted Seeds|Banana|Bandage|Banjo|Bantam|Barricade Kit|Basic Camera|Bastion Cell|Battered Paperback|Battery|Bicycle Pump|Binoculars|Blaze Grenade|Blaze Grenade Trap|Bloated Tuna Can|Blue Gate Cellar Key|Blue Gate Communication Tower Key|Blue Gate Confiscation Room Key|Blue Gate Village Key|Blue Light Stick|Bombardier Cell|Breathtaking Snow Globe|Broken Compass|Broken Flashlight|Broken Guidance System|Broken Handheld Radio|Broken Taser|Bronze Statuette|Bully Fragmenter|Bureau Desk Lamp|Burgerboy|Buried City Hospital Key|Buried City JKV Employee Access Card|Buried City Residential Master Key|Buried City Town Hall Key|Burned ARC Circuitry|Burnt-out Candles|Cable Stripper|Calculator|Camera Lens|Candle Holder|Candleberries|Canister|Cat Bed|Celeste's Journal|Cheer|Chemicals|Coffee Pot|Combat Mk. 1|Combat Mk. 2|Combat Mk. 3 (Aggressive)|Combat Mk. 3 (Flanking)|Comet Igniter|Compensator I|Compensator II|Compensator III|Complex Gun Parts|Coolant|Cooling Coil|Cooling Fan|Cracked Bioscanner|Crash Mat|Crude Explosives|Crumpled Plastic Bottle|Dam Control Tower Key|Dam Controlled Access Zone Key|Dam Staff Room Key|Dam Surveillance Key|Dam Testing Annex Key|Dam Utility Key|Damaged ARC Motion Core|Damaged ARC Powercell|Damaged Fireball Burner|Damaged Heat Sink|Damaged Hornet Driver|Damaged Leaper Pulse Unit|Damaged Rocketeer Driver|Damaged Snitch Scanner|Damaged Tick Pod|Damaged Wasp Driver|Dart Board|Dead Flowers|Deadline|Defibrillator|Deflated Football|Degraded ARC Rubber|Desk Lamp|Differential Microphone|Diving Goggles|Dockmaster's Detector|Dodger's Note|Dog Collar|Dolabra|Doodly Duck|Door Blocker|Dried-Out ARC Resin|Duct Tape|Durable Cloth|Dusty Film Reel|Electrical Components|Elephant Obelisk|Emperor Beacon|Emperor Gateway Conduit|Emperor Modulator|Empty Wine Bottle|Energy Clip|Epoxy Bucket|Equalizer|Equatorial Sundial|Espresso Machine Parts|ESR Analyzer|Exodus Modules|Exodus Technical Handbook|Experimental Seed Sample|Expired Pasta|Expired Respirator|Expired Security Code|Explosive Compound|Explosive Mine|Extended Barrel I|Extended Barrel II|Extended Barrel III|Extended Light Mag I|Extended Light Mag II|Extended Light Mag III|Extended Medium Mag I|Extended Medium Mag II|Extended Medium Mag III|Extended Shotgun Mag I|Extended Shotgun Mag II|Extended Shotgun Mag III|Fabric|Faded Photograph|Familiar Duck|Fancy Plate|Fertilizer|Film Reel|Fine Wristwatch|Fireball Burner|Firecracker|Firefly Burner|Fireworks Box|First Wave Compass|First Wave Rations|First Wave Tape|Flame Spray|Flashy Duck|Flow Controller|Flushing Terminal Key|Fluted Rotor Core|Fossilized Lightning|Free Loadout Augment|Frequency Modulation Box|Fried Motherboard|Frigate Diagnostic Node|Frigate Inductor|Frosty Duck|Fruit Mix|Frying Pan|Garlic Press|Gas Grenade|Gas Grenade Trap|Gas Mine|Geiger Counter|Gentle Duck|Glitched ARC Circuitry|Glitched ARC Light Ring|Glitched ARC Phased Array|Glitched ARC Power Converter|Glitched ARC Transmitter|Grappling Hook|Great Mullein|Green Light Stick|Hand Drill|Harmonica|Headphones|Heavy Ammo|Heavy Fuze Grenade|Heavy Gun Parts|Heavy Shield|Herbal Bandage|Horizontal Grip|Hornet Driver|Household Cleaner|Hullcracker|Humidifier|Ice Cream Scooper|Il Toro|Impure ARC Coolant|Industrial Battery|Industrial Charger|Industrial Magnet|Insulation Roll|Integrated Binoculars|Integrated Defibrillator|Integrated Shield Recharger|Ion Sputter|Jolt Mine|Jupiter|Kettle|Kinetic Converter|Laboratory Reagents|Lance's Mixtape (5th edition)|Laser Level|Launcher Ammo|Leaper Pulse Unit|Lemon|Li'l Smoke Grenade|LiDAR Scanner|Light Ammo|Light Bulb|Light Gun Parts|Light Impact Grenade|Light Shield|Lightweight Stock|Looting Mk. 1|Looting Mk. 2|Looting Mk. 3 (Cautious)|Looting Mk. 3 (Safekeeper)|Looting Mk. 3 (Survivor)|Lure Grenade|Lure Grenade Trap|Magnet|Magnetic Accelerator|Magnetron|Major Aiva's Mementos|Major Aiva's Patch|Marano Market Business Card|Mask Fragment|Matriarch Reactor|Mechanical Components|Medium Ammo|Medium Gun Parts|Medium Shield|Metal Brackets|Metal Parts|Microscope|Mini Centrifuge|Mini Pump|Mod Components|Moisture Meter|Moss|Motor|Mountaineer's Detector|MRI Duck|Mushroom|Music Album|Music Box|Muzzle Brake I|Muzzle Brake II|Muzzle Brake III|Noisemaker|Number Plate|Nutrient Meter|Official Shutdown Documentation|Oil|Old World Books|Olives|Osprey|Padded Stock|Painted Box|Patrol Car Key|Pendola Pass Observatory Key|Pendola Pass Old Town Key|Pendola Pass Railyard Key|Pendola Pass Train Station Key|Photoelectric Cloak|Pickaxe|Pilgrim's Peak Security Code|Planks|Plastic Parts|Playing Cards|Pneumatic Actuator|Polluted Air Filter|Pop Trigger|Portable TV|Possibly Toxic Plant|Poster of Natural Wonders|Potted Plant|Pottery|Power Bank|Power Cable|Power Rod|Powered Descender|Precision Gimbal|Pressure Regulator|Prickly Pear|Processor|Project Heartwood Blueprints|Project Pathos Empathy Core|Projector|Propellant Valve Assembly|Pulse Mine|Queen Reactor|Radial Press|Radio|Radio Relay|Radio Renegade|Raider Flag|Raider Hatch Key|Raider Logbook|Raider Tokens|Raider's Refuge Security Code|Railway Lantern|Rascal|Rattler|Recorder|Red Coral Jewelry|Red Light Stick|Reinforced Reception Security Code|Remote Control|Remote Raider Flare|Renegade|Resin|Ripped Safety Vest|Riven Tides Classified Records Keycard|Riven Tides Crane House Keycard|Riven Tides Hotel Keycard No. 102|Riven Tides Hotel Keycard No. 107|Riven Tides Hotel Keycard No. 113|Riven Tides Hotel Keycard No. 205|Riven Tides Hotel Keycard No. 208|Riven Tides Hotel Keycard No. 311|Riven Tides Hotel Keycard No. 404|Riven Tides Secure Storage Keycard|Rock Salt|Rocket Thruster|Rocketeer Driver|Roots|Rope|Rosary|Rotary Encoder|Rubber Duck|Rubber Pad|Rubber Parts|Ruined Accordion|Ruined Augment|Ruined Baton|Ruined Emperor Beacon|Ruined Handcuffs|Ruined Parachute|Ruined Riot Shield|Ruined Tactical Vest|Rusted Bolts|Rusted Gear|Rusted Shut Medical Kit|Rusted Tools|Rusty ARC Steel|Sample Cleaner|Scout Patrol Note|Secret Meeting Info|Seed Vault Box Key|Seeker Grenade|Sensors|Sentinel Firing Core|Sextant|Shaker|Sheet Metal|Shield Recharger|Shotgun Ammo|Shotgun Choke I|Shotgun Choke II|Shotgun Choke III|Shotgun Silencer|Showstopper|Shrapnel Grenade|Shredder Gyro|Signal Amplifier|Silencer I|Silencer II|Silencer III|Silver Teaspoon Set|Simple Gun Parts|Skulker Targeter|Smoke Grenade|Smoke Grenade Trap|Snap Blast Grenade|Snap Hook|Snitch Scanner|Snowball|Spaceport Container Storage Key|Spaceport Control Tower Key|Spaceport Trench Tower Key|Spaceport Warehouse Key|Speaker Component|Spectrometer|Spectrum Analyzer|Spotter Relay|Spring Cushion|Stable Stock I|Stable Stock II|Stable Stock III|Stack of Movie Tapes|Statuette|Steel Cable|Steel Spring|Stella Montis Archives Key|Stella Montis Assembly Admin Key|Stella Montis Medical Storage Key|Stella Montis Security Checkpoint Key|Stencil Parts|Sterilized Bandage|Stiletto|Stitcher|Surge Coil|Surge Shield Recharger|Surveyor Vault|Synthesized Fuel|Syringe|Tactical Mk. 1|Tactical Mk. 2|Tactical Mk. 3 (Defensive)|Tactical Mk. 3 (Healing)|Tactical Mk. 3 (Revival)|Tactical Mk. 3 (Smoke)|Tagging Grenade|Tattered ARC Lining|Tattered Clothes|Telemetry Transceiver|Tellurion|Tempest|Tether Launcher|Thermal Shaker|Thermostat|Tick Pod|Toaster|Torn Blanket|Torn Book|Torrente|Trailblazer|Train Model|Trigger 'Nade|Tropical Duck|Turbine Compressor|Turbo Pump|Unusable Weapon|Vaporizer Regulator|Vase|Venator|Vertical Grip I|Vertical Grip II|Vertical Grip III|Very Comfortable Pillow|Vintage Steering Wheel|Vita Shot|Vita Spray|Volcanic Rock|Voltage Converter|Vulcano|Wasp Driver|Water Filter|Water Pump|White Flag|Wires|Wolfpack|Yellow Light Stick|Zipline";
+const char* const WIKI_ITEMS = "\"Leviathan's Crown\" Ship Model|\"Sirena Dorata\" Ship Model|\"Twilight Compass\" Ship Model|\"Velocity\" Ship Model|\"Wind Sprite\" Ship Model|Acoustic Guitar|Adrenaline Shot|Advanced ARC Powercell|Advanced Camera|Advanced Electrical Components|Advanced Mechanical Components|Agave|Agave Juice|Air Freshener|Alarm Clock|Alien Duck|Amplification Module MK. I|Amplification Module MK. II|Amplification Module MK. III|Amplification Module MK. IV|Amplification Module MK. V|Amplified Fragments|Ancient Fort Security Code|Angled Grip I|Angled Grip II|Angled Grip III|Antiseptic|Anvil Splitter|Aphelion|Apricot|ARC Alloy|ARC Circuitry|ARC Conductive Coupler|ARC Coolant|ARC Data Module|ARC Flex Rubber|ARC Insulated Coupler|ARC Motion Core|ARC Performance Steel|ARC Plated Coupler|ARC Powercell|ARC Synthetic Resin|ARC Thermo Lining|Arcade Duck|Archive Desk Lamp|Assessor Matrix|Assorted Seeds|Banana|Bandage|Banjo|Bantam|Barricade Kit|Basic Camera|Bastion Cell|Battered Paperback|Battery|Bent Clothes Hanger|Bicycle Pump|Binoculars|Blaze Grenade|Blaze Grenade Trap|Bloated Tuna Can|Blown Fuses|Blue Gate Cellar Key|Blue Gate Communication Tower Key|Blue Gate Confiscation Room Key|Blue Gate Village Key|Blue Light Stick|Bombardier Cell|Breathtaking Snow Globe|Broken Compass|Broken Flashlight|Broken Guidance System|Broken Handheld Radio|Broken Taser|Bronze Statuette|Bully Fragmenter|Bureau Desk Lamp|Burgerboy|Buried City Hospital Key|Buried City JKV Employee Access Card|Buried City Residential Master Key|Buried City Town Hall Key|Burned ARC Circuitry|Burnt-out Candles|Cable Stripper|Calculator|Camera Lens|Candle Holder|Candleberries|Canister|Cat Bed|Celeste's Journal|Cheer|Chemicals|Coffee Pot|Combat Mk. 1|Combat Mk. 2|Combat Mk. 3 (Aggressive)|Combat Mk. 3 (Flanking)|Comet Igniter|Compensator I|Compensator II|Compensator III|Complex Gun Parts|Coolant|Cooling Coil|Cooling Fan|Cracked Bioscanner|Crash Mat|Crude Explosives|Crumpled Plastic Bottle|Dam Control Tower Key|Dam Controlled Access Zone Key|Dam Staff Room Key|Dam Surveillance Key|Dam Testing Annex Key|Dam Utility Key|Damaged ARC Motion Core|Damaged ARC Powercell|Damaged Fireball Burner|Damaged Heat Sink|Damaged Hornet Driver|Damaged Leaper Pulse Unit|Damaged Rocketeer Driver|Damaged Snitch Scanner|Damaged Tick Pod|Damaged Wasp Driver|Dart Board|Dead Flowers|Deadline|Defibrillator|Deflated Football|Degraded ARC Rubber|Desk Lamp|Differential Microphone|Diving Goggles|Dockmaster's Detector|Dodger's Note|Dog Collar|Dolabra|Doodly Duck|Door Blocker|Dried-Out ARC Resin|Duct Tape|Durable Cloth|Dusty Film Reel|Electrical Components|Elephant Obelisk|Emperor Beacon|Emperor Gateway Conduit|Emperor Modulator|Empty Wine Bottle|Energy Clip|Epoxy Bucket|Equalizer|Equatorial Sundial|Espresso Machine Parts|ESR Analyzer|Exodus Modules|Exodus Technical Handbook|Experimental Seed Sample|Expired Pasta|Expired Respirator|Expired Security Code|Explosive Compound|Explosive Mine|Extended Barrel I|Extended Barrel II|Extended Barrel III|Extended Light Mag I|Extended Light Mag II|Extended Light Mag III|Extended Medium Mag I|Extended Medium Mag II|Extended Medium Mag III|Extended Shotgun Mag I|Extended Shotgun Mag II|Extended Shotgun Mag III|Fabric|Faded Photograph|Familiar Duck|Fancy Plate|Fertilizer|Film Reel|Fine Wristwatch|Fireball Burner|Firecracker|Firefly Burner|Fireworks Box|First Wave Compass|First Wave Rations|First Wave Tape|Flame Spray|Flashy Duck|Flow Controller|Flushing Terminal Key|Fluted Rotor Core|Food Wrapper|Fossilized Lightning|Free Loadout Augment|Frequency Modulation Box|Fried Motherboard|Frigate Diagnostic Node|Frigate Inductor|Frosty Duck|Fruit Mix|Frying Pan|Garlic Press|Gas Grenade|Gas Grenade Trap|Gas Mine|Geiger Counter|Gentle Duck|Glitched ARC Circuitry|Glitched ARC Light Ring|Glitched ARC Phased Array|Glitched ARC Power Converter|Glitched ARC Transmitter|Grappling Hook|Great Mullein|Green Light Stick|Hand Drill|Harmonica|Headphones|Heavy Ammo|Heavy Fuze Grenade|Heavy Gun Parts|Heavy Shield|Herbal Bandage|Horizontal Grip|Hornet Driver|Household Cleaner|Hullcracker|Humidifier|Husk Lily|Ice Cream Scooper|Il Toro|Impure ARC Coolant|Industrial Battery|Industrial Charger|Industrial Magnet|Insulation Roll|Integrated Binoculars|Integrated Defibrillator|Integrated Shield Recharger|Ion Sputter|Jolt Mine|Jupiter|Kettle|Kinetic Converter|Laboratory Reagents|Lance's Mixtape (5th edition)|Laser Level|Launcher Ammo|Leaper Pulse Unit|Lemon|Li'l Smoke Grenade|Library Book|LiDAR Scanner|Light Ammo|Light Bulb|Light Gun Parts|Light Impact Grenade|Light Shield|Lightweight Stock|Looting Mk. 1|Looting Mk. 2|Looting Mk. 3 (Cautious)|Looting Mk. 3 (Safekeeper)|Looting Mk. 3 (Survivor)|Lure Grenade|Lure Grenade Trap|Magnet|Magnetic Accelerator|Magnetron|Major Aiva's Mementos|Major Aiva's Patch|Marano Market Business Card|Mask Fragment|Matriarch Reactor|Mechanical Components|Medium Ammo|Medium Gun Parts|Medium Shield|Metal Brackets|Metal Parts|Microscope|Mini Centrifuge|Mini Pump|Mod Components|Moisture Meter|Moss|Motor|Mountaineer's Detector|MRI Duck|Mushroom|Music Album|Music Box|Muzzle Brake I|Muzzle Brake II|Muzzle Brake III|Noisemaker|Number Plate|Nutrient Meter|Official Shutdown Documentation|Oil|Old World Books|Olives|Osprey|Padded Stock|Painted Box|Patrol Car Key|Pendola Pass Observatory Key|Pendola Pass Old Town Key|Pendola Pass Railyard Key|Pendola Pass Train Station Key|Photoelectric Cloak|Pickaxe|Pilgrim's Peak Security Code|Planks|Plastic Parts|Plastic Trash|Playing Cards|Pneumatic Actuator|Polluted Air Filter|Pop Trigger|Portable TV|Possibly Toxic Plant|Poster of Natural Wonders|Potted Plant|Pottery|Power Bank|Power Cable|Power Rod|Powered Descender|Precision Gimbal|Pressure Regulator|Prickly Pear|Processor|Project Heartwood Blueprints|Project Pathos Empathy Core|Projector|Propellant Valve Assembly|Pulse Mine|Purification System Blueprint|Queen Reactor|Radial Press|Radio|Radio Relay|Radio Renegade|Raider Flag|Raider Hatch Key|Raider Logbook|Raider Tokens|Raider's Refuge Security Code|Railway Lantern|Rascal|Rattler|Recorder|Red Coral Jewelry|Red Light Stick|Reinforced Reception Security Code|Remote Control|Remote Raider Flare|Renegade|Resin|Ripped Safety Vest|Riven Tides Classified Records Keycard|Riven Tides Crane House Keycard|Riven Tides Hotel Keycard No. 102|Riven Tides Hotel Keycard No. 107|Riven Tides Hotel Keycard No. 113|Riven Tides Hotel Keycard No. 205|Riven Tides Hotel Keycard No. 208|Riven Tides Hotel Keycard No. 311|Riven Tides Hotel Keycard No. 404|Riven Tides Secure Storage Keycard|Rock Salt|Rocket Thruster|Rocketeer Driver|Roots|Rope|Rosary|Rotary Encoder|Rubber Duck|Rubber Pad|Rubber Parts|Ruined Accordion|Ruined Augment|Ruined Baton|Ruined Emperor Beacon|Ruined Handcuffs|Ruined Parachute|Ruined Riot Shield|Ruined Tactical Vest|Rusted Bolts|Rusted Gear|Rusted Shut Medical Kit|Rusted Tools|Rusty ARC Steel|Sample Cleaner|Scout Patrol Note|Secret Meeting Info|Seed Vault Box Key|Seeker Grenade|Sensors|Sentinel Firing Core|Sextant|Shaker|Sheet Metal|Shield Recharger|Shotgun Ammo|Shotgun Choke I|Shotgun Choke II|Shotgun Choke III|Shotgun Silencer|Showstopper|Shrapnel Grenade|Shredder Gyro|Signal Amplifier|Silencer I|Silencer II|Silencer III|Silver Teaspoon Set|Simple Gun Parts|Skulker Targeter|Smoke Grenade|Smoke Grenade Trap|Snap Blast Grenade|Snap Hook|Snitch Scanner|Snowball|Spaceport Container Storage Key|Spaceport Control Tower Key|Spaceport Trench Tower Key|Spaceport Warehouse Key|Speaker Component|Spectrometer|Spectrum Analyzer|Spotter Relay|Spring Cushion|Stable Stock I|Stable Stock II|Stable Stock III|Stack of Movie Tapes|Statuette|Steel Cable|Steel Spring|Stella Montis Archives Key|Stella Montis Assembly Admin Key|Stella Montis Medical Storage Key|Stella Montis Security Checkpoint Key|Stencil Parts|Sterilized Bandage|Stiletto|Stitcher|Surge Coil|Surge Shield Recharger|Surveyor Vault|Synthesized Fuel|Syringe|Tactical Mk. 1|Tactical Mk. 2|Tactical Mk. 3 (Defensive)|Tactical Mk. 3 (Healing)|Tactical Mk. 3 (Revival)|Tactical Mk. 3 (Smoke)|Tagging Grenade|Tattered ARC Lining|Tattered Clothes|Telemetry Transceiver|Tellurion|Tempest|Tether Launcher|Thermal Shaker|Thermostat|Tick Pod|Toaster|Torn Blanket|Torn Book|Torrente|Trailblazer|Train Model|Trigger 'Nade|Tropical Duck|Turbine Compressor|Turbo Pump|Unusable Weapon|Vaporizer Regulator|Vase|Venator|Vertical Grip I|Vertical Grip II|Vertical Grip III|Very Comfortable Pillow|Vintage Steering Wheel|Vita Shot|Vita Spray|Volcanic Rock|Voltage Converter|Vulcano|Wasp Driver|Water Filter|Water Pump|White Flag|Wires|Wolfpack|Yellow Light Stick|Zipline";
 
 //Gun keys as the datamines have them (Teralix42/ArcRaidersAssets, ARES-Server, bukueal asset index, November 2026)
 const Rule ITEM_NAMES[] = {
@@ -193,6 +197,8 @@ const Rule ITEM_NAMES[] = {
     {"smg01", "Bobcat"}, {"smglowtier01", "Stitcher"}, {"smgmedium01", "Canto"},
     {"sniperrifleboltactionmedium01", "Osprey"},
     {"specialrailgun01", "Jupiter"},
+    //stowed guns: DA_WeaponVisuals_HandCannon_01 and the amplified Jupiter (..._SniperRifle_Railgun_01_Ascended_...)
+    {"handcannon01", "Anvil"}, {"specialsniperriflerailgun01", "Jupiter"},
     //short forms, in case a name arrives without its family prefix
     {"basicmeleeweapon", "Pickaxe"}, //the starting tool everyone has (confirmed by the player, not a wiki list)
     {"breachaction01", "Ferro"}, {"leveraction01", "Renegade"}, {"pneumatic01", "Kettle"}, {"singleaction01", "Anvil"},
@@ -232,6 +238,11 @@ const Rule KEY_NAMES[] = {
     {"salvagemountaincompoundutilitykey4", "Stella Montis Assembly Admin Key"},
     {"salvagemountaincompoundutilitykey2", "Stella Montis Medical Storage Key"},
     {"salvagemountaincompoundutilitykey1", "Stella Montis Security Checkpoint Key"},
+    {"salvagefrozentrailobservatorykey01", "Pendola Pass Observatory Key"},
+    {"salvagefrozentrailrailyardkey01", "Pendola Pass Railyard Key"},
+    {"salvagefrozentrailstationkey01", "Pendola Pass Train Station Key"},
+    {"salvagefrozentrailvillagekey", "Pendola Pass Old Town Key"},
+    {"salvagecommunityeventtt1bunkerkey", "Hidden Bunker Key"},
     //quest items
     {"salvagequestcelestejournal", "Celeste's Journal"}, {"salvagequestrecordingtape", "Dusty Film Reel"},
     {"salvagequestseedpacket", "Experimental Seed Sample"}, {"salvagequestfirstwavecamcorder", "First Wave Tape"},
@@ -240,7 +251,7 @@ const Rule KEY_NAMES[] = {
     {"salvagequestmoistureprobe", "Moisture Meter"}, {"salvagequestecmeter", "Nutrient Meter"},
     {"salvagequestrarebooks", "Old World Books"}, {"salvagequestplant", "Possibly Toxic Plant"},
     {"salvagequestoldreport", "Project Heartwood Blueprints"}, {"salvagequestseedvaultkey", "Seed Vault Box Key"},
-    {"salvagequestvideotape", "Stack of Movie Tapes"},
+    {"salvagequestvideotape", "Stack of Movie Tapes"}, {"salvagequestcollectorcircuitry", "Unknown ARC Circuitry"},
     //materials and ARC parts
     {"salvagematintactbaronrubber", "ARC Flex Rubber"}, {"salvagematintactbaroningot", "ARC Performance Steel"},
     {"salvagematintactbaronoil", "ARC Synthetic Resin"}, {"salvagematintactbaroncloth", "ARC Thermo Lining"},
@@ -276,6 +287,29 @@ const Rule KEY_NAMES[] = {
     {"salvageadvancedgunparts", "Advanced Mechanical Components"}, {"salvageexplosivemixture", "Crude Explosives"},
     {"salvagewovencloth", "Durable Cloth"}, {"salvagerefinedexplosives", "Explosive Compound"},
     {"salvageseeds", "Assorted Seeds"}, {"salvageeventitemcandleberries", "Candleberries"},
+    {"salvagetarragonpart", "Bully Fragmenter"}, {"salvagemeerkatpart", "Skulker Targeter"},
+    {"salvagemeerkatpartturret", "Skulker Targeter"}, {"salvagerubberband01", "Rubber Bands"},
+    //Frozen Trail materials, amplification parts, Emperor and Frigate parts, books
+    {"salvagefrozentrailmat1", "Steel Cable"}, {"salvagefrozentrailmat2", "Epoxy Bucket"},
+    {"salvagefrozentrailmat3", "Insulation Roll"}, {"salvagefrozentrailmechanical1", "Cable Stripper"},
+    {"salvagefrozentrailmechanical2", "Hand Drill"}, {"salvagefrozentrailmechanical3", "Laser Level"},
+    {"salvagefrozentrailmechanical4", "Radial Press"}, {"salvagefrozentrailtech1", "Mini Pump"},
+    {"salvagefrozentrailtech2", "Calculator"}, {"salvagefrozentrailtech3", "Differential Microphone"},
+    {"salvagefrozentrailtech4", "Thermal Shaker"}, {"salvageascensionmaterial1", "Propellant Valve Assembly"},
+    {"salvageascensionmaterial2", "Pressure Regulator"}, {"salvageascensionmaterial3", "Fluted Rotor Core"},
+    {"salvageascensionmaterial4", "Pneumatic Actuator"}, {"salvageascensionfragments", "Amplified Fragments"},
+    {"salvagecommonascensionmodule", "Amplification Module MK. I"},
+    {"salvageuncommonascensionmodule", "Amplification Module MK. II"},
+    {"salvagerareascensionmodule", "Amplification Module MK. III"},
+    {"salvageepicascensionmodule", "Amplification Module MK. IV"},
+    {"salvagelegendaryascensionmodule", "Amplification Module MK. V"},
+    {"salvagecollector1", "Emperor Modulator"}, {"salvagecollectorkey01", "Emperor Gateway Conduit"},
+    {"salvagecollectorkeycomponent01", "ARC Plated Coupler"}, {"salvagecollectorkeycomponent02", "ARC Insulated Coupler"},
+    {"salvagecollectorkeycomponent03", "ARC Conductive Coupler"}, {"salvagefrigate1", "Frigate Inductor"},
+    {"salvagebrokentransmitter", "Ruined Emperor Beacon"}, {"transmitter", "Emperor Beacon"},
+    {"salvagearcmemorycard", "ARC Data Module"}, {"salvageexodusbook", "Exodus Technical Handbook"},
+    {"salvagefrigatememorymodule", "Frigate Diagnostic Node"}, {"salvageraiderjournal", "Raider Logbook"},
+    {"salvageoldbook", "Battered Paperback"},
     //trinkets
     {"salvagetrinketboatmodel", "\"Leviathan's Crown\" Ship Model"},
     {"salvagetrinketboatmodelc02", "\"Leviathan's Crown\" Ship Model"},
@@ -292,6 +326,14 @@ const Rule KEY_NAMES[] = {
     {"salvagetrinketrubberduckcow", "Gentle Duck"}, {"salvagetrinketlancemixtape", "Lance's Mixtape (5th edition)"},
     {"salvageposternature01", "Poster of Natural Wonders"}, {"salvagetrinketrubberduckstandard", "Rubber Duck"},
     {"salvagetrinketrubberduckflamingo", "Tropical Duck"}, {"salvagecomfortablepillow01", "Very Comfortable Pillow"},
+    {"salvagerubberduckwinner01", "MRI Duck"}, {"salvagerubberduckwinner02", "Arcade Duck"},
+    {"salvagerubberduckwinner03", "Frosty Duck"}, {"salvagefootballshoes01green", "Colorful Shoes"},
+    {"salvagefootballshoes01red", "Colorful Shoes"}, {"salvagefootballshoes01silver", "Colorful Shoes"},
+    {"salvagedeadflowerbouquet01", "Dead Flowers"}, {"salvagebronzemaskfragment01", "Mask Fragment"},
+    {"salvagemajolicatazza01", "Fancy Plate"},
+    {"salvagecorruptedarcpart01", "Glitched ARC Power Converter"}, {"salvagecorruptedarcpart02", "Glitched ARC Transmitter"},
+    {"salvagecorruptedarcpart03", "Glitched ARC Phased Array"}, {"salvagecorruptedarcpart04", "Glitched ARC Light Ring"},
+    {"salvagecorruptedarcpart05", "Glitched ARC Circuitry"},
     //shields
     {"armorheavybody", "Heavy Shield"}, {"armorlightbody", "Light Shield"}, {"armormediumbody", "Medium Shield"},
     //augments
@@ -309,12 +351,14 @@ const Rule KEY_NAMES[] = {
     {"gadgetinstrumentflute", "Recorder"}, {"deployablebarricade", "Barricade Kit"},
     {"remotetrapfireworkbox", "Fireworks Box"}, {"deployableremoteflaretrap", "Remote Raider Flare"},
     {"emittertrapteslacoil", "Surge Coil"}, {"crashpad", "Crash Mat"},
+    {"tethergun", "Tether Launcher"}, {"metaldetector02", "Mountaineer's Detector"}, {"camera", "Advanced Camera"},
     //healing
     {"adrenalinshot", "Adrenaline Shot"}, {"healinghotsmall", "Bandage"}, {"healinghotimprovised", "Herbal Bandage"},
     {"consumableshieldovertimepack", "Shield Recharger"}, {"healinghotmedium", "Sterilized Bandage"},
     {"armorpack", "Surge Shield Recharger"}, {"healthpack01", "Vita Shot"}, {"healthspray", "Vita Spray"},
+    {"integratedshieldrepair", "Integrated Shield Recharger"},
     //throwables
-    {"throwablevolcanicrock", "Volcanic Rock"},
+    {"throwablevolcanicrock", "Volcanic Rock"}, {"throwabletethergrenade", "Yank Grenade"},
     //weapon mods (the level is part of the name)
     {"weaponmodunderbarrelangledgrip01", "Angled Grip I"}, {"weaponmodunderbarrelangledgrip02", "Angled Grip II"},
     {"weaponmodunderbarrelangledgrip03", "Angled Grip III"}, {"weaponmodunderbarrelhorizontalgrip01", "Horizontal Grip"},
@@ -339,6 +383,7 @@ const Rule KEY_NAMES[] = {
     {"weaponmodstockactivestabilizer01", "Kinetic Converter"}, {"weaponmodstocklightweight01", "Lightweight Stock"},
     {"weaponmodstockpadded01", "Padded Stock"}, {"weaponmodstockstable01", "Stable Stock I"},
     {"weaponmodstockstable02", "Stable Stock II"}, {"weaponmodstockstable03", "Stable Stock III"},
+    {"weaponmodshotgunmuzzlesilencer01", "Shotgun Silencer"}, {"weaponmodtechprojectilesplitter", "Anvil Splitter"},
     //ammo
     {"energyammo", "Energy Clip"},
     //grenades and throwables
@@ -357,9 +402,11 @@ const Rule KEY_NAMES[] = {
     {"deployablejumpmineexplosive", "Explosive Mine"}, {"jumpminestaminadot", "Gas Mine"},
     {"jumpmineimpulse", "Pulse Mine"}, {"timedmineexplosive", "Deadline"},
     //blueprints
+    {"recipeadvancedcamerarecipe", "Advanced Camera Blueprint"},
     {"reciperecipeangledgrip02", "Angled Grip II Blueprint"}, {"reciperecipeangledgrip03", "Angled Grip III Blueprint"},
     {"reciperecipeanvil", "Anvil Blueprint"}, {"recipechargeriflerecipe", "Aphelion Blueprint"},
-    {"reciperecipeassaultrifleburst", "Arpeggio Blueprint"}, {"reciperecipebarricadekit", "Barricade Kit Blueprint"},
+    {"reciperecipeassaultrifleburst", "Arpeggio Blueprint"}, {"recipebanjo", "Banjo Blueprint"},
+    {"recipesnubnose01recipe", "Bantam Blueprint"}, {"reciperecipebarricadekit", "Barricade Kit Blueprint"},
     {"recipeassaultrifleheavyrecipe", "Bettina Blueprint"}, {"reciperecipeblazegrenade", "Blaze Grenade Blueprint"},
     {"recipeblueglowstickrecipe", "Blue Light Stick Blueprint"}, {"reciperecipebobcat", "Bobcat Blueprint"},
     {"reciperecipeburletta", "Burletta Blueprint"}, {"recipecantorecipe", "Canto Blueprint"},
@@ -368,7 +415,8 @@ const Rule KEY_NAMES[] = {
     {"reciperecipecompensator02", "Compensator II Blueprint"}, {"reciperecipecompensator03", "Compensator III Blueprint"},
     {"recipecomplexgunpartsrecipe", "Complex Gun Parts Blueprint"}, {"recipecrashpadrecipe", "Crash Mat Blueprint"},
     {"recipetimedminerecipe", "Deadline Blueprint"}, {"reciperecipedefib", "Defibrillator Blueprint"},
-    {"recipedolabrarecipe", "Dolabra Blueprint"}, {"reciperecipeequlizer", "Equalizer Blueprint"},
+    {"recipedolabrarecipe", "Dolabra Blueprint"}, {"recipecollectorkey", "Emperor Gateway Conduit Blueprint"},
+    {"reciperecipeequlizer", "Equalizer Blueprint"},
     {"reciperecipejumpmine", "Explosive Mine Blueprint"}, {"recipeextendedbarrel02recipe", "Extended Barrel II Blueprint"},
     {"reciperecipeextendedlightmag02", "Extended Light Mag II Blueprint"},
     {"reciperecipeextendedlightmag03", "Extended Light Mag III Blueprint"},
@@ -377,6 +425,7 @@ const Rule KEY_NAMES[] = {
     {"reciperecipeextendedshotgunmag02", "Extended Shotgun Mag II Blueprint"},
     {"reciperecipeextendedshotgunmag03", "Extended Shotgun Mag III Blueprint"},
     {"recipefireworksboxblueprint", "Fireworks Box Blueprint"}, {"recipegasminerecipe", "Gas Mine Blueprint"},
+    {"recipegrapplinghookrecipe", "Grappling Hook Blueprint"},
     {"recipegreenglowstickrecipe", "Green Light Stick Blueprint"},
     {"reciperecipeheavygunparts", "Heavy Gun Parts Blueprint"}, {"reciperecipeantiarclauncher", "Hullcracker Blueprint"},
     {"reciperecipeiltoro", "Il Toro Blueprint"}, {"reciperecipejoltmine", "Jolt Mine Blueprint"},
@@ -397,19 +446,20 @@ const Rule KEY_NAMES[] = {
     {"reciperecipesilencer01", "Silencer I Blueprint"}, {"reciperecipesilencer02", "Silencer II Blueprint"},
     {"recipesmokegrenaderecipe", "Smoke Grenade Blueprint"}, {"reciperecipesnaphook", "Snap Hook Blueprint"},
     {"reciperecipestablestock02", "Stable Stock II Blueprint"}, {"reciperecipestablestock03", "Stable Stock III Blueprint"},
-    {"recipesurgecoilrecipe", "Surge Coil Blueprint"},
+    {"recipebattleriflelight01recipe", "Stiletto Blueprint"}, {"recipesurgecoilrecipe", "Surge Coil Blueprint"},
     {"recipeutilityagumentt3defensiverecipe", "Tactical Mk. 3 (Defensive) Blueprint"},
     {"recipeutilityagumentt3healingrecipe", "Tactical Mk. 3 (Healing) Blueprint"},
     {"recipetacticalaugmentt3revivalrecipe", "Tactical Mk.3 (Revival) Blueprint"},
     {"recipeutilityaugmentt3smokerecipe", "Tactical Mk.3 (Smoke) Blueprint"},
     {"reciperecipetagginggrenade", "Tagging Grenade Blueprint"}, {"reciperecipetempest", "Tempest Blueprint"},
+    {"recipetethergunrecipe", "Tether Launcher Blueprint"},
     {"reciperecipemediumlmg", "Torrente Blueprint"}, {"recipetrailblazerrecipe", "Trailblazer Blueprint"},
     {"reciperecipetriggernade", "Trigger Nade Blueprint"}, {"reciperecipehipowerpistol", "Venator Blueprint"},
     {"reciperecipeverticalgrip02", "Vertical Grip II Blueprint"},
     {"reciperecipeverticalgrip03", "Vertical Grip III Blueprint"}, {"reciperecipevitashot", "Vita Shot Blueprint"},
     {"reciperecipevitaspray", "Vita Spray Blueprint"}, {"reciperecipevulcano", "Vulcano Blueprint"},
     {"recipewhiteflagrecipe", "White Flag Blueprint"}, {"reciperecipewolfpack", "Wolfpack Blueprint"},
-    {"recipeyellowglowstickrecipe", "Yellow Light Stick Blueprint"},
+    {"recipeyellowglowstickrecipe", "Yellow Light Stick Blueprint"}, {"recipetethergrenaderecipe", "Yank Grenade Blueprint"},
 };
 
 } // namespace
