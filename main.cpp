@@ -188,9 +188,13 @@ int main() {
             lastKeyboards = keyboards;
         }
 
-        if (!snap->gameFound) DrawLabelCentered(110, 14, OBF("Waiting for ARC Raiders...").c_str(), 14.0f);
         float below = 20;
-        if (lost) {
+        if (!snap->gameFound) {
+            //A card at top centre in the Text size (never under the old 14 px), the toast goes under it
+            const float ws = std::max(14.0f, config::labelSize), y = 12 + ws / 2;
+            DrawLabelCentered((float)config::SCREEN_W * 0.5f, y, OBF("Waiting for ARC Raiders...").c_str(), ws, COLOR::white, true);
+            below = y + ws / 2 + 10 + config::labelSize / 2;
+        } else if (lost) {
             //The game runs but nothing has been live for a while: say so and why, big, whatever the debug switch says
             char why[160];
             if (snap->valid) std::snprintf(why, sizeof why, "the data stopped updating (%.1f s old)", ageMs / 1000.0);
