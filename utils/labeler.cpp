@@ -125,12 +125,13 @@ std::string gunsOf(uintptr_t pawn) {
 void fillPlayer(Info& in, uintptr_t pawn, double t) {
     if (t - in.labelT >= PLAYER_TTL) {
         in.labelT = t;
-        in.label.clear();
-        uintptr_t ps = ReadMemory<uintptr_t>(pawn + PAWN_PLAYERSTATE);
+        const uintptr_t ps = ReadMemory<uintptr_t>(pawn + PAWN_PLAYERSTATE);
+        std::string name;
+        uint64_t id = 0;
         if (isObj(ps)) {
-            std::string name = names::playerName(ps + PS_NAME);
+            name = names::playerName(ps + PS_NAME);
             uintptr_t acc = ReadMemory<uintptr_t>(ps + PS_ACCOUNT_OBJ);
-            uint64_t id = isValidPtr(acc) ? (uint64_t)ReadMemory<uintptr_t>(acc + 0x18) : 0;
+            id = isValidPtr(acc) ? (uint64_t)ReadMemory<uintptr_t>(acc + 0x18) : 0;
             if (isValidPtr(id)) id = 0; //a pointer, not an account id
             //Another player on screen right now (seen within PLAYER_TTL) with a different PlayerState and the same id means
             //the id is some shared field after a patch. Marking it would hide everyone, so ids are off until the game restarts.
@@ -144,10 +145,15 @@ void fillPlayer(Info& in, uintptr_t pawn, double t) {
                 if (g_idsBad) { std::printf("[!] Two players have the same account id: player marks and nicknames are off until the game restarts\n"); std::fflush(stdout); }
             }
             if (g_idsBad) id = 0;
-            in.ps = ps;
-            in.account = id ? hex64(id) : std::string();
-            if (!name.empty()) in.label = id ? labels::display(labels::Cat::Player, hex64(id), name) : name;
         }
+        //A read that fails keeps what this same PlayerState gave before, so a name or hand mark does not blink off.
+        //Another PlayerState (or none) may be another player at a reused address: it starts empty.
+        if (ps != in.ps) { in.label.clear(); in.account.clear(); }
+        in.ps = ps;
+        if (id) in.account = hex64(id);
+        if (g_idsBad) in.account.clear();
+        if (!name.empty()) in.label = in.account.empty() ? name : labels::display(labels::Cat::Player, in.account, name);
+        if (name.empty() || (!id && !g_idsBad)) in.labelT = t - (PLAYER_TTL - RETRY_TTL); //something failed: try again in 1 s, not 3
     }
     if (g_idsBad) in.account.clear(); //every player at once, not only at its next refresh
     if (t - in.gunsT >= GUNS_TTL) {

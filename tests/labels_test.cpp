@@ -340,6 +340,14 @@ int main() {
 
     put<u64>(pop, 0x11C0, tickAsset);
     put<u64>(ferro, 0x518, stitcherAsset);
+
+    //a player whose name and account then fail to read (re-read after the two sleeps below, more than 3 s together)
+    u64 psK = makePS("\x76\x6e\x6b\x7e\x64\x46", 6, 0x5a5a1234abcd5678ULL);
+    u64 pK = makeObject(0x1400, 0x2000, 8); put<u64>(pK, 0x3E8, psK);
+    RenderEntity eK = ent(Object::PLAYER, 50.0, pK); labeler::fill(eK);
+    CHECK(eK.label == "cooked" && eK.account == "5a5a1234abcd5678", "player read: name and account");
+    put<int>(psK, 0x468, 0); put<u64>(psK, 0x3E0, 0); //the name and the account object now read as nothing
+
     std::this_thread::sleep_for(std::chrono::milliseconds(2200));
     RenderEntity e8 = ent(Object::ARC, 30.0, pop); labeler::fill(e8);
     CHECK(e8.label == "Tick", "ARC at a reused address gets its new name");
@@ -348,6 +356,13 @@ int main() {
 
     std::this_thread::sleep_for(std::chrono::milliseconds(3000));
     CHECK(names::name(late) == "DA_Late_Name", "a name that failed to read is tried again later");
+
+    eK = ent(Object::PLAYER, 50.0, pK); labeler::fill(eK);
+    CHECK(eK.label == "cooked" && eK.account == "5a5a1234abcd5678", "player read fails: the name and account of the same PlayerState are kept");
+    put<u64>(pK, 0x3E8, makePS("\x76\x6e\x6b\x7e", 4, 0)); //another PlayerState: "cook", no account
+    std::this_thread::sleep_for(std::chrono::milliseconds(1100));
+    eK = ent(Object::PLAYER, 50.0, pK); labeler::fill(eK);
+    CHECK(eK.label == "cook" && eK.account.empty(), "a failed player read is tried again after 1 s; another PlayerState does not get the old account");
 
     //--- account ids are sanity-checked (the first player above was last seen more than 3 s ago)
     u64 pA = makeObject(0x1400, 0x2000, 4); put<u64>(pA, 0x3E8, makePS("\x76\x6e\x6b\x7e\x64\x46", 6, 0x793381ba5d093c9fULL));
