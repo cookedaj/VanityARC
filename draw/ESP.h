@@ -245,7 +245,13 @@ inline void DrawEdgeArrows(const View& v, std::vector<EdgeArrow>& edge) {
         DrawArrow(px, py, (float)ux, (float)uy, 15.0f, e.color);
         QueueReserve({px - 14, py - 14, px + 14, py + 14});
         std::snprintf(buf, sizeof buf, "%.0fm", e.dist);
-        QueueLabel(px - (float)ux * 30, py - (float)uy * 30, buf, config::labelSize * 0.9f, 0, e.dist);
+        //Far enough back to clear the arrow's own reserved square (16 = 14 + LabelAt's x pad, 15 = 14 + its y pad), or a
+        //wide or tall label would always be dropped; never closer than the old 30 px
+        const float ls = config::labelSize * 0.9f;
+        const ImVec2 ts = LabelSize(buf, ls);
+        const float ax = std::max(std::abs((float)ux), 1e-3f), ay = std::max(std::abs((float)uy), 1e-3f);
+        const float back = std::max(30.0f, 1.0f + std::min((16.0f + ts.x / 2) / ax, (15.0f + ts.y / 2) / ay));
+        QueueLabel(px - (float)ux * back, py - (float)uy * back, buf, ls, 0, e.dist);
     }
 }
 
