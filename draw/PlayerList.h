@@ -102,8 +102,18 @@ inline void DrawPlayerRows(int maxRows) {
         ImGui::PushID(key.c_str());
         const std::string name = !e->label.empty() ? e->label : (e->account.empty() ? "Unknown" : e->account.substr(0, 8));
         ImGui::SetNextItemAllowOverlap(); //the TEAM button on top of the row takes its own clicks (and hides the row tooltip)
+        //An outline, not a fill (a lit fill would wash out the grey and dim names): white while its inventory is open,
+        //grey under the mouse. Its left side sits before the name; where the window clips it, the other three sides show.
+        ImGui::PushStyleColor(ImGuiCol_Header, IM_COL32_BLACK_TRANS);
+        ImGui::PushStyleColor(ImGuiCol_HeaderHovered, IM_COL32_BLACK_TRANS);
+        ImGui::PushStyleColor(ImGuiCol_HeaderActive, IM_COL32_BLACK_TRANS);
         if (ImGui::Selectable("##row", IsInspected(key), 0, ImVec2(rowW, 20))) ToggleInspect(key);
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Click for the inventory");
+        ImGui::PopStyleColor(3);
+        const bool rowHov = ImGui::IsItemHovered();
+        if (rowHov || IsInspected(key))
+            ImGui::GetWindowDrawList()->AddRect(ImVec2(ImGui::GetWindowPos().x + 2, ImGui::GetItemRectMin().y), ImGui::GetItemRectMax(),
+                                                IsInspected(key) ? ui::WHITE : ui::GREY, 0.0f, 0, 2.0f);
+        if (rowHov) ImGui::SetTooltip("Click for the inventory");
         ImGui::SameLine(6);
         ImGui::PushStyleColor(ImGuiCol_Text, ImColor(col).Value);
         ImGui::TextUnformatted(name.c_str());

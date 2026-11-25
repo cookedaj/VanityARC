@@ -25,20 +25,27 @@ inline const char* LabelEnd(const char* label) {
 }
 
 //The black and white look. Call PushTheme() before drawing a window, PopTheme() after. menuOpacity: the background.
+//Buttons, drop-downs, slider tracks and boxes are mid grey with a light outline, so they stand out from the black;
+//lighter under the mouse and while pressed. White text stays at least 4.5:1 on every one of them.
 inline int g_themeColors = 0;
 inline void PushTheme(float opacity) {
     auto c = [&](ImGuiCol i, ImVec4 v) { ImGui::PushStyleColor(i, v); g_themeColors++; };
     g_themeColors = 0;
-    const ImVec4 black(0, 0, 0, opacity), white(1, 1, 1, 1), grey(0.53f, 0.53f, 0.53f, 1), dark(0.09f, 0.09f, 0.09f, 1), mid(0.22f, 0.22f, 0.22f, 1);
+    const ImVec4 black(0, 0, 0, opacity), white(1, 1, 1, 1), grey(0.53f, 0.53f, 0.53f, 1),
+                 fill(0.28f, 0.28f, 0.28f, 1), hover(0.38f, 0.38f, 0.38f, 1), press(0.45f, 0.45f, 0.45f, 1);
     c(ImGuiCol_WindowBg, black); c(ImGuiCol_ChildBg, ImVec4(0, 0, 0, 0)); c(ImGuiCol_PopupBg, ImVec4(0.04f, 0.04f, 0.04f, 0.98f));
     c(ImGuiCol_Border, ImVec4(1, 1, 1, 0.55f)); c(ImGuiCol_Text, white); c(ImGuiCol_TextDisabled, grey);
     c(ImGuiCol_TitleBg, black); c(ImGuiCol_TitleBgActive, black); c(ImGuiCol_TitleBgCollapsed, black);
-    c(ImGuiCol_FrameBg, dark); c(ImGuiCol_FrameBgHovered, mid); c(ImGuiCol_FrameBgActive, mid);
-    c(ImGuiCol_CheckMark, white); c(ImGuiCol_SliderGrab, white); c(ImGuiCol_SliderGrabActive, ImVec4(0.7f, 0.7f, 0.7f, 1));
-    c(ImGuiCol_Separator, mid); c(ImGuiCol_Header, dark); c(ImGuiCol_HeaderHovered, mid); c(ImGuiCol_HeaderActive, mid);
-    c(ImGuiCol_Button, dark); c(ImGuiCol_ButtonHovered, mid); c(ImGuiCol_ButtonActive, ImVec4(0.4f, 0.4f, 0.4f, 1));
-    c(ImGuiCol_Tab, dark); c(ImGuiCol_TabHovered, mid); c(ImGuiCol_TabSelected, mid); c(ImGuiCol_TabSelectedOverline, white);
-    c(ImGuiCol_ScrollbarBg, ImVec4(0, 0, 0, 0)); c(ImGuiCol_ScrollbarGrab, mid); c(ImGuiCol_TextSelectedBg, mid);
+    c(ImGuiCol_FrameBg, fill); c(ImGuiCol_FrameBgHovered, hover); c(ImGuiCol_FrameBgActive, hover);
+    c(ImGuiCol_CheckMark, white); c(ImGuiCol_SliderGrab, white); c(ImGuiCol_SliderGrabActive, white); //white on any track
+    c(ImGuiCol_Separator, hover); c(ImGuiCol_Header, fill); c(ImGuiCol_HeaderHovered, hover); c(ImGuiCol_HeaderActive, press);
+    c(ImGuiCol_Button, fill); c(ImGuiCol_ButtonHovered, hover); c(ImGuiCol_ButtonActive, press);
+    c(ImGuiCol_Tab, fill); c(ImGuiCol_TabHovered, hover); c(ImGuiCol_TabSelected, hover); c(ImGuiCol_TabSelectedOverline, white);
+    //a grey bar on a visible track, so a page that scrolls looks like one
+    c(ImGuiCol_ScrollbarBg, ImVec4(0.12f, 0.12f, 0.12f, 1)); c(ImGuiCol_ScrollbarGrab, grey);
+    c(ImGuiCol_ScrollbarGrabHovered, ImVec4(0.75f, 0.75f, 0.75f, 1)); c(ImGuiCol_ScrollbarGrabActive, white);
+    c(ImGuiCol_TextSelectedBg, hover);
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f); //the Border colour around every button, drop-down, slider and box
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 0.0f);
@@ -53,7 +60,7 @@ inline void PushTheme(float opacity) {
     ImGui::PushStyleVar(ImGuiStyleVar_GrabMinSize, 16.0f);
 }
 inline void PopTheme() {
-    ImGui::PopStyleVar(12);
+    ImGui::PopStyleVar(13);
     ImGui::PopStyleColor(g_themeColors);
 }
 
@@ -137,15 +144,15 @@ inline bool Choice(const char* label, double* v, std::initializer_list<const cha
     return changed;
 }
 
-//A tab on the left: the chosen one has a white bar
+//A tab on the left: the chosen one is lit grey with a white bar (white text on it: about 9:1)
 inline bool Tab(const char* label, bool selected, float w) {
     ImGui::PushID(label);
     const ImVec2 p = ImGui::GetCursorScreenPos();
     const bool pressed = ImGui::InvisibleButton("##t", ImVec2(w, 32));
     const bool hov = ImGui::IsItemHovered();
     ImDrawList* dl = ImGui::GetWindowDrawList();
-    if (selected) dl->AddRectFilled(p, ImVec2(p.x + w, p.y + 32), IM_COL32(32, 32, 32, 255));
-    else if (hov) dl->AddRectFilled(p, ImVec2(p.x + w, p.y + 32), IM_COL32(18, 18, 18, 255));
+    if (selected) dl->AddRectFilled(p, ImVec2(p.x + w, p.y + 32), IM_COL32(72, 72, 72, 255));
+    else if (hov) dl->AddRectFilled(p, ImVec2(p.x + w, p.y + 32), IM_COL32(44, 44, 44, 255));
     if (selected) dl->AddRectFilled(p, ImVec2(p.x + 3, p.y + 32), WHITE);
     dl->AddText(ImVec2(p.x + 16, p.y + (32 - ImGui::GetFontSize()) / 2), selected ? WHITE : (hov ? LIGHT : GREY), label, LabelEnd(label));
     ImGui::PopID();
