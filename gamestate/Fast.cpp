@@ -50,6 +50,7 @@ double ms(clk::time_point a, clk::time_point b) { return std::chrono::duration<d
 constexpr auto POSE_FROZEN_AFTER = std::chrono::milliseconds(300); //a drawn, animated player's bones change every game tick
 constexpr auto BONE_PERIOD = std::chrono::milliseconds(16);        //a bone list is read at most about 60 times a second; between reads the last one is reused
 constexpr auto CAMERA_HOLD = std::chrono::milliseconds(250);       //a view that cannot be used is replaced by the last good one for this long
+constexpr auto WORLD_CHECK_GAP = std::chrono::milliseconds(30);    //the UWorld chain is read at least this often (every 4th step at 120 updates a second)
 
 uint64_t fnv1a(const uint8_t* p, size_t n) {
     uint64_t h = 1469598103934665603ULL;
@@ -58,9 +59,8 @@ uint64_t fnv1a(const uint8_t* p, size_t n) {
 }
 } // namespace
 
-bool GameState::scan() {
+bool GameState::scan(ptr uworld) {
     const auto t0 = clk::now();
-    ptr uworld = getUworld();
     if (!isValidPtr(uworld)) {
         fault_ = "no game world: menu or loading screen (or the UWORLD offsets are stale)";
         logThrottled("[-] Invalid Uworld (not in a raid yet?)");
@@ -73,8 +73,10 @@ bool GameState::scan() {
     if (!isValidPtr(levelCollection)) { fault_ = "no level yet: loading (or LEVEL_COLLECTIONS is stale)"; logThrottled("[-] No level collection yet"); return false; }
     ptr persistentLevel = ReadMemory<ptr>(levelCollection + off::PERSISTENT_LEVEL);
     if (!isValidPtr(persistentLevel)) { fault_ = "no level yet: loading (or PERSISTENT_LEVEL is stale)"; logThrottled("[-] No persistent level yet"); return false; }
-    ptr actorsPtr = ReadMemory<ptr>(persistentLevel + off::ACTORS_PTR);
-    int count = ReadMemory<int>(persistentLevel + off::ACTORS_PTR + 0x8);
+    struct { ptr data; int num, max; } arr{}; //Level::Actors: the list and its count side by side, so one read (zero if it fails)
+    ReadMemoryBuffer(persistentLevel + off::ACTORS_PTR, &arr, sizeof arr);
+    const ptr actorsPtr = arr.data;
+    const int count = arr.num;
     if (!(isValidPtr(actorsPtr) && count > 0 && count < 250000)) { fault_ = "actor list not readable: loading (or ACTORS_PTR is stale)"; logThrottled("[-] Actor list not readable yet"); return false; }
 
     std::vector<ptr> actors((size_t)count);
@@ -220,9 +222,8 @@ void GameState::updatePose(Tracked& t, const std::vector<uint8_t>& bones, const 
     if (skeleton::placePose(comp, mesh, t.ent.pos, *pose)) t.ent.pose = std::move(pose);
 }
 
-void GameState::updateDynamic() {
-    const size_t n = dyn_.size();
-    if (!n) return;
+void GameState::updateDynamic(FminimalViewInfo& vm) {
+    const size_t n = dyn_.size(); //may be 0: the camera is still read
     //The mesh's own transform as it sits in memory (rotation, position, scale of the character's mesh)
     struct MeshXf { double q[4]; double t[3]; double padT; double s[3]; };
     static_assert(sizeof(MeshXf) == 0x58, "MeshXf must match the game's transform");
@@ -237,7 +238,8 @@ void GameState::updateDynamic() {
     const double skeletonRange = g_skeletonDist.load(std::memory_order_relaxed) * 100.0; //cm
     std::vector<Row> rows(n);
     std::vector<ReadReq> rq;
-    rq.reserve(n * 5);
+    rq.reserve(n * 5 + 1);
+    if (camActor_) queue(rq, camActor_ + off::VIEW_MATRIX, &vm); //the camera's view rides along (a failed read is zeroed: not usable)
     for (size_t i = 0; i < n; i++) {
         const RenderEntity& e = dyn_[i].ent;
         Row& r = rows[i];
@@ -421,18 +423,22 @@ gsRet GameState::step() {
     if (isDebugMode || probeNames) return tick(); //the diagnostic modes want the unfiltered view
 
     const auto t0 = clk::now();
-    //The world is checked on every step (4 small reads): leaving a raid or loading a map is noticed at once
-    const ptr world = getUworld();
-    const bool full = camActor_ == 0 || world != lastWorld_ || !isValidPtr(world) || t0 - lastScan_ >= nextScanGap();
-    if (full) {
-        lastScan_ = t0;
-        if (!scan()) { statics_.clear(); dyn_.clear(); camActor_ = 0; return {.fault = fault_}; }
+    //The world takes 4 reads one after another, so it is checked before every scan and about 30 times a second, not on
+    //every step: leaving a raid or loading a map is still noticed within a few hundredths of a second
+    const bool scanDue = camActor_ == 0 || t0 - lastScan_ >= nextScanGap();
+    if (scanDue || t0 - worldAt_ >= WORLD_CHECK_GAP) {
+        worldAt_ = t0;
+        const ptr world = getUworld();
+        if (scanDue || world != lastWorld_ || !isValidPtr(world)) {
+            lastScan_ = t0;
+            if (!scan(world)) { statics_.clear(); dyn_.clear(); camActor_ = 0; return {.fault = fault_}; }
+        }
     }
-    updateDynamic();
+    FminimalViewInfo vm{}; //no camera: stays zero, which is not a usable view
+    updateDynamic(vm);     //the camera's view is read in the same go as the players
 
     //One bad read (a failed read, the camera being rewritten) must not blank the overlay: the last good view is used
     //for a moment. Only a camera that stays unusable is dropped and looked for again.
-    FminimalViewInfo vm = ReadMemory<FminimalViewInfo>(camActor_ + off::VIEW_MATRIX);
     if (viewUsable(vm)) { goodVm_ = vm; goodVmAt_ = t0; }
     else if (camActor_ && t0 - goodVmAt_ < CAMERA_HOLD) vm = goodVm_;
     else {

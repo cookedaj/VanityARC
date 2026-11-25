@@ -342,7 +342,8 @@ int main() {
 
     //--- the world goes away (loading screen) and comes back
     breakWorld();
-    gsRet a = ref.tick(), b = fast.step(); //right after a scan: leaving the world is noticed at once anyway
+    std::this_thread::sleep_for(std::chrono::milliseconds(40)); //the world is checked about 30 times a second, not on every step
+    gsRet a = ref.tick(), b = fast.step(); //not yet time for a scan: the world check alone notices it
     CHECK(!a.valid && !b.valid && b.entities.empty(), "no world: both paths report nothing");
     CHECK(b.fault != nullptr, "no world: step() says why (shown on screen)");
     fixWorld();
