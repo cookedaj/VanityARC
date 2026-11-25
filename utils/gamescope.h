@@ -27,8 +27,8 @@ struct Info {
 //argv[0] is the program name. Everything after "--" belongs to the game and is ignored.
 Info parseArgs(const std::vector<std::string>& argv);
 
-//The running gamescope with the highest pid, or Info{} (found = false) when there is none
-Info find();
+//The gamescope the game (gamePid) runs in, or Info{} (found = false) when it is not in one
+Info find(pid_t gamePid);
 
 } // namespace gamescope
 

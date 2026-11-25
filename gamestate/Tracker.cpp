@@ -126,7 +126,7 @@ void Tracker::run() {
 
         if (t0 - lastGamescope >= std::chrono::seconds(2)) {
             lastGamescope = t0;
-            gamescope::Info g = gamescope::find();
+            gamescope::Info g = gamescope::find(ProcessId);
             std::lock_guard<std::mutex> lk(gsMu_);
             gs_ = g;
         }
