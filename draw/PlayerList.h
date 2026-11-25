@@ -79,7 +79,7 @@ inline std::vector<ptr> InspectedActors() {
 }
 
 //One row per player: name, distance, health, shield, team, guns. Click a name for the inventory, the TEAM button marks a
-//teammate. interactive = false: only shown (the overlay is click-through then).
+//teammate. Clickable only while the menu is open: DrawPlayerListWindow adds NoInputs otherwise.
 inline void DrawPlayerRows(int maxRows) {
     const auto players = PlayersByDistance();
     if (players.empty()) { ui::Note(g_ui.live ? "No players in view." : "No live data from the game."); return; }
