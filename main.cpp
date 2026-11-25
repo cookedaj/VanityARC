@@ -17,6 +17,7 @@
 #include "draw/Marking.h"
 #include "draw/Menu.h"
 #include "draw/OverlayBackend.h"
+#include "utils/cue.h"
 #include "utils/labels.h"
 #include "utils/itemvalues.h"
 #include "utils/marks.h"
@@ -66,6 +67,7 @@ int main() {
     std::signal(SIGHUP, SignalHandler);
     std::signal(SIGUSR1, MenuSignalHandler);   //before InitOverlay: an early pkill -USR1/-USR2 must not kill the overlay
     std::signal(SIGUSR2, StreamSignalHandler);
+    cue::init(); //the spoken cues' spd-say processes are cleaned up by the kernel when they end
     if (!InitOverlay()) {
         std::cerr << "[-] Failed to init Overlay (GLFW/Wayland)" << std::endl;
         return 1;
@@ -89,6 +91,9 @@ int main() {
     auto lastLive = std::chrono::steady_clock::now(); //the last frame with live data (or with no game running)
     double quitArmedUntil = 0, clearArmedUntil = 0; //F10 and F7 act only on a second press within 2 s
     int lastKeyboards = -1; //what g_KeyboardCount was last frame
+    NearCue nearCue;        //the spoken warning when an enemy comes close
+    //A message at the top of the screen that is also said out loud (when spoken cues are on)
+    auto tell = [](const std::string& text, double seconds = 3.0) { Toast(text, seconds); cue::say(text); };
     while (g_Running && !OverlayShouldClose()) {
         MenuPollToggle();
         //Stream-hide (F8, SIGUSR2 or the menu switch): while on, the overlay draws nothing and takes no mouse, so a screen
@@ -97,6 +102,7 @@ int main() {
         if (g_KeyStream.exchange(false)) {
             config::streamHide = !config::streamHide; //not saved: every launch starts visible
             std::cout << (config::streamHide ? "[+] Stream hide ON: the overlay draws nothing (F8 to show it)" : "[+] Stream hide OFF: the overlay is visible") << std::endl;
+            cue::say(config::streamHide ? "Overlay hidden" : "Overlay shown");
         }
         SetOverlayHidden(config::streamHide);
         if (config::streamHide) {
@@ -158,22 +164,22 @@ int main() {
         if (config::hotkeysEnabled) {
             const double now = ImGui::GetTime();
             if (g_KeyQuit.exchange(false)) {
-                if (now < quitArmedUntil) g_Running = false;
-                else { quitArmedUntil = now + 2.0; Toast("F10 again to quit", 2.0); }
+                if (now < quitArmedUntil) { g_Running = false; cue::say("Overlay closed"); }
+                else { quitArmedUntil = now + 2.0; tell("F10 again to quit", 2.0); }
             }
             if (g_KeyClear.exchange(false)) {
-                if (now < clearArmedUntil) { clearArmedUntil = 0; marks::clear(); marks::save(); Toast("Teammate marks cleared"); }
+                if (now < clearArmedUntil) { clearArmedUntil = 0; marks::clear(); marks::save(); tell("Teammate marks cleared"); }
                 else {
                     const size_t n = marks::all().size();
                     clearArmedUntil = now + 2.0;
-                    Toast("F7 again to clear " + std::to_string(n) + (n == 1 ? " mark" : " marks"), 2.0);
+                    tell("F7 again to clear " + std::to_string(n) + (n == 1 ? " mark" : " marks"), 2.0);
                 }
             }
             if (g_KeyMark.exchange(false)) {
-                if (!live) Toast("No live game data: F6 did nothing");
+                if (!live) tell("No live game data: F6 did nothing");
                 else {
                     const MarkResult r = MarkNearestAtCrosshair(ents, View(vm, MakeProjection()), snap->localPlayerTeam);
-                    Toast(r.text());
+                    tell(r.text());
                     if (r.kind == MarkResult::Marked || r.kind == MarkResult::Unmarked) marks::save();
                 }
             }
@@ -183,10 +189,14 @@ int main() {
         //Insert and the F-keys need a keyboard: say so when the last one goes away (Bluetooth sleep, unplugged) and when one is back
         const int keyboards = g_KeyboardCount;
         if (keyboards != lastKeyboards) {
-            if (keyboards == 0 && lastKeyboards > 0) Toast("Keyboard lost: Insert will not work", 5.0);
-            else if (keyboards > 0 && lastKeyboards == 0) Toast("Keyboard found");
+            if (keyboards == 0 && lastKeyboards > 0) tell("Keyboard lost: Insert will not work", 5.0);
+            else if (keyboards > 0 && lastKeyboards == 0) tell("Keyboard found");
             lastKeyboards = keyboards;
         }
+        //Said out loud when an enemy first comes close. Quiet while stream hide is on (the overlay then gives nothing
+        //away); when cues come back on, whoever is near is said again.
+        if (!config::soundCues || config::streamHide) nearCue = NearCue{};
+        else if (live) cue::say(nearCue.update(ents, vm, snap->localPlayerTeam, ImGui::GetTime()));
 
         if (!snap->gameFound) DrawLabelCentered(110, 14, OBF("Waiting for ARC Raiders...").c_str(), 14.0f);
         float below = 20;

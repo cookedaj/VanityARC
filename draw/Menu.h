@@ -14,6 +14,7 @@
 #include "Overlay.h"
 #include "PlayerList.h"
 #include "UiKit.h"
+#include "../utils/cue.h"
 #include "../utils/hotkey.h"
 #include "../utils/keytext.h"
 #include "../utils/gameview.h"
@@ -244,6 +245,13 @@ inline void PageSettings() {
     Slider("Overlay opacity", &config::overlayOpacity, 0.2f, 1.0f, "%.2f");
     Slider("Menu opacity", &config::menuOpacity, 0.5f, 1.0f, "%.2f");
     Slider("Text size", &config::labelSize, 10.0f, 28.0f, "%.0f px");
+    Section("SPOKEN CUES");
+    if (Switch("Say hotkey results and near enemies out loud", &config::soundCues) && config::soundCues) cue::say("Spoken cues on");
+    if (config::soundCues) {
+        SliderD("Enemy warning range", &config::cueRange, 10, 150, "%.0f m");
+        if (cue::missing) ImGui::TextWrapped("No sound: spd-say was not found. Install speech-dispatcher to hear the cues.");
+    }
+    Note("Says the result of F6, F7, F8 and F10, and warns when an enemy player first comes within range (at most one warning every 2 s). Enemy warnings are quiet while stream hide is on.");
     Section("SPEED");
     SliderD("Update rate", &config::trackerHz, 30, 240, "%.0f Hz");
     Note("Higher follows moving players more closely and uses more CPU.");
