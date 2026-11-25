@@ -336,9 +336,11 @@ inline bool PlayerScreenBox(const View& v, const RenderEntity& ent, float& cx, f
 //The bars on the right of a player box, as config::barStyle says: health (red to green) with the shield next to it;
 //health only; or one bar with the shield stacked on the health. The side shield bar is gone when the shield is used up
 //(or cannot be read). With config::barNumbers, "HP 85" and "SH 40" beside them in the text size, left of the box when the
-//screen's right edge is in the way. Returns the right edge of the bars; text (if given) gets where the numbers went, and
-//is left alone when there are none. gap: how far the box's outline reaches past its edge; the bars' dark edge starts there.
-inline float DrawPlayerBars(float x0, float y0, float w, float h, const RenderEntity& ent, float gap, LabelRect* text = nullptr) {
+//screen's right edge is in the way, and moved down or up off other players' numbers (taken). Returns the right edge of
+//the bars; text (if given) gets where the numbers went, and is left alone when there are none. gap: how far the box's
+//outline reaches past its edge; the bars' dark edge starts there.
+inline float DrawPlayerBars(float x0, float y0, float w, float h, const RenderEntity& ent, float gap, LabelRect* text = nullptr,
+                            const std::vector<LabelRect>* taken = nullptr) {
     const float bw = std::min(5.0f, std::max(2.0f, h * 0.05f));
     auto bar = [&](float bx, float frac, ImU32 col) {
         DrawRectFilled(bx - 1, y0 - 1, bx + bw + 1, y0 + h + 1, IM_COL32(0, 0, 0, 200));
@@ -375,7 +377,14 @@ inline float DrawPlayerBars(float x0, float y0, float w, float h, const RenderEn
         float nx = right + 4 + tw / 2;
         if (nx + tw / 2 + 2 > W) nx = x0 - gap - 4 - tw / 2; //no room on the right: left of the box
         nx = std::clamp(nx, tw / 2 + 2, std::max(tw / 2 + 2, W - tw / 2 - 2));
-        const float mid = std::clamp(y0 + h / 2, half, std::max(half, H - half));
+        auto midAt = [&](int step) { return std::clamp(y0 + h / 2 + step * 2 * half, half, std::max(half, H - half)); };
+        float mid = midAt(0);
+        for (int step : {0, 1, -1, 2, -2}) { //players standing together: as little up or down as keeps the numbers apart
+            const LabelRect r{nx - tw / 2 - 2, midAt(step) - half, nx + tw / 2 + 2, midAt(step) + half};
+            if (taken && std::any_of(taken->begin(), taken->end(), [&](const LabelRect& t) { return RectsOverlap(r, t); })) continue;
+            mid = midAt(step);
+            break;
+        }
         if (shText[0]) {
             DrawLabelCentered(nx, mid - ls / 2 - 1, shText, ls, COLOR::white, config::labelCards);
             DrawLabelCentered(nx, mid + ls / 2 + 1, hpText, ls, COLOR::white, config::labelCards);
@@ -526,6 +535,7 @@ inline void DrawESP(const std::vector<RenderEntity>& entities, FminimalViewInfo 
     const float pad = config::labelCards ? 2.0f : 0.0f; //a card reaches 2 px past its text, top and bottom
     auto onScreen = [&](double x, double y) { return x > -60 && x < W + 60 && y > -60 && y < H + 60; };
     std::vector<EdgeArrow> edge, arcEdge;
+    std::vector<LabelRect> numbers; //where bar numbers went this frame
     char buf[64];
 
     for (const auto& ent : entities) {
@@ -594,13 +604,16 @@ inline void DrawESP(const std::vector<RenderEntity>& entities, FminimalViewInfo 
 
             float right = x0 + w;
             LabelRect nums{x0, y0, x0, y0}; //where the bar numbers went (none: a point inside the box)
-            if (config::showBars) right = DrawPlayerBars(x0, y0, w, h, ent, m, &nums); //health, and the shield next to it
+            if (config::showBars) right = DrawPlayerBars(x0, y0, w, h, ent, m, &nums, &numbers); //health, and the shield next to it
             //Box, bars and numbers: the numbers can stand taller than a far player's box
             const float top = std::min(y0 - m, nums.y0), bottom = std::max(y0 + h + m, nums.y1);
-            //loot, ARC and dead-body labels move off an enemy's box, bars and numbers, or drop; m covers the outline.
-            //A teammate's box does not move them, but their numbers do (text over text cannot be read)
-            if (!mate) QueueReserve({std::min(x0 - m, nums.x0 - m), top, std::max(right, nums.x1) + m, bottom}, true);
-            else if (nums.x1 > nums.x0) QueueReserve(nums, true);
+            //loot, ARC and dead-body labels move off an enemy's box and bars, or drop; m covers the outline
+            if (!mate) QueueReserve({x0 - m, y0 - m, right + m, y0 + h + m}, true);
+            if (nums.x1 > nums.x0) {
+                numbers.push_back(nums);
+                //No label goes over numbers, another player's neither (1 px in: this player's own lines start right at them)
+                QueueReserve({nums.x0, nums.y0 + 1, nums.x1, nums.y1 - 1});
+            }
 
             //name above, distance and guns below, clear of the box and its bar numbers and 2 px apart (cards included). With no room
             //below the box the distance and guns go above the name; the lines are kept on the screen. Players are always
@@ -608,12 +621,17 @@ inline void DrawESP(const std::vector<RenderEntity>& entities, FminimalViewInfo 
             const float nameH = config::showPlayerNames ? ls + 2 * pad + 2 : 0, lineH = ls2 + 2 * pad + 2; //a line and its gap
             const float linesH = config::showPlayerGuns ? 2 * lineH : lineH;
             float nameTop = std::max(2.0f, top + 2 - nameH), lineTop = std::max(nameTop + nameH, bottom), lineStep = lineH;
+            float nameStep = -nameH;
+            if (nums.x1 > nums.x0 && top + 2 - nameH < 2 && bottom + nameH + linesH <= H) {
+                //no room above (the screen's top): the name goes under the box and its numbers, never onto them
+                nameTop = bottom; lineTop = bottom + nameH; nameStep = nameH;
+            }
             if (lineTop + linesH > H) {
                 lineTop = std::max(2.0f, std::min(top + 2 - nameH - linesH, H - linesH - nameH));
                 nameTop = lineTop + linesH;
                 lineStep = -lineH;
             }
-            if (config::showPlayerNames) QueueLabel(bx, nameTop + pad + ls / 2, ent.label, ls, 0, dist, true, -nameH);
+            if (config::showPlayerNames) QueueLabel(bx, nameTop + pad + ls / 2, ent.label, ls, 0, dist, true, nameStep);
             snprintf(buf, sizeof buf, "%.0fm", dist);
             const float below = lineTop + pad + ls2 / 2;
             QueueLabel(bx, below, buf, ls2, 0, dist, true, lineStep);

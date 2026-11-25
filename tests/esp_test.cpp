@@ -283,6 +283,14 @@ int main() {
         });
         CHECK(mid.x0 > 1040 && edge.x1 < config::SCREEN_W - 50 && high.y0 >= 0,
               "bar numbers: right of the bars, left of the box at the screen's right edge, never above the screen");
+        LabelRect first, second;
+        draw([&] {
+            std::vector<LabelRect> taken;
+            DrawPlayerBars(1000, 500, 40, 100, sh[0], 3, &first, &taken);
+            taken.push_back(first);
+            DrawPlayerBars(1010, 505, 40, 100, sh[0], 3, &second, &taken);
+        });
+        CHECK(!RectsOverlap(first, second), "bar numbers of two players standing together do not land on each other");
         config::barStyle = 0; config::barNumbers = false;
         config::boxStyle = 0; config::showSkeleton = true; config::showOffscreen = true;
     }

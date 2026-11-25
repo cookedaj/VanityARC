@@ -630,7 +630,7 @@ void GameState::selfCheckIfAsked(const FminimalViewInfo& vm) {
     if (self_.stage == 1) {
         //After a raid report from a guess: write again only with you in your pawn in a raid (else it repeats all raid)
         if (self_.guessed && !(raid && byController)) { self_.stage = 3; return; }
-        if (!byController && ++self_.looks < 10) return; //not spawned yet: wait up to 10 s for the pawn your PlayerController controls
+        if (!byController && (++self_.looks < 10 || (!meA && self_.looks < 60))) return; //not spawned yet: wait up to 10 s for the pawn your PlayerController controls
         if (meA) { self_.stage = 2; self_.me = meA; self_.rt = rt[1]; return; } //the report comes at the next look, 1 s later
     }
     //final only for a raid with you in your pawn; a menu report, or one before you spawned, is run again
