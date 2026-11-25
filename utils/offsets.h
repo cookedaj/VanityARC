@@ -67,7 +67,10 @@ inline void load(const std::string& dir = "") {
                 num(a.off) && num(a.stride) && num(a.asset) && a.off >= 0 && a.stride >= 8 && a.stride <= 0x200 && a.asset >= 0 && a.asset < a.stride) {
                 std::string c;
                 if (in >> c) a.category = c;
-                if (invArrays.size() < 16) invArrays.push_back(a);
+                auto key = [](int64_t comp) { return comp < 0 ? int64_t(0xCB0) : comp; }; //-1 is the inventory component at pawn+0xCB0
+                bool dup = false;
+                for (const InvArray& b : invArrays) if (key(b.comp) == key(a.comp) && b.off == a.off) dup = true; //the same list twice would count every item twice
+                if (!dup && invArrays.size() < 16) invArrays.push_back(a);
             }
         }
     }
