@@ -27,7 +27,7 @@ namespace config {
     inline bool showItemNames = true;
     inline double nameMaxLootDist = 25 /*<-Dist in m. Loot names further away stay hidden so the screen is not cluttered*/;
     inline float labelSize = 15.0f;        //text size in px
-    inline bool showDebugInfo = false;     //small stats block in the top-left corner (fps, update rate, counts)
+    inline bool showDebugInfo = false;     //"Status card": stats at the top middle of the screen (fps, update rate, counts)
 
     //How things look (Insert menu: spread over the ESP, Players and Settings tabs)
     inline double boxStyle = 0;            //player boxes: 0 corner brackets, 1 full rectangle, 2 sides only
