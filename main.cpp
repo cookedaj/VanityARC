@@ -44,7 +44,7 @@ int main() {
     prctl(PR_SET_NAME, "kwin-helper", 0, 0, 0);
     migrateConfigDir();
     std::signal(SIGINT, SignalHandler);
-    std::signal(SIGTERM, SignalHandler); //pkill / logout: leave cleanly so settings and names are saved
+    std::signal(SIGTERM, SignalHandler); //pkill / logout: leave cleanly so settings are saved
     std::signal(SIGHUP, SignalHandler);
     if (!InitOverlay()) {
         std::cerr << "[-] Failed to init Overlay (GLFW/Wayland)" << std::endl;
@@ -82,7 +82,7 @@ int main() {
             if (g_MenuOpen) {
                 g_MenuOpen = false;
                 if (g_SetInteractive) g_SetInteractive(false);
-                settings::clampAll(); settings::save(); labels::save(); marks::save(); //what a normal menu close does
+                settings::clampAll(); settings::save(); //what a normal menu close does
             }
             g_TextGrab = false;
         }
@@ -159,8 +159,6 @@ int main() {
     tracker.stop();
     settings::clampAll();
     settings::save();
-    labels::save();
-    marks::save();
     g_HotkeyStop = true;
     if (hotkey.joinable()) hotkey.join();
 

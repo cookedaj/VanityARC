@@ -34,9 +34,7 @@ inline void MenuPollToggle() {
     if (g_SetInteractive) g_SetInteractive(g_MenuOpen); //the overlay takes the mouse while the menu is open
     if (!g_MenuOpen) {
         settings::clampAll();
-        settings::save();
-        labels::save();
-        marks::save();
+        settings::save(); //labels.txt is only read; marks are saved the moment they change
     }
 }
 
