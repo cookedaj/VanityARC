@@ -288,14 +288,15 @@ inline void PlayerBoxZ(const RenderEntity& ent, double& top, double& bottom) {
 }
 
 //The two bars on the right of a player box: health (red to green) and, next to it, the shield. The shield bar is gone
-//when the shield is used up (or when the shield cannot be read). Returns the right edge of what it drew.
-inline float DrawPlayerBars(float x0, float y0, float w, float h, const RenderEntity& ent) {
+//when the shield is used up (or when the shield cannot be read). Returns the right edge of what it drew. gap: how far
+//the box's outline reaches past its edge; the bars' dark edge starts there.
+inline float DrawPlayerBars(float x0, float y0, float w, float h, const RenderEntity& ent, float gap) {
     const float bw = std::min(5.0f, std::max(2.0f, h * 0.05f));
     auto bar = [&](float bx, float frac, ImU32 col) {
         DrawRectFilled(bx - 1, y0 - 1, bx + bw + 1, y0 + h + 1, IM_COL32(0, 0, 0, 200));
         DrawRectFilled(bx, y0 + h - h * frac, bx + bw, y0 + h, col);
     };
-    float bx = x0 + w + 4.0f;
+    float bx = x0 + w + gap + 1.0f;
     const float hp = (float)std::min(1.0, std::max(0.0, ent.playerHealth / 100.0)); //never taller than the box
     bar(bx, hp, COLOR::health(hp));
     if (ent.hasShield && ent.shield >= 1.0 && ent.shieldMax > 0) {
@@ -503,6 +504,7 @@ inline void DrawESP(const std::vector<RenderEntity>& entities, FminimalViewInfo 
             v.toCamera(midPos, mx, my, mz);
             const float w = std::max(3.0f, (float)(90.0 * v.focal * v.sx / mz)), x0 = (float)sHead.x - w / 2, y0 = (float)sHead.y;
             const float th = std::min(10.0f, std::max(1.0f, config::boxThickness));
+            const float m = std::max(3.0f, th / 2 + 1); //how far the outline's dark edge reaches past the box (3 px up to th 4)
             const int style = (int)config::boxStyle;
             if (style == 1) DrawBoxOutlined(x0, y0, w, h, color, th);
             else if (style == 2) DrawSidesBox(x0, y0, w, h, color, th);
@@ -524,18 +526,18 @@ inline void DrawESP(const std::vector<RenderEntity>& entities, FminimalViewInfo 
             }
 
             float right = x0 + w;
-            if (config::showBars) right = DrawPlayerBars(x0, y0, w, h, ent); //health, and the shield next to it
-            //loot, ARC and dead-body labels move off an enemy's box and bars, or drop; 3 px covers the thickest outline
-            if (!mate) QueueReserve({x0 - 3, y0 - 3, right + 3, y0 + h + 3}, true);
+            if (config::showBars) right = DrawPlayerBars(x0, y0, w, h, ent, m); //health, and the shield next to it
+            //loot, ARC and dead-body labels move off an enemy's box and bars, or drop; m covers the outline
+            if (!mate) QueueReserve({x0 - m, y0 - m, right + m, y0 + h + m}, true);
 
-            //name above, distance and guns below, 3 px clear of the box and 2 px apart (cards included). With no room
+            //name above, distance and guns below, m px clear of the box and 2 px apart (cards included). With no room
             //below the box the distance and guns go above the name; the lines are kept on the screen. Players are always
             //drawn: when crowded they move a line further out, and only over other labels when nothing is free.
             const float nameH = config::showPlayerNames ? ls + 2 * pad + 2 : 0, lineH = ls2 + 2 * pad + 2; //a line and its gap
             const float linesH = config::showPlayerGuns ? 2 * lineH : lineH;
-            float nameTop = std::max(2.0f, y0 - 1 - nameH), lineTop = std::max(nameTop + nameH, y0 + h + 3), lineStep = lineH;
+            float nameTop = std::max(2.0f, y0 + 2 - m - nameH), lineTop = std::max(nameTop + nameH, y0 + h + m), lineStep = lineH;
             if (lineTop + linesH > H) {
-                lineTop = std::max(2.0f, std::min(y0 - 1 - nameH - linesH, H - linesH - nameH));
+                lineTop = std::max(2.0f, std::min(y0 + 2 - m - nameH - linesH, H - linesH - nameH));
                 nameTop = lineTop + linesH;
                 lineStep = -lineH;
             }
