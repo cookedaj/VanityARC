@@ -105,6 +105,9 @@ int main() {
         r[2].force = true;
         auto forced = ChoosePlaces(r);
         CHECK(forced.size() == 3 && forced[0].alt == -1, "forced labels keep their first place");
+        r[2].alts = {{0, 30, 100, 50}, {200, 0, 300, 20}};
+        auto moved = ChoosePlaces(r);
+        CHECK(moved.size() == 3 && moved[2].index == 2 && moved[2].alt == 1, "a forced label whose first place is taken moves to a free place");
     }
 
     //--- camera roll: Unreal's rotation matrix

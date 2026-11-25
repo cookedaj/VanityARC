@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdio>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "Declutter.h"
@@ -139,7 +140,8 @@ inline LabelRect LabelAt(float x, float y, const ImVec2& ts) {
     return {x - ts.x / 2 - 2, y - ts.y / 2 - 1, x + ts.x / 2 + 2, y + ts.y / 2 + 1};
 }
 
-inline void QueueLabel(float x, float y, const std::string& text, float size, int prio, double dist, bool force = false) {
+//step: when the place is taken, try one and two steps further (in y), as long as that stays on the screen
+inline void QueueLabel(float x, float y, const std::string& text, float size, int prio, double dist, bool force = false, float step = 0) {
     if (text.empty()) return;
     const ImVec2 ts = LabelSize(text.c_str(), size);
     PendingLabel p;
@@ -147,18 +149,27 @@ inline void QueueLabel(float x, float y, const std::string& text, float size, in
     const LabelRect r = LabelAt(x, y, ts);
     p.box.x0 = r.x0; p.box.x1 = r.x1; p.box.y0 = r.y0; p.box.y1 = r.y1;
     p.box.prio = prio; p.box.dist = dist; p.box.force = force;
+    for (int k = 1; k <= 2 && step != 0; k++) {
+        const float cy = y + step * k;
+        if (cy - ts.y / 2 < 0 || cy + ts.y / 2 > (float)config::SCREEN_H) break;
+        p.centers.push_back(ImVec2(x, cy)); p.box.alts.push_back(LabelAt(x, cy, ts));
+    }
     PendingLabels().push_back(std::move(p));
 }
 
-//A label for a round marker at (cx, cy): below it if that is free, else above, to the right, to the left, or lower
+//A label for a round marker at (cx, cy): below it if that is free, else above, to the right, to the left, or lower.
+//At the bottom edge of the screen it goes above first. It stays 3 px clear of the marker, card included.
 inline void QueueMarkerLabel(float cx, float cy, float radius, const std::string& text, float size, int prio, double dist) {
     if (text.empty()) return;
     const ImVec2 ts = LabelSize(text.c_str(), size);
-    const float below = cy + radius + 9;
-    QueueLabel(cx, below, text, size, prio, dist);
+    const float pad = config::labelCards ? 2.0f : 0.0f; //a card reaches 2 px past its text, top and bottom
+    const float gap = radius + 3 + pad + ts.y / 2, step = ts.y + 2 + 2 * pad;
+    float first = cy + gap, second = cy - gap, out = step;
+    if (first + ts.y / 2 + pad > (float)config::SCREEN_H) { std::swap(first, second); out = -step; }
+    QueueLabel(cx, first, text, size, prio, dist);
     PendingLabel& p = PendingLabels().back();
-    const ImVec2 alts[4] = {ImVec2(cx, cy - radius - 9), ImVec2(cx + radius + 8 + ts.x / 2, cy),
-                            ImVec2(cx - radius - 8 - ts.x / 2, cy), ImVec2(cx, below + ts.y + 2)};
+    const ImVec2 alts[4] = {ImVec2(cx, second), ImVec2(cx + radius + 8 + ts.x / 2, cy),
+                            ImVec2(cx - radius - 8 - ts.x / 2, cy), ImVec2(cx, first + out)};
     for (const ImVec2& c : alts) { p.centers.push_back(c); p.box.alts.push_back(LabelAt(c.x, c.y, ts)); }
 }
 
@@ -175,7 +186,9 @@ inline void FlushLabels() {
     std::vector<LabelReq> reqs;
     reqs.reserve(v.size());
     for (const PendingLabel& p : v) reqs.push_back(p.box);
-    for (const LabelPick& pick : ChoosePlaces(reqs)) {
+    const std::vector<LabelPick> picks = ChoosePlaces(reqs);
+    for (auto it = picks.rbegin(); it != picks.rend(); ++it) { //most important last, so it is on top where forced labels overlap
+        const LabelPick& pick = *it;
         const PendingLabel& p = v[pick.index];
         if (p.text.empty()) continue; //a reserved area
         const ImVec2 c = pick.alt < 0 ? ImVec2(p.x, p.y) : p.centers[(size_t)pick.alt];
@@ -293,6 +306,7 @@ inline void DrawESP(const std::vector<RenderEntity>& entities, FminimalViewInfo 
     if (!v.ok) return;
     const float W = (float)config::SCREEN_W, H = (float)config::SCREEN_H;
     const float ls = config::labelSize, ls2 = config::labelSize * 0.9f;
+    const float pad = config::labelCards ? 2.0f : 0.0f; //a card reaches 2 px past its text, top and bottom
     auto onScreen = [&](double x, double y) { return x > -60 && x < W + 60 && y > -60 && y < H + 60; };
     std::vector<EdgeArrow> edge;
     char buf[64];
@@ -326,7 +340,7 @@ inline void DrawESP(const std::vector<RenderEntity>& entities, FminimalViewInfo 
                 DrawCross((float)sp.x, (float)sp.y, (float)rad, COLOR::deadPlayer());
                 snprintf(buf, sizeof buf, "%.0fm", dist);
                 QueueMarkerLabel((float)sp.x, (float)sp.y, (float)rad, buf, ls2, 2, dist);
-                if (config::showPlayerNames) QueueLabel((float)sp.x, (float)(sp.y - rad - 10), ent.label, ls, 1, dist);
+                if (config::showPlayerNames) QueueLabel((float)sp.x, (float)(sp.y - rad - 3 - pad - ls / 2), ent.label, ls, 1, dist);
                 continue;
             }
 
@@ -363,13 +377,22 @@ inline void DrawESP(const std::vector<RenderEntity>& entities, FminimalViewInfo 
 
             if (config::showBars) DrawPlayerBars(x0, y0, w, h, ent); //health, and the shield next to it
 
-            //name above, distance and guns below. Players are always drawn, even over other labels.
-            if (config::showPlayerNames) QueueLabel((float)sHead.x, y0 - 10, ent.label, ls, 0, dist, true);
+            //name above, distance and guns below, 3 px clear of the box and 2 px apart (cards included). With no room
+            //below the box the distance and guns go above the name; the lines are kept on the screen. Players are always
+            //drawn: when crowded they move a line further out, and only over other labels when nothing is free.
+            const float nameH = config::showPlayerNames ? ls + 2 * pad + 2 : 0, lineH = ls2 + 2 * pad + 2; //a line and its gap
+            const float linesH = config::showPlayerGuns ? 2 * lineH : lineH;
+            float nameTop = std::max(2.0f, y0 - 1 - nameH), lineTop = std::max(nameTop + nameH, y0 + h + 3), lineStep = lineH;
+            if (lineTop + linesH > H) {
+                lineTop = std::max(2.0f, std::min(y0 - 1 - nameH - linesH, H - linesH - nameH));
+                nameTop = lineTop + linesH;
+                lineStep = -lineH;
+            }
+            if (config::showPlayerNames) QueueLabel((float)sHead.x, nameTop + pad + ls / 2, ent.label, ls, 0, dist, true, -nameH);
             snprintf(buf, sizeof buf, "%.0fm", dist);
-            float below = y0 + h + 10;
-            QueueLabel((float)sHead.x, below, buf, ls2, 0, dist, true);
-            below += ls2 + 2;
-            if (config::showPlayerGuns) QueueLabel((float)sHead.x, below, ent.sub, ls2, 0, dist, true);
+            const float below = lineTop + pad + ls2 / 2;
+            QueueLabel((float)sHead.x, below, buf, ls2, 0, dist, true, lineStep);
+            if (config::showPlayerGuns) QueueLabel((float)sHead.x, below + lineH, ent.sub, ls2, 0, dist, true, lineStep);
         } else {
             if (!front || !onScreen(sp.x, sp.y)) continue;
             ImU32 color;
