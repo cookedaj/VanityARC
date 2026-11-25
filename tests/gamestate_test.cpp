@@ -339,12 +339,19 @@ int main() {
     fixWorld();
     compare("world back: both are back");
 
-    //--- a camera that is not a camera
+    //--- a camera read that is not a view: the fast path keeps the last good view for a moment, then gives up
     setCamera(cx, cy, cz, 0, 0, 0.0f);
     gsRet badA = ref.tick(), badB = fast.step();
-    CHECK(!badA.valid && !badB.valid, "FOV 0: both paths say there is no view");
+    CHECK(!badA.valid, "FOV 0: the reference path says there is no view");
+    CHECK(badB.valid && !badB.entities.empty() && badB.vm.FOV == 75.0f, "FOV 0 once: step() keeps drawing with the last good view");
+    std::this_thread::sleep_for(std::chrono::milliseconds(300));
+    gsRet badC = fast.step();
+    CHECK(!badC.valid, "a camera that stays unusable: step() says there is no view");
     setCamera(cx, cy, cz, 0, 0, 70.0f);
     compare("camera fixed: both are back");
+    setCamera(cx, cy, cz, 0, 0, 5.0f);
+    compare("FOV 5 (a high-zoom scope): both paths still draw");
+    setCamera(cx, cy, cz, 0, 0, 70.0f);
 
     //--- speed (printed; the check is only that the fast path is clearly faster)
     {

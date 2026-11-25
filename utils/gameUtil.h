@@ -57,6 +57,14 @@ struct FminimalViewInfo {
     }
 };
 
+//A view that can be drawn with: finite numbers and a FOV a camera could have. Wide on purpose (a scope zooms far in, a
+//FOV setting can go far out); the narrower 10..130 is only used to pick the camera in the first place (GameState::scan)
+inline bool viewUsable(const FminimalViewInfo& v) {
+    return v.FOV > 1 && v.FOV < 170 && //NaN fails this too
+           std::isfinite(v.Location.x) && std::isfinite(v.Location.y) && std::isfinite(v.Location.z) &&
+           std::isfinite(v.Rotation.x) && std::isfinite(v.Rotation.y) && std::isfinite(v.Rotation.z);
+}
+
 struct Vector2 {
     double x, y;
 

@@ -49,6 +49,7 @@ double ms(clk::time_point a, clk::time_point b) { return std::chrono::duration<d
 
 constexpr auto POSE_FROZEN_AFTER = std::chrono::milliseconds(300); //a drawn, animated player's bones change every game tick
 constexpr auto BONE_PERIOD = std::chrono::milliseconds(16);        //a bone list is read at most about 60 times a second; between reads the last one is reused
+constexpr auto CAMERA_HOLD = std::chrono::milliseconds(250);       //a view that cannot be used is replaced by the last good one for this long
 
 uint64_t fnv1a(const uint8_t* p, size_t n) {
     uint64_t h = 1469598103934665603ULL;
@@ -64,7 +65,7 @@ bool GameState::scan() {
         logThrottled("[-] Invalid Uworld (not in a raid yet?)");
         return false;
     }
-    if (uworld != lastWorld_) clockVal_ = -1; //a new world has a new clock
+    if (uworld != lastWorld_) { clockVal_ = -1; camActor_ = 0; } //a new world has a new clock and a new camera
     lastWorld_ = uworld;
     //PersistentLevel at UWorld+0x170 is encrypted; the plain pointer is in LevelCollections[0] (see config.h)
     ptr levelCollection = ReadMemory<ptr>(uworld + off::LEVEL_COLLECTIONS);
@@ -73,7 +74,7 @@ bool GameState::scan() {
     if (!isValidPtr(persistentLevel)) { logThrottled("[-] No persistent level yet"); return false; }
     ptr actorsPtr = ReadMemory<ptr>(persistentLevel + off::ACTORS_PTR);
     int count = ReadMemory<int>(persistentLevel + off::ACTORS_PTR + 0x8);
-    if (!(isValidPtr(actorsPtr) && count > 0 && count < 30000)) { logThrottled("[-] Actor list not readable yet"); return false; }
+    if (!(isValidPtr(actorsPtr) && count > 0 && count < 250000)) { logThrottled("[-] Actor list not readable yet"); return false; }
 
     std::vector<ptr> actors((size_t)count);
     ReadMemoryBuffer(actorsPtr, actors.data(), actors.size() * sizeof(ptr));
@@ -128,7 +129,12 @@ bool GameState::scan() {
             statics_.push_back(std::move(t));
         }
     }
-    camActor_ = cam;
+    //The camera is picked only with a FOV in the usual range (far from it: VIEW_MATRIX is not a view). A scan that did
+    //not see one, or saw one zoomed in by a scope, keeps the camera it has; step() then takes any usable view from it.
+    if (cam) {
+        const FminimalViewInfo v = ReadMemory<FminimalViewInfo>(cam + off::VIEW_MATRIX);
+        if (viewUsable(v) && std::abs(v.FOV - 70.0) <= 60.0) camActor_ = cam;
+    }
     for (auto it = shieldSeen_.begin(); it != shieldSeen_.end();) { //forget players that are gone (their address may be reused)
         bool present = false;
         for (const Tracked& t : dyn_) if (t.ent.actor == it->first) { present = true; break; }
@@ -402,9 +408,12 @@ gsRet GameState::step() {
     }
     updateDynamic();
 
-    //Same sanity check as the old path: a FOV far from the usual range means this is not a camera
+    //One bad read (a failed read, the camera being rewritten) must not blank the overlay: the last good view is used
+    //for a moment. Only a camera that stays unusable is dropped and looked for again.
     FminimalViewInfo vm = ReadMemory<FminimalViewInfo>(camActor_ + off::VIEW_MATRIX);
-    if (!std::isfinite(vm.FOV) || std::abs(vm.FOV - 70.0) > 60.0) {
+    if (viewUsable(vm)) { goodVm_ = vm; goodVmAt_ = t0; }
+    else if (camActor_ && t0 - goodVmAt_ < CAMERA_HOLD) vm = goodVm_;
+    else {
         logThrottled("[-] Invalid rawEntities or no viewMatrix");
         camActor_ = 0; //find the camera again at the next step
         return {};

@@ -37,7 +37,7 @@ gsRet GameState::tick() {
     DBG {std::cout << "Uworld: 0x" << std::hex << uworld << std::dec << std::endl;}
 
     RawInfo raw = getRawEnt(uworld);
-    if (raw.rawEnt.empty() || std::abs(raw.VM.FOV - 70.0) > 60.0) {
+    if (raw.rawEnt.empty() || !viewUsable(raw.VM)) {
         logThrottled("[-] Invalid rawEntities or no viewMatrix");
         return{};
     }
@@ -143,7 +143,7 @@ GameState::RawInfo GameState::getRawEnt(ptr uworld) {
     DBG{std::cout << "Actors: 0x" << std::hex << actors << std::dec << std::endl;}
     int actorsCount = ReadMemory<int>(persistentLevel + off::ACTORS_PTR + 0x8);
     DBG{std::cout << "actorsCount: " << actorsCount << std::endl;}
-    if (!(isValidPtr(actors) && actorsCount > 0 && actorsCount < 30000)) {
+    if (!(isValidPtr(actors) && actorsCount > 0 && actorsCount < 250000)) {
         logThrottled("[-] Actor list not readable yet");
         return {};
     }
