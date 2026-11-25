@@ -661,9 +661,9 @@ void flagProbe(ptr pawn, FILE* out) {
 //place in other players' meshes then shows how long ago they were drawn: near 0 means on screen, growing means hidden.
 void renderTimeProbe(ptr localPawn, const std::vector<RenderEntity>& ents, const FminimalViewInfo& vm, FILE* out) {
     static std::unordered_map<uint32_t, double> prev;
-    static std::set<uint32_t> good;
+    static std::unordered_map<uint32_t, int> streak; //looks in a row the number grew by about 2 s; a key leaves when that breaks
     static ptr lastPawn = 0;
-    if (localPawn != lastPawn) { prev.clear(); good.clear(); lastPawn = localPawn; std::fprintf(out, "\n=== RENDER TIME PROBE: looking for numbers in your mesh that follow the game clock ===\n"); }
+    if (localPawn != lastPawn) { prev.clear(); streak.clear(); lastPawn = localPawn; std::fprintf(out, "\n=== RENDER TIME PROBE: looking for numbers in your mesh that follow the game clock ===\n"); }
     const ptr mesh = ReadMemory<ptr>(localPawn + off::MESH);
     if (!isValidPtr(mesh)) return;
     auto valueAt = [](const std::vector<uint8_t>& b, uint32_t key) {
@@ -678,12 +678,16 @@ void renderTimeProbe(ptr localPawn, const std::vector<RenderEntity>& ents, const
             if (!isFloat && (o & 7)) continue;
             const uint32_t key = (uint32_t)(o << 1) | (uint32_t)isFloat;
             const double v = valueAt(mine, key);
-            if (!std::isfinite(v) || v < 1.0 || v > 1e7) continue;
+            if (!std::isfinite(v) || v < 1.0 || v > 1e7) { streak.erase(key); continue; }
             auto it = prev.find(key);
-            if (it != prev.end() && v - it->second > 1.0 && v - it->second < 4.0) good.insert(key); //grew by about the 2 s between calls
+            if (it != prev.end() && v - it->second > 1.0 && v - it->second < 4.0) streak[key]++; //grew by about the 2 s between calls
+            else streak.erase(key);
             prev[key] = v;
         }
-    if (good.empty()) { std::fprintf(out, "  (warming up: needs two looks)\n"); std::fflush(out); return; }
+    std::vector<std::pair<int, uint32_t>> good; //(streak, key), longest streak first: a one-off jump is never listed
+    for (const auto& [key, n] : streak) if (n >= 2) good.push_back({n, key});
+    std::sort(good.begin(), good.end(), [](const auto& a, const auto& b) { return a.first != b.first ? a.first > b.first : a.second < b.second; });
+    if (good.empty()) { std::fprintf(out, "  (warming up: needs three looks)\n"); std::fflush(out); return; }
 
     struct Other { double dist; std::vector<uint8_t> blk; };
     std::vector<std::pair<double, ptr>> near;
@@ -695,8 +699,9 @@ void renderTimeProbe(ptr localPawn, const std::vector<RenderEntity>& ents, const
         if (isValidPtr(m)) others.push_back({near[i].first / 100.0, readBlock(m, 0x1000)});
     }
     int shown = 0;
-    for (uint32_t key : good) {
+    for (const auto& g : good) {
         if (shown++ >= 8) break;
+        const uint32_t key = g.second;
         std::fprintf(out, "  mesh+0x%x %s  you %.2f", key >> 1, (key & 1) ? "float " : "double", valueAt(mine, key));
         for (const Other& ot : others) std::fprintf(out, " | %.0f m: %.2f (%.1f s behind)", ot.dist, valueAt(ot.blk, key), valueAt(mine, key) - valueAt(ot.blk, key));
         std::fprintf(out, "\n");
