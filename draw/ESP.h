@@ -358,17 +358,21 @@ inline std::vector<LabelRect> DrawEdgeArrows(const View& v, std::vector<EdgeArro
         for (const LabelRect& L : {g_listRect, hpCard}) //not under the player list or the HP readout: just above it
             if (L.x1 > L.x0 && px > L.x0 - m && px < L.x1 + m && py > L.y0 - m && py < L.y1 + m) py = L.y0 - m;
         const LabelRect sq{px - half, py - half, px + half, py + half};
-        if (avoid && std::any_of(avoid->begin(), avoid->end(), [&](const LabelRect& r) { return RectsOverlap(sq, r); })) continue;
+        //The ARC kite's pointed tail reaches 1.3 * as back, past sq: a second square, tail px further back, covers it
+        const float tail = e.arc ? 0.5f * as : 0.0f;
+        const LabelRect tsq{sq.x0 - (float)ux * tail, sq.y0 - (float)uy * tail, sq.x1 - (float)ux * tail, sq.y1 - (float)uy * tail};
+        if (avoid && std::any_of(avoid->begin(), avoid->end(), [&](const LabelRect& r) { return RectsOverlap(sq, r) || RectsOverlap(tsq, r); })) continue;
         std::snprintf(buf, sizeof buf, "%.0fm", e.dist);
         //Far enough back to clear the arrow's own reserved square (half + LabelAt's 2 px x pad / 1 px y pad), or a
         //wide or tall label would always be dropped; never closer than two arrow lengths (the old 30 px at k = 1)
         const float ls = config::labelSize * 0.9f;
         const ImVec2 ts = LabelSize(buf, ls);
         const float ax = std::max(std::abs((float)ux), 1e-3f), ay = std::max(std::abs((float)uy), 1e-3f);
-        const float back = std::max(2.0f * as, 1.0f + std::min((half + 2.0f + ts.x / 2) / ax, (half + 1.0f + ts.y / 2) / ay));
+        const float back = std::max(2.0f * as, tail + 1.0f + std::min((half + 2.0f + ts.x / 2) / ax, (half + 1.0f + ts.y / 2) / ay));
         const float lx = px - (float)ux * back, ly = py - (float)uy * back;
         (e.arc ? DrawKiteArrow : DrawArrow)(px, py, (float)ux, (float)uy, as, e.color);
         QueueReserve(sq);
+        if (e.arc) QueueReserve(tsq);
         QueueLabel(lx, ly, buf, ls, e.arc ? 1 : 0, e.dist); //ARC: same rank as its marker labels
         used.push_back(sq);
         used.push_back(LabelAt(lx, ly, ts));
