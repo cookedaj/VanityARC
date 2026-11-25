@@ -287,6 +287,32 @@ inline void PlayerBoxZ(const RenderEntity& ent, double& top, double& bottom) {
     bottom = lo - 3.0;
 }
 
+//A live player's box on screen as DrawESP draws it: its middle cx, its top y0, w wide, h tall. False when it is not on
+//the screen.
+inline bool PlayerScreenBox(const View& v, const RenderEntity& ent, float& cx, float& y0, float& w, float& h) {
+    double boxTop, boxBottom;
+    PlayerBoxZ(ent, boxTop, boxBottom);
+    Vector3 headPos = ent.pos; headPos.z = boxTop;
+    Vector3 feetPos = ent.pos; feetPos.z = boxBottom;
+    Vector2 sHead, sFeet;
+    if (!v.project(headPos, sHead) || !v.project(feetPos, sFeet)) return false;
+    const double midY = (sHead.y + sFeet.y) / 2;
+    if (!(sHead.x > -60 && sHead.x < config::SCREEN_W + 60 && midY > -60 && midY < config::SCREEN_H + 60)) return false;
+    const float rawH = (float)(sFeet.y - sHead.y);
+    if (!std::isfinite(rawH)) return false;
+    h = std::max(6.0f, rawH); //a far player still gets a box, name and distance
+    //About 90 cm wide whatever the pose (only the height follows it), at the depth of the box's middle; head and
+    //feet are both in front, so the middle is too. A stretched picture makes people wider. Never under 3 px, so a
+    //far player's box stays visible.
+    Vector3 midPos = ent.pos; midPos.z = (boxTop + boxBottom) / 2;
+    double mx, my, mz;
+    v.toCamera(midPos, mx, my, mz);
+    w = std::max(3.0f, (float)(90.0 * v.focal * v.sx / mz));
+    cx = (float)sHead.x;
+    y0 = (float)sHead.y;
+    return true;
+}
+
 //The two bars on the right of a player box: health (red to green) and, next to it, the shield. The shield bar is gone
 //when the shield is used up (or when the shield cannot be read). Returns the right edge of what it drew. gap: how far
 //the box's outline reaches past its edge; the bars' dark edge starts there.
@@ -487,26 +513,12 @@ inline void DrawESP(const std::vector<RenderEntity>& entities, FminimalViewInfo 
             //should be rendered from this point on
             ImU32 color = mate ? COLOR::mate() : COLOR::enemy();
             if (config::dimHidden && !ent.isVisible) color = COLOR::withAlpha(color, (int)config::hiddenAlpha); //not drawn by the game right now: behind cover
-            double boxTop, boxBottom;
-            PlayerBoxZ(ent, boxTop, boxBottom);
-            Vector3 headPos = ent.pos; headPos.z = boxTop;
-            Vector3 feetPos = ent.pos; feetPos.z = boxBottom;
-            Vector2 sHead, sFeet;
-            if (!v.project(headPos, sHead) || !v.project(feetPos, sFeet) || !onScreen(sHead.x, (sHead.y + sFeet.y) / 2)) {
+            float bx, y0, w, h; //bx: the box's middle
+            if (!PlayerScreenBox(v, ent, bx, y0, w, h)) {
                 if (!squad && config::showOffscreen) edge.push_back({&ent, dist, mate ? COLOR::mate() : COLOR::enemy()});
                 continue;
             }
-
-            const float rawH = (float)(sFeet.y - sHead.y);
-            if (!std::isfinite(rawH)) continue;
-            const float h = std::max(6.0f, rawH); //a far player still gets a box, name and distance
-            //About 90 cm wide whatever the pose (only the height follows it), at the depth of the box's middle; head and
-            //feet are both in front, so the middle is too. A stretched picture makes people wider. Never under 3 px, so a
-            //far player's box stays visible.
-            Vector3 midPos = ent.pos; midPos.z = (boxTop + boxBottom) / 2;
-            double mx, my, mz;
-            v.toCamera(midPos, mx, my, mz);
-            const float w = std::max(3.0f, (float)(90.0 * v.focal * v.sx / mz)), x0 = (float)sHead.x - w / 2, y0 = (float)sHead.y;
+            const float x0 = bx - w / 2;
             const float th = std::min(10.0f, std::max(1.0f, config::boxThickness));
             const float m = std::max(3.0f, th / 2 + 1); //how far the outline's dark edge reaches past the box (3 px up to th 4)
             const int style = (int)config::boxStyle;
@@ -521,7 +533,7 @@ inline void DrawESP(const std::vector<RenderEntity>& entities, FminimalViewInfo 
             float fx = 0, fy = 0;
             const double toHim = std::atan2(ent.pos.y - vm.Location.y, ent.pos.x - vm.Location.x) * 180.0 / 3.14159265358979;
             if (config::showFacing && FacingOnScreen(ent.yaw, toHim, fx, fy)) {
-                const float mxs = (float)sHead.x, mys = y0 + h / 2;
+                const float mxs = bx, mys = y0 + h / 2;
                 //The head grows with the shaft (1.1 * tip wide vs lineT + 2 with the dark edge), so thick lines still read as an arrow
                 const float lineT = std::max(3.0f, th + 1.0f), len0 = std::clamp(std::min(w, h) * 0.4f, 12.0f, 40.0f);
                 const float tip = std::max({7.0f, len0 * 0.45f, 1.6f * (lineT + 2.0f)}), len = std::max(len0, tip);
@@ -545,11 +557,11 @@ inline void DrawESP(const std::vector<RenderEntity>& entities, FminimalViewInfo 
                 nameTop = lineTop + linesH;
                 lineStep = -lineH;
             }
-            if (config::showPlayerNames) QueueLabel((float)sHead.x, nameTop + pad + ls / 2, ent.label, ls, 0, dist, true, -nameH);
+            if (config::showPlayerNames) QueueLabel(bx, nameTop + pad + ls / 2, ent.label, ls, 0, dist, true, -nameH);
             snprintf(buf, sizeof buf, "%.0fm", dist);
             const float below = lineTop + pad + ls2 / 2;
-            QueueLabel((float)sHead.x, below, buf, ls2, 0, dist, true, lineStep);
-            if (config::showPlayerGuns) QueueLabel((float)sHead.x, below + lineH, ent.sub, ls2, 0, dist, true, lineStep);
+            QueueLabel(bx, below, buf, ls2, 0, dist, true, lineStep);
+            if (config::showPlayerGuns) QueueLabel(bx, below + lineH, ent.sub, ls2, 0, dist, true, lineStep);
         } else {
             if (!front || !onScreen(sp.x, sp.y)) {
                 //a live ARC within 50 m that is off screen or behind you: an arrow at the screen edge
@@ -637,9 +649,26 @@ inline std::string DrawCloseEnemyWarning(const std::vector<RenderEntity>& entiti
     char buf[96];
     if (count == 1) std::snprintf(buf, sizeof buf, "ENEMY %.0f m %s", best, where);
     else std::snprintf(buf, sizeof buf, "%d ENEMIES - NEAREST %.0f m %s", count, best, where);
-    const float size = config::labelSize * 2.0f, cx = (float)v.cx, cy = (float)v.cy + 140.0f;
+    const float size = config::labelSize * 2.0f, cx = (float)v.cx;
+    float cy = (float)v.cy + 140.0f;
     const ImVec2 ts = LabelSize(buf, size);
     const float hx = ts.x / 2 + 10, hy = ts.y / 2 + 6;
+    //Never over the nearest enemy when DrawESP shows him: below his box, bars and labels, above them when there is no
+    //room below (LOW HEALTH follows the card down). When he fills the screen top to bottom the card stays put.
+    float bx, by, bw, bh;
+    if (config::showPlayers && best <= config::maxPlayerDist && PlayerScreenBox(v, *nearest, bx, by, bw, bh)) {
+        const float ls = config::labelSize, ls2 = ls * 0.9f, pad = config::labelCards ? 2.0f : 0.0f;
+        const float m = std::max(3.0f, std::min(10.0f, std::max(1.0f, config::boxThickness)) / 2 + 1); //as in DrawESP
+        const float nameH = ls + 2 * pad + 2, linesH = 2 * (ls2 + 2 * pad + 2); //name above; distance and guns below (or above)
+        float half = bw / 2 + 2 * m + 16; //the health and shield bars on the right
+        for (const std::string& s : {nearest->label, nearest->sub, std::string("999m")}) half = std::max(half, LabelSize(s.c_str(), ls).x / 2 + 4);
+        const LabelRect him{bx - half, by - m - nameH - linesH, bx + half, by + bh + m + linesH};
+        const float gap = 8, H = (float)config::SCREEN_H;
+        if (RectsOverlap(him, {cx - hx - 2, cy - hy - 2, cx + hx + 2, cy + hy + 2})) {
+            if (him.y1 + gap + 2 * hy + 2 <= H) cy = him.y1 + gap + hy + 2;
+            else if (him.y0 - gap - 2 * hy - 2 >= 0) cy = him.y0 - gap - hy - 2;
+        }
+    }
     DrawRectFilled(cx - hx, cy - hy, cx + hx, cy + hy, IM_COL32(0, 0, 0, 220));
     DrawRectOutline(cx - hx, cy - hy, cx + hx, cy + hy, COLOR::enemy(), 3.0f);
     DrawLabelCentered(cx, cy, buf, size, COLOR::white);

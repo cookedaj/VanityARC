@@ -431,6 +431,12 @@ int main() {
             for (int i = n0; i < vb.Size; i++) if (std::abs(vb[i].pos.x - config::SCREEN_W * 0.5f) < 60) lowTop = std::min(lowTop, vb[i].pos.y);
         });
         CHECK(wb > 0 && lowTop < 1e9f && lowTop > wb, "LOW HEALTH goes under the close-enemy card, not on top of it");
+        {   //and the card itself goes under that enemy's box and his distance and gun lines, not over them
+            draw([&] { DrawCloseEnemyWarning(close, cam, 3); });
+            float bx, by, bw, bh;
+            const bool on = PlayerScreenBox(View(cam, MakeProjection()), close[0], bx, by, bw, bh);
+            CHECK(on && g_minY > by + bh + 2 * config::labelSize, "the close-enemy card stays clear of the enemy ahead and his labels");
+        }
         //an enemy to your left and a little behind: his edge arrow lands at the readout's height on the left edge
         const std::vector<RenderEntity> side = {ent(Object::PLAYER, -681, -2000, 0)};
         const LabelRect r = SelfHealthRect();
