@@ -1,4 +1,4 @@
-//Headless run of the real Insert menu: draws every frame, then types into a text box through the key queue.
+//Headless run of the real Insert menu: draws every frame, then types into a slider's number box through the key queue.
 #include "draw/Menu.h"
 #include "imgui_internal.h"
 #include <cstdio>
@@ -58,44 +58,50 @@ int main() {
     CHECK(true, "menu draws the Settings page");
     g_OverlayNote.clear();
 
-    //typing: a text box that is made active, then keys arrive through the same queue the keyboard thread fills
-    char buf[48] = "";
-    bool active = false;
-    auto box = [&] {
-        ImGui::Begin("typebox");
-        if (!active) { ImGui::SetKeyboardFocusHere(); active = true; }
-        ImGui::InputText("##t", buf, sizeof buf);
-        ImGui::End();
-    };
+    //typing: Ctrl+click turns a menu slider into a number box, then keys arrive through the same queue the keyboard thread fills
+    double typed = 50;
+    auto box = [&] { ImGui::Begin("typebox"); ui::SliderD("Typed value", &typed, 0, 500); ImGui::End(); };
+    for (int i = 0; i < 3; i++) frame(box);
+    ImGuiWindow* tw = ImGui::FindWindowByName("typebox");
+    const ImGuiID sliderId = ImGui::GetIDWithSeed("##v", nullptr, ImGui::GetIDWithSeed("Typed value", nullptr, tw->ID));
+    bool onSlider = false;
+    for (float y = tw->Pos.y; y < tw->Pos.y + tw->Size.y && !onSlider; y += 2) {
+        io.AddMousePosEvent(tw->Pos.x + ui::LABEL_W + 40, y); frame(box); frame(box);
+        onSlider = ImGui::GetCurrentContext()->HoveredId == sliderId;
+    }
+    CHECK(onSlider, "the mouse can hover the slider");
+    io.AddKeyEvent(ImGuiMod_Ctrl, true); frame(box); //the test holds Ctrl itself (in the program it comes from the keyboard)
+    io.AddMouseButtonEvent(ImGuiMouseButton_Left, true); frame(box);
+    io.AddMouseButtonEvent(ImGuiMouseButton_Left, false); frame(box);
+    io.AddKeyEvent(ImGuiMod_Ctrl, false);
     int n = 0;
     while (!io.WantTextInput && n++ < 12) frame(box);
     std::printf("frames until active: %d, activeId %u\n", n, ImGui::GetCurrentContext()->ActiveId);
-    CHECK(io.WantTextInput, "an active text box asks for typing");
+    CHECK(io.WantTextInput, "Ctrl+click on a slider opens a number box that asks for typing");
 
     MenuFeedKeys(); //sets the keyboard grab flag
     CHECK(g_TextGrab.load(), "keyboard grab requested while typing");
 
-    auto press = [&](int code, bool shift = false) {
+    auto press = [&](int code) {
         std::lock_guard<std::mutex> lk(g_KeyMutex);
-        if (shift) g_KeyQueue.push_back({KEY_LEFTSHIFT, 1});
         g_KeyQueue.push_back({code, 1});
         g_KeyQueue.push_back({code, 0});
-        if (shift) g_KeyQueue.push_back({KEY_LEFTSHIFT, 0});
     };
-    press(KEY_C, true); press(KEY_O); press(KEY_O); press(KEY_K); press(KEY_E); press(KEY_D); press(KEY_X);
+    press(KEY_1); press(KEY_2); press(KEY_5); //the old number is selected, so typing replaces it
     MenuFeedKeys(); for (int i = 0; i < 30; i++) frame(box); //ImGui hands queued keys out over a few frames
-    std::printf("typed: '%s'\n", buf);
-    CHECK(std::strcmp(buf, "Cookedx") == 0, "typed text arrives in the box (shift gives a capital)");
+    std::printf("typed: %g\n", typed);
+    CHECK(typed == 125, "a typed number arrives in the slider");
 
     press(KEY_BACKSPACE);
     MenuFeedKeys(); for (int i = 0; i < 10; i++) frame(box);
-    CHECK(std::strcmp(buf, "Cooked") == 0, "backspace deletes a character");
+    CHECK(typed == 12, "backspace deletes a digit");
 
     { std::lock_guard<std::mutex> lk(g_KeyMutex); g_KeyQueue.push_back({KEY_LEFTCTRL, 1}); }
     press(KEY_A);
     { std::lock_guard<std::mutex> lk(g_KeyMutex); g_KeyQueue.push_back({KEY_LEFTCTRL, 0}); }
-    MenuFeedKeys(); for (int i = 0; i < 10; i++) frame(box);
-    CHECK(std::strcmp(buf, "Cooked") == 0, "Ctrl+A types no 'a'");
+    press(KEY_7);
+    MenuFeedKeys(); for (int i = 0; i < 20; i++) frame(box);
+    CHECK(typed == 7, "Ctrl+A selects all and types no 'a'"); //an 'a' would leave "a7", which is not a number
 
     { std::lock_guard<std::mutex> lk(g_KeyMutex); g_KeyQueue.push_back({KEY_ENTER, 1}); } //its key-up comes after typing ended, so is never queued
     MenuFeedKeys(); for (int i = 0; i < 10; i++) frame(box);
@@ -103,6 +109,8 @@ int main() {
     CHECK(!io.WantTextInput && !g_TextGrab.load(), "Enter finishes typing and releases the keyboard");
     frame(box);
     CHECK(!ImGui::IsKeyDown(ImGuiKey_Enter), "a key held when typing ends is let go");
+    CHECK(typed == 7, "the typed number is kept");
+    io.AddMousePosEvent(-1000, -1000); frame(box); frame(box);
 
     //typed keys are ignored (and not kept) when no text box is active
     press(KEY_A);
@@ -174,6 +182,32 @@ int main() {
         }
         CHECK(caught, "detector catches two widgets with the same label");
         io.AddMousePosEvent(-1000, -1000); frame(bad); frame(bad); frame(bad);
+    }
+
+    //Game view with "Detect automatically" off: a size that is not in the list shows the big step buttons, and they stop at the limit
+    config::gameViewAuto = false; config::gameRenderW = 8000; config::gameRenderH = 1080; //left off, so the Settings scan below covers the buttons
+    {
+        auto gv = [] {
+            ImGui::SetNextWindowPos(ImVec2(0, 0)); ImGui::SetNextWindowSize(ImVec2(700, 400));
+            ImGui::Begin("gv"); DrawGameViewSettings(); ImGui::End();
+        };
+        for (int i = 0; i < 3; i++) frame(gv);
+        ImGuiWindow* gw = ImGui::FindWindowByName("gv");
+        const ImGuiID plusId = ImGui::GetIDWithSeed("+100", nullptr, ImGui::GetIDWithSeed("Game width", nullptr, gw->ID));
+        bool over = false;
+        for (float y = 0; y < 400 && !over; y += 4)
+            for (float x = 0; x < 700 && !over; x += 8) {
+                io.AddMousePosEvent(x, y); frame(gv); frame(gv);
+                over = G->HoveredId == plusId;
+            }
+        CHECK(over, "the mouse can hover the Game width +100 button");
+        for (int i = 0; i < 2; i++) {
+            io.AddMouseButtonEvent(ImGuiMouseButton_Left, true); frame(gv);
+            io.AddMouseButtonEvent(ImGuiMouseButton_Left, false); frame(gv); frame(gv);
+        }
+        CHECK(config::gameRenderW == 8192, "+100 twice from 8000 stops at 8192");
+        CHECK(config::gameRenderH == 1080, "the width buttons leave the height alone");
+        io.AddMousePosEvent(-1000, -1000); frame(gv); frame(gv);
     }
 
     auto scan = [&](const char* what) {
