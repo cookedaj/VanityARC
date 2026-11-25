@@ -11,6 +11,19 @@ endif()
 
 set(IMGUI_DIR "${CMAKE_SOURCE_DIR}/imgui")
 
+# Compiler warnings for our own code (kwin-helper and the tests). No -Werror yet: the existing warnings come first.
+set(KWINHELPER_WARNINGS -Wall -Wextra -Wformat=2 -Wuninitialized)
+# The vendored imgui sources are not ours: build them without warnings (some tests compile them too)
+set(IMGUI_LIB_SOURCES
+        ${IMGUI_DIR}/imgui.cpp
+        ${IMGUI_DIR}/imgui_draw.cpp
+        ${IMGUI_DIR}/imgui_tables.cpp
+        ${IMGUI_DIR}/imgui_widgets.cpp
+        ${IMGUI_DIR}/backends/imgui_impl_glfw.cpp
+        ${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp
+)
+set_source_files_properties(${IMGUI_LIB_SOURCES} PROPERTIES COMPILE_OPTIONS -w)
+
 # Tests only, without the overlay program, so no Wayland, EGL, GLFW or OpenGL packages are needed:
 #   cmake -B cmake-build-tests -DKWINHELPER_TESTS_ONLY=ON
 option(KWINHELPER_TESTS_ONLY "Build only the headless tests (no graphics packages needed)" OFF)
@@ -34,13 +47,11 @@ add_custom_command(OUTPUT ${GEN_DIR}/wlr-layer-shell-client.c
         DEPENDS ${LAYER_XML})
 
 # --- 1. DEFINE SOURCES FIRST ---
+# The generated Wayland protocol code is not ours: build it without warnings
+set_source_files_properties(${GEN_DIR}/wlr-layer-shell-client.c PROPERTIES COMPILE_OPTIONS -w)
+
 set(IMGUI_SOURCES
-        ${IMGUI_DIR}/imgui.cpp
-        ${IMGUI_DIR}/imgui_draw.cpp
-        ${IMGUI_DIR}/imgui_tables.cpp
-        ${IMGUI_DIR}/imgui_widgets.cpp
-        ${IMGUI_DIR}/backends/imgui_impl_glfw.cpp
-        ${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp
+        ${IMGUI_LIB_SOURCES}
         gamestate/GameState.cpp
         gamestate/Fast.cpp
         gamestate/Tracker.cpp
@@ -94,6 +105,7 @@ target_include_directories(kwin-helper PRIVATE
 )
 
 target_link_libraries(kwin-helper PRIVATE glfw OpenGL::GL PkgConfig::WAYLAND)
+target_compile_options(kwin-helper PRIVATE ${KWINHELPER_WARNINGS})
 if(KWINHELPER_PROBES)
     target_compile_definitions(kwin-helper PRIVATE KWINHELPER_PROBES)
 endif()
@@ -112,6 +124,7 @@ if(KWINHELPER_TESTS OR KWINHELPER_TESTS_ONLY)
         add_executable(${name} tests/${name}.cpp ${ARGN})
         target_include_directories(${name} PRIVATE ${CMAKE_SOURCE_DIR} ${IMGUI_DIR} ${IMGUI_DIR}/backends)
         target_compile_definitions(${name} PRIVATE KWINHELPER_PROBES) #the tests always exercise the probes
+        target_compile_options(${name} PRIVATE ${KWINHELPER_WARNINGS})
         add_test(NAME ${name} COMMAND ${name})
         set_tests_properties(${name} PROPERTIES ENVIRONMENT "HOME=${TEST_HOME}")
     endfunction()
