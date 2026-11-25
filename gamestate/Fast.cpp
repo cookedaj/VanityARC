@@ -216,6 +216,7 @@ void GameState::updateDynamic() {
         ptr vt = 0, root = 0, hc = 0, sc = 0; int team = 0; uint8_t destroyed = 0; Vector3 pos; double hp = 0; uint64_t shRaw = 0, shMaxRaw = 0;
         bool wantPose = false; ptr ctrl = 0, mesh = 0, boneData = 0; uint64_t rtRaw = 0; int boneNum = 0; MeshXf mx{}; std::vector<uint8_t> bones;
         const std::vector<uint8_t>* view = nullptr; bool freshBones = false; //the bone list to use: this step's read, or the cached one
+        double hpMax = 0; int teamAt = -1, hpAt = -1, maxAt = -1; bool teamOk = false, hpOk = false; //which reads worked (a failed one reads as 0)
     };
     const bool shieldOn = live::shieldValue >= 0;
     const bool skeletonOn = g_skeletonOn.load(std::memory_order_relaxed);
@@ -230,7 +231,7 @@ void GameState::updateDynamic() {
         queue(rq, e.actor + off::ROOT_COMPONENT_PTR, &r.root);
         if (e.type == Object::PLAYER) {
             queue(rq, e.actor + off::HEALTH_COMPONENT, &r.hc);
-            queue(rq, e.actor + off::TEAM_ID, &r.team);
+            r.teamAt = (int)rq.size(); queue(rq, e.actor + off::TEAM_ID, &r.team);
             if (shieldOn && live::shieldComponent >= 0) queue(rq, e.actor + (ptr)live::shieldComponent, &r.sc); //the shield lives in another component
             r.wantPose = skeletonOn && e.pos.Dist(lastCamPos_) <= skeletonRange; //only near players are drawn as a skeleton
             queue(rq, e.actor + off::CONTROLLER, &r.ctrl);
@@ -240,6 +241,7 @@ void GameState::updateDynamic() {
         }
     }
     ReadScatter(rq.data(), rq.size());
+    for (Row& r : rows) r.teamOk = r.teamAt >= 0 && rq[(size_t)r.teamAt].ok; //before rq is reused: a failed read is 0, not team 0
 
     rq.clear();
     for (size_t i = 0; i < n; i++) {
@@ -252,7 +254,10 @@ void GameState::updateDynamic() {
             queue(rq, r.mesh + off::BONE_ARRAY, &r.boneData);
             queue(rq, r.mesh + off::BONE_ARRAY + 8, &r.boneNum);
         }
-        if (dyn_[i].ent.type == Object::PLAYER && isValidPtr(r.hc)) queue(rq, r.hc + off::HEALTH_CACHED, &r.hp);
+        if (dyn_[i].ent.type == Object::PLAYER && isValidPtr(r.hc)) {
+            r.hpAt = (int)rq.size(); queue(rq, r.hc + off::HEALTH_CACHED, &r.hp);
+            r.maxAt = (int)rq.size(); queue(rq, r.hc + off::HEALTH_MAX, &r.hpMax);
+        }
         if (dyn_[i].ent.type == Object::PLAYER && shieldOn) {
             const ptr comp = live::shieldComponent >= 0 ? r.sc : r.hc;
             if (isValidPtr(comp)) {
@@ -262,6 +267,9 @@ void GameState::updateDynamic() {
         }
     }
     ReadScatter(rq.data(), rq.size());
+    for (Row& r : rows) //before rq is reused. A failed read is 0 (dead): only a believable pair counts, as in printStatusLine
+        r.hpOk = r.hpAt >= 0 && rq[(size_t)r.hpAt].ok && rq[(size_t)r.maxAt].ok &&
+                 r.hpMax >= 50 && r.hpMax <= 500 && r.hp >= 0 && r.hp <= r.hpMax + 1;
 
     //Third round: the bone list itself, only for players whose mesh and a list of exactly 97 bones were readable. A list
     //read less than BONE_PERIOD ago is reused instead: reading it on every step would cost the game and the CPU for no gain.
@@ -302,12 +310,12 @@ void GameState::updateDynamic() {
         t.root = r.root;
         t.ent.pos = r.pos;
         if (t.ent.type == Object::PLAYER) {
-            t.ent.playerHealth = isValidPtr(r.hc) ? r.hp : 100; //no health component read: treated as alive, as before
+            if (r.hpOk) t.ent.playerHealth = r.hp; //otherwise the last good value: 100 (alive) for a player not read yet
             t.ent.isDead = t.ent.playerHealth < 1;
             t.ent.isLocal = isValidPtr(r.ctrl);
             const float drawn = renderTime(r);
             t.ent.isVisible = !isValidPtr(r.mesh) || gameClock < 0 || (drawn > 0 && gameClock - drawn < 0.25); //no mesh read: unknown, treated as visible
-            t.ent.teamID = r.team & 0xFF; //the byte at TeamId only; the bytes after it belong to other fields
+            if (r.teamOk) t.ent.teamID = r.team & 0xFF; //the byte at TeamId only; the bytes after it belong to other fields. Failed: the last good one (-1 if none)
             t.ent.pose.reset();
             t.ent.poseLive = true;
             if (r.wantPose) {
@@ -352,7 +360,7 @@ gsRet GameState::assemble(const FminimalViewInfo& vm) {
             if (d < best) { best = d; me = &t; }
         }
     }
-    if (me) lastTeamID = me->ent.teamID;
+    if (me && me->ent.teamID >= 0) lastTeamID = me->ent.teamID; //set only by a read that worked (a failed one is not team 0)
     meActor_ = me ? me->ent.actor : 0;
 
     gsRet out;
