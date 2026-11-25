@@ -209,6 +209,28 @@ inline void PageRadar() {
     Slider("Up / down", &config::radarCenterY, R, std::max(R + 1, (float)config::SCREEN_H - R), "%.0f");
 }
 
+//Common game picture sizes for a stretched resolution, in the order of the "Game picture size" list (then "Custom")
+inline constexpr int GAME_SIZES[][2] = {{1024, 768}, {1280, 960}, {1440, 1080}, {1600, 1200}, {1920, 1440},
+                                        {1280, 1024}, {1680, 1050}, {1728, 1080}, {1920, 1080}};
+inline constexpr int GAME_SIZE_CUSTOM = 9;
+
+//One number with big step buttons: "Game width  1440    -100 -10 -1 +1 +10 +100", kept within lo..hi
+inline void StepRow(const char* label, double* v, double lo, double hi) {
+    static const int steps[] = {-100, -10, -1, 1, 10, 100};
+    ImGui::PushID(label);
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8, 10)); //tall buttons, and the text stays level with them
+    ImGui::AlignTextToFramePadding();
+    ImGui::Text("%s  %.0f", label, *v);
+    for (int i = 0; i < 6; i++) {
+        ImGui::SameLine(i == 0 ? ui::LABEL_W : 0.0f);
+        char t[8];
+        std::snprintf(t, sizeof t, "%+d", steps[i]);
+        if (ImGui::Button(t, ImVec2(56, 0))) *v = std::clamp(*v + steps[i], lo, hi);
+    }
+    ImGui::PopStyleVar();
+    ImGui::PopID();
+}
+
 //The game view part of the Settings tab (stretched resolution, gamescope, calibration)
 inline void DrawGameViewSettings() {
     using namespace ui;
@@ -216,11 +238,24 @@ inline void DrawGameViewSettings() {
     Switch("Detect automatically", &config::gameViewAuto);
     Note(g_gameView.how.c_str());
     if (!config::gameViewAuto) {
-        int gw = (int)config::gameRenderW, gh = (int)config::gameRenderH;
-        ImGui::SetNextItemWidth(120);
-        if (ImGui::InputInt("Game width", &gw, 0, 0)) config::gameRenderW = std::min(8192, std::max(320, gw));
-        ImGui::SetNextItemWidth(120);
-        if (ImGui::InputInt("Game height", &gh, 0, 0)) config::gameRenderH = std::min(8192, std::max(240, gh));
+        static bool custom = false; //"Custom" was picked: keep the step buttons even when the size matches a listed one
+        int idx = GAME_SIZE_CUSTOM;
+        if (!custom)
+            for (int i = 0; i < GAME_SIZE_CUSTOM; i++)
+                if (GAME_SIZES[i][0] == (int)config::gameRenderW && GAME_SIZES[i][1] == (int)config::gameRenderH) idx = i;
+        double pick = idx;
+        ImGui::SetNextWindowSizeConstraints(ImVec2(0, 0), ImVec2(FLT_MAX, FLT_MAX)); //the open list shows all ten, no scrolling
+        if (Choice("Game picture size", &pick, {"1024 x 768 (4:3)", "1280 x 960 (4:3)", "1440 x 1080 (4:3)", "1600 x 1200 (4:3)",
+                                                "1920 x 1440 (4:3)", "1280 x 1024 (5:4)", "1680 x 1050 (16:10)", "1728 x 1080 (16:10)",
+                                                "1920 x 1080 (16:9)", "Custom"})) {
+            idx = (int)pick;
+            custom = idx == GAME_SIZE_CUSTOM;
+            if (!custom) { config::gameRenderW = GAME_SIZES[idx][0]; config::gameRenderH = GAME_SIZES[idx][1]; }
+        }
+        if (idx == GAME_SIZE_CUSTOM) {
+            StepRow("Game width", &config::gameRenderW, 320, 8192); //the same limits settings.h keeps
+            StepRow("Game height", &config::gameRenderH, 240, 8192);
+        }
         Switch("Stretch to fill the screen", &config::gameStretch);
     }
     Section("CALIBRATION");
