@@ -110,16 +110,17 @@ void diffScan(FILE* out, const char* title, const std::vector<ptr>& actors, int 
 //----------------------------------------------------------------------------------------------
 // Players
 //----------------------------------------------------------------------------------------------
-//The PlayerState: pawn+0x3E8 in v1029. The pawn holds other objects next to it (controller, class pointers), so a
-//slot counts only when its object is named like a PlayerState: 0x3E8 first, then 0x380..0x470. If none is (object
-//names unreadable, or the class is named differently), a slot whose +0x460 decodes to a player name is taken.
+//The PlayerState: pawn+off::PAWN_PLAYERSTATE (config.h, shared with the overlay). The pawn holds other objects next to
+//it (controller, class pointers), so a slot counts only when its object is named like a PlayerState: that offset first,
+//then 0x380..0x470. If none is (object names unreadable, or the class is named differently), a slot whose +PS_NAME
+//decodes to a player name is taken.
 ptr playerStateOf(ptr pawn, int* offOut = nullptr) {
     auto accept = [](ptr p, bool byClass) {
-        return byClass ? nm(p).find("PlayerState") != std::string::npos : isObject(p) && !names::playerName(p + 0x460).empty();
+        return byClass ? nm(p).find("PlayerState") != std::string::npos : isObject(p) && !names::playerName(p + off::PS_NAME).empty();
     };
     for (bool byClass : {true, false}) {
-        ptr ps = ReadMemory<ptr>(pawn + 0x3E8);
-        if (accept(ps, byClass)) { if (offOut) *offOut = 0x3E8; return ps; }
+        ptr ps = ReadMemory<ptr>(pawn + off::PAWN_PLAYERSTATE);
+        if (accept(ps, byClass)) { if (offOut) *offOut = off::PAWN_PLAYERSTATE; return ps; }
         for (int off = 0x380; off < 0x470; off += 8) {
             ptr p = ReadMemory<ptr>(pawn + off);
             if (accept(p, byClass)) { if (offOut) *offOut = off; return p; }
@@ -128,37 +129,38 @@ ptr playerStateOf(ptr pawn, int* offOut = nullptr) {
     return 0;
 }
 
-//The player name FString in the PlayerState: +0x460 in v1029. If that reads nothing, the first FString in
+//The player name FString in the PlayerState: +off::PS_NAME. If that reads nothing, the first FString in
 //+0x400..+0x500 that decodes to plain text.
 int nameOffOf(ptr ps) {
-    if (!names::playerName(ps + 0x460).empty()) return 0x460;
-    for (int off = 0x400; off < 0x500; off += 8) {
-        const std::string n = names::playerName(ps + off);
-        if (!n.empty() && n.find('?') == std::string::npos) return off;
+    if (!names::playerName(ps + off::PS_NAME).empty()) return off::PS_NAME;
+    for (int o = 0x400; o < 0x500; o += 8) {
+        const std::string n = names::playerName(ps + o);
+        if (!n.empty() && n.find('?') == std::string::npos) return o;
     }
-    return 0x460;
+    return off::PS_NAME;
 }
 
-//The account id is held through PlayerState+0x3E0 -> object, id qword at object+0x18
+//The account id is held through PlayerState+off::PS_ACCOUNT_OBJ -> object, id qword at object+0x18
 ptr accountId(ptr ps) {
-    ptr obj = ReadMemory<ptr>(ps + 0x3E0);
+    ptr obj = ReadMemory<ptr>(ps + off::PS_ACCOUNT_OBJ);
     return isValidPtr(obj) ? ReadMemory<ptr>(obj + 0x18) : 0;
 }
 
 void probePlayers(FILE* out, const std::vector<std::pair<double, const RenderEntity*>>& players, ptr localPawn) {
-    std::fprintf(out, "PLAYERS (PS = PlayerState @pawn+0x3E8, name = PS+0x460 decoded, account id = PS+0x3E0 -> +0x18)\n");
+    std::fprintf(out, "PLAYERS (PS = PlayerState @pawn+0x%X, name = PS+0x%X decoded, account id = PS+0x%X -> +0x18, team = pawn+0x%X)\n",
+                 off::PAWN_PLAYERSTATE, off::PS_NAME, off::PS_ACCOUNT_OBJ, (unsigned)off::TEAM_ID);
     int shown = 0;
     for (const auto& pl : players) {
         ptr pawn = pl.second->actor;
-        int off = 0;
-        ptr ps = playerStateOf(pawn, &off);
+        int psOff = 0;
+        ptr ps = playerStateOf(pawn, &psOff);
         std::fprintf(out, "  %6.1f m%s", pl.first, pawn == localPawn ? " (you)" : "      ");
         if (!ps) { std::fprintf(out, "  no PlayerState\n"); continue; }
         const int nameOff = nameOffOf(ps);
         std::string n = names::playerName(ps + nameOff);
-        std::fprintf(out, "  PS @pawn+0x%x%s  name '%s' (PS+0x%x%s)  id %016lx  pawn: %s  team %d\n", off,
-                     off != 0x3E8 ? " MOVED: set PAWN_PLAYERSTATE" : "", n.c_str(), nameOff, nameOff != 0x460 ? " MOVED: set PS_NAME" : "",
-                     (unsigned long)accountId(ps), nm(pawn).c_str(), ReadMemory<int>(pawn + 0x802) & 0xFF);
+        std::fprintf(out, "  PS @pawn+0x%x%s  name '%s' (PS+0x%x%s)  id %016lx  pawn: %s  team %d\n", psOff,
+                     psOff != off::PAWN_PLAYERSTATE ? " MOVED: set PAWN_PLAYERSTATE" : "", n.c_str(), nameOff, nameOff != off::PS_NAME ? " MOVED: set PS_NAME" : "",
+                     (unsigned long)accountId(ps), nm(pawn).c_str(), ReadMemory<int>(pawn + off::TEAM_ID) & 0xFF);
         if (++shown >= 16) break;
     }
 }
@@ -193,7 +195,7 @@ void printItemArray(FILE* out, const char* label, ptr inv, int off) {
 }
 
 void probeGuns(FILE* out, const std::vector<std::pair<double, const RenderEntity*>>& players, ptr localPawn) {
-    constexpr int INV = 0xCB0, SLOT0 = 0x3B0, SLOT1 = 0x3F0, CUR = 0x530, CUR2 = 0x550;
+    constexpr int INV = off::PAWN_INVENTORY, SLOT0 = off::INV_STOWED[0], SLOT1 = off::INV_STOWED[1], CUR = off::INV_HELD, CUR2 = 0x550;
     std::fprintf(out, "GUNS (inventory @pawn+0x%x; stowed slots +0x%x / +0x%x; held-item arrays +0x%x / +0x%x)\n", INV, SLOT0, SLOT1, CUR, CUR2);
     int shown = 0;
     for (const auto& pl : players) {
@@ -293,7 +295,7 @@ void runNameProbe(const std::vector<RenderEntity>& ents, const std::vector<Rende
         double d = e.pos.Dist(vm.Location) / 100.0;
         switch (e.type) {
             case Object::ARC: {
-                ArcType& t = arc[ReadMemory<ptr>(e.actor + 0x11C0)]; //EnemyTypeDataAsset
+                ArcType& t = arc[ReadMemory<ptr>(e.actor + off::ARC_TYPE_ASSET)]; //EnemyTypeDataAsset
                 t.count++;
                 if (d < t.nearest) { t.nearest = d; t.sample = e.actor; }
                 break;
@@ -313,7 +315,7 @@ void runNameProbe(const std::vector<RenderEntity>& ents, const std::vector<Rende
 
     probePlayers(out, players, me ? me->actor : 0);
 
-    std::fprintf(out, "ARC TYPES (EnemyTypeDataAsset @actor+0x11C0; sample = nearest actor of that type)\n");
+    std::fprintf(out, "ARC TYPES (EnemyTypeDataAsset @actor+0x%X; sample = nearest actor of that type)\n", off::ARC_TYPE_ASSET);
     for (auto& kv : arc) {
         std::fprintf(out, "  count %3d  nearest %6.1f m  asset %s  sample actor %s  AITemplate %s\n", kv.second.count, kv.second.nearest,
                      tag(kv.first).c_str(), nm(kv.second.sample).c_str(), tag(ReadMemory<ptr>(kv.second.sample + 0x11B0)).c_str());
@@ -715,7 +717,7 @@ void inventoryProbeOne(ptr pawn, const char* who, FILE* out) {
     std::fprintf(out, "\n=== INVENTORY PROBE: %s (pawn 0x%lx %s) ===\n", who, (unsigned long)pawn, nm(pawn).c_str());
     int found = 0;
     std::vector<Comp> comps = componentsOf(pawn);
-    comps.insert(comps.begin(), {0xCB0, ReadMemory<ptr>(pawn + 0xCB0)}); //the inventory component first
+    comps.insert(comps.begin(), {off::PAWN_INVENTORY, ReadMemory<ptr>(pawn + off::PAWN_INVENTORY)}); //the inventory component first
     std::set<ptr> listed; //componentsOf finds the inventory component again (and a component may sit at two pawn offsets)
     for (const Comp& c : comps) {
         if (!isObject(c.obj) || !listed.insert(c.obj).second) continue;
@@ -751,7 +753,7 @@ void inventoryProbeOne(ptr pawn, const char* who, FILE* out) {
                 std::fprintf(out, " [%u] %s", i, name.empty() ? "?" : name.c_str());
             }
             std::fprintf(out, "\n");
-            if (c.pawnOff == 0xCB0) std::fprintf(out, "      offsets.txt:  inv_array 0x%zx 0x%x 0x%x item\n", o, bestStride, bestAsset);
+            if (c.pawnOff == off::PAWN_INVENTORY) std::fprintf(out, "      offsets.txt:  inv_array 0x%zx 0x%x 0x%x item\n", o, bestStride, bestAsset);
             else std::fprintf(out, "      offsets.txt:  inv_array_in 0x%x 0x%zx 0x%x 0x%x item\n", c.pawnOff, o, bestStride, bestAsset);
             if (++found >= 24) { std::fprintf(out, "  (more lists omitted)\n"); std::fflush(out); return; }
         }
@@ -774,7 +776,7 @@ void teamProbeOne(ptr pawn, const char* who, FILE* out) {
         return n.empty() ? std::string("?") : n;
     };
     std::fprintf(out, "  %-14s team %3d | +3f8 %-28s +400 %-28s +878 %s\n", who, team, nameAt(0x3F8).c_str(), nameAt(0x400).c_str(), nameAt(0x878).c_str());
-    const ptr state = ReadMemory<ptr>(pawn + 0x3E8);
+    const ptr state = ReadMemory<ptr>(pawn + off::PAWN_PLAYERSTATE);
     if (!isValidPtr(state)) return;
     auto b = readBlock(state + 0x2C0, 0x400);
     std::string hits;

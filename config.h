@@ -153,6 +153,17 @@ namespace off {
     inline constexpr uintptr_t HEALTH_COMPONENT = 0xD98; //(v1029)
     inline constexpr uintptr_t HEALTH_MAX = 0x380;       //MaxHealth (double)
     inline constexpr uintptr_t HEALTH_CACHED = 0x708;    //CachedHealth (double)
+
+    //Names, guns and ARC types (v1029; not in the public dumps, found with the name probe, see probeNames above).
+    //The overlay (utils/labeler.cpp) and the probe report (gamestate/Probe.cpp) both read these: fix them here only.
+    inline constexpr int PAWN_PLAYERSTATE = 0x3E8;        //pawn -> PlayerState
+    inline constexpr int PS_NAME = 0x460;                 //PlayerState: player name FString
+    inline constexpr int PS_ACCOUNT_OBJ = 0x3E0;          //PlayerState -> object, 8-byte account id at +0x18
+    inline constexpr int PAWN_INVENTORY = 0xCB0;          //pawn -> inventory component
+    inline constexpr int INV_STOWED[2] = {0x3B0, 0x3F0};  //inventory: stowed weapon slots, +0x18 = DA_WeaponVisuals_<gun>
+    inline constexpr int INV_HELD = 0x530;                //inventory: TArray of 0x20-byte records: +0x0 weapon actor, +0x10 DA_Item_<gun>
+    inline constexpr int PICKUP_ITEM_ASSET = 0x518;       //BP_PickupBase_C -> DA_Item_<thing>
+    inline constexpr int ARC_TYPE_ASSET = 0x11C0;         //ARC actor -> EnemyTypeDataAsset
 }
 
 // !!! ARC / SEARCH / PICKUP / PLAYER are STALE for v1029 (CAMMANAGER is current).

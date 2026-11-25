@@ -15,15 +15,9 @@
 namespace labeler {
 namespace {
 
-//v1029 offsets (these are not in the public dumps; found with the probe, see Probe.cpp)
-constexpr int PAWN_PLAYERSTATE = 0x3E8;
-constexpr int PS_NAME = 0x460;          //FString
-constexpr int PS_ACCOUNT_OBJ = 0x3E0;   //-> object, 8-byte account id at +0x18
-constexpr int PAWN_INVENTORY = 0xCB0;
-constexpr int INV_STOWED[2] = {0x3B0, 0x3F0}; //+0x18 = DA_WeaponVisuals_<gun>
-constexpr int INV_HELD = 0x530;               //TArray of 0x20-byte records: +0x0 weapon actor, +0x10 DA_Item_<gun>
-constexpr int PICKUP_ITEM_ASSET = 0x518;      //BP_PickupBase_C -> DA_Item_<thing>
-constexpr int ARC_TYPE_ASSET = 0x11C0;        //EnemyTypeDataAsset
+//The offsets live in config.h (off::), shared with the probe report so both always read the same fields
+using off::PAWN_PLAYERSTATE, off::PS_NAME, off::PS_ACCOUNT_OBJ, off::PAWN_INVENTORY, off::INV_STOWED, off::INV_HELD,
+      off::PICKUP_ITEM_ASSET, off::ARC_TYPE_ASSET;
 
 constexpr double CLASS_TTL = 5.0, PLAYER_TTL = 3.0, GUNS_TTL = 1.5, RETRY_TTL = 1.0, ASSET_RECHECK = 2.0, FORGET_AFTER = 20.0;
 constexpr double PICKUP_RETRY_MAX = 30.0; //a ground item whose asset cannot be read is tried after 1 s, 2 s, 4 s ... then every 30 s
