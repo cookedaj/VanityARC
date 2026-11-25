@@ -12,14 +12,16 @@
 #include "../utils/marks.h"
 
 struct MarkResult {
-    enum Kind { Marked, Unmarked, NoneNearby, Ambiguous, NoId } kind = NoneNearby;
+    enum Kind { Marked, Unmarked, NoneNearby, Ambiguous, NoId, NotMarkable } kind = NoneNearby;
     std::string name;
+    bool down = false; //NotMarkable: the player is down (else: already in your squad)
     std::string text() const {
         switch (kind) {
             case Marked: return "Teammate marked: " + name;
             case Unmarked: return "Teammate mark removed: " + name;
             case Ambiguous: return "Two players near the crosshair: aim at one";
             case NoId: return "No account id for that player yet";
+            case NotMarkable: return down ? "That player is down" : "That player is already in your squad";
             default: return "No player near the crosshair";
         }
     }
@@ -32,8 +34,7 @@ inline MarkResult MarkNearestAtCrosshair(const std::vector<RenderEntity>& ents, 
     const RenderEntity* best = nullptr;
     double d1 = 1e18, d2 = 1e18;
     for (const RenderEntity& e : ents) {
-        if (e.type != Object::PLAYER || e.isDead) continue;
-        if (localTeam >= 0 && e.teamID == localTeam) continue; //your squad is not marked by hand
+        if (e.type != Object::PLAYER) continue; //down players and your squad still count, so aiming at one never marks someone else
         Vector3 mid = e.pos; //the middle of the body, not the feet
         Vector2 s;
         if (!v.project(mid, s)) continue;
@@ -43,6 +44,7 @@ inline MarkResult MarkNearestAtCrosshair(const std::vector<RenderEntity>& ents, 
     }
     if (!best || d1 > maxPx) return r;
     if (d2 < std::max(d1 * 1.6, d1 + 40.0) && d2 <= maxPx * 1.5) { r.kind = MarkResult::Ambiguous; return r; }
+    if (best->isDead || (localTeam >= 0 && best->teamID == localTeam)) { r.kind = MarkResult::NotMarkable; r.down = best->isDead; return r; } //your squad is not marked by hand
     r.name = !best->label.empty() ? best->label : best->account;
     if (best->account.empty()) { r.kind = MarkResult::NoId; return r; }
     marks::toggle(best->account);
