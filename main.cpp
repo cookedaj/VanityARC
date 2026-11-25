@@ -188,6 +188,14 @@ int main() {
             lastKeyboards = keyboards;
         }
 
+        //Drawn in this order, each over the one before: radar, then markers, then the messages at the top
+        if (config::enableRadar) {
+            DrawRadar(ents, vm, snap->localPlayerTeam);
+            //An empty radar must not read as "nobody near" when there is simply no data
+            if (!live) { const ImVec2 rc = RadarCenter(); DrawLabelCentered(rc.x, rc.y, snap->gameFound ? "NO DATA" : "NO GAME", config::labelSize, COLOR::white, true); }
+        }
+        if (live && config::espEnabled) DrawESP(ents, vm, snap->localPlayerTeam);
+
         if (!snap->gameFound) DrawLabelCentered(110, 14, OBF("Waiting for ARC Raiders...").c_str(), 14.0f);
         float below = 20;
         if (lost) {
@@ -214,13 +222,6 @@ int main() {
             below = DrawStatusCard(l1, l2);
         }
         DrawToast(below);
-
-        if (live && config::espEnabled) DrawESP(ents, vm, snap->localPlayerTeam);
-        if (config::enableRadar) {
-            DrawRadar(ents, vm, snap->localPlayerTeam);
-            //An empty radar must not read as "nobody near" when there is simply no data
-            if (!live) { const ImVec2 rc = RadarCenter(); DrawLabelCentered(rc.x, rc.y, snap->gameFound ? "NO DATA" : "NO GAME", config::labelSize, COLOR::white, true); }
-        }
 
         RenderEnd(DrawUi);
     }
