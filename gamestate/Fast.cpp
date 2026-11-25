@@ -66,7 +66,7 @@ bool GameState::scan() {
         logThrottled("[-] Invalid Uworld (not in a raid yet?)");
         return false;
     }
-    if (uworld != lastWorld_) { clockVal_ = -1; camActor_ = 0; } //a new world has a new clock and a new camera
+    if (uworld != lastWorld_) camActor_ = 0; //a new world has a new camera
     lastWorld_ = uworld;
     //PersistentLevel at UWorld+0x170 is encrypted; the plain pointer is in LevelCollections[0] (see config.h)
     ptr levelCollection = ReadMemory<ptr>(uworld + off::LEVEL_COLLECTIONS);
@@ -145,6 +145,11 @@ bool GameState::scan() {
         bool present = false;
         for (const Tracked& t : dyn_) if (t.ent.actor == it->first) { present = true; break; }
         it = present ? std::next(it) : poseSeen_.erase(it);
+    }
+    for (auto it = drawnSeen_.begin(); it != drawnSeen_.end();) { //and the draw times
+        bool present = false;
+        for (const Tracked& t : dyn_) if (t.ent.actor == it->first) { present = true; break; }
+        it = present ? std::next(it) : drawnSeen_.erase(it);
     }
     timing_.lastScanMs = ms(t0, clk::now());
     timing_.statics = statics_.size();
@@ -298,16 +303,11 @@ void GameState::updateDynamic() {
     }
     if (!rq.empty()) ReadScatter(rq.data(), rq.size());
 
-    //When did the game last draw each player? The numbers are the game's clock; the newest one seen (yours, or a player
-    //in view) says what the clock reads now, and anyone clearly behind it is not being drawn.
+    //When did the game last draw each player? The number is the game's clock at his last draw, written on every frame the
+    //game draws him: one that has not changed for a moment means he is not drawn right now. Each player is judged by his
+    //own number only, so one bad read cannot dim anyone else, and nothing carries over from one raid to the next.
     auto renderTime = [](const Row& r) { float f[2]; std::memcpy(f, &r.rtRaw, 8); return std::isfinite(f[1]) ? f[1] : -1.0f; }; //LastRenderTimeOnScreen
-    float newest = -1;
-    for (const Row& r : rows) newest = std::max(newest, renderTime(r));
-    //Each newer render time re-anchors the estimate (the game's clock advances every frame, so this happens constantly).
-    //During a real stall nothing is drawn, so a stale estimate there has no visible effect.
     const auto clockNow = clk::now();
-    if (newest > clockVal_) { clockVal_ = newest; clockAt_ = clockNow; }
-    const double gameClock = clockVal_ >= 0 ? clockVal_ + std::chrono::duration<double>(clockNow - clockAt_).count() : -1;
 
     for (size_t i = 0; i < n; i++) {
         Tracked& t = dyn_[i];
@@ -320,8 +320,13 @@ void GameState::updateDynamic() {
             if (r.hpOk) t.ent.playerHealth = r.hp; //otherwise the last good value: 100 (alive) for a player not read yet
             t.ent.isDead = t.ent.playerHealth < 1;
             t.ent.isLocal = isValidPtr(r.ctrl);
-            const float drawn = renderTime(r);
-            t.ent.isVisible = !isValidPtr(r.mesh) || gameClock < 0 || (drawn > 0 && gameClock - drawn < 0.25); //no mesh read: unknown, treated as visible
+            t.ent.isVisible = true; //no mesh read: unknown, treated as visible
+            if (isValidPtr(r.mesh)) {
+                const float drawn = renderTime(r);
+                DrawnState& ds = drawnSeen_.try_emplace(t.ent.actor, DrawnState{drawn, clockNow}).first->second; //first read: unknown, visible for now
+                if (drawn != ds.rt) { ds.rt = drawn; ds.changed = clockNow; }
+                t.ent.isVisible = clockNow - ds.changed < std::chrono::milliseconds(250);
+            }
             if (r.teamOk) t.ent.teamID = r.team & 0xFF; //the byte at TeamId only; the bytes after it belong to other fields. Failed: the last good one (-1 if none)
             t.ent.pose.reset();
             t.ent.poseLive = true;

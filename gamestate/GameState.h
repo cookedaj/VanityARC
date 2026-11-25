@@ -94,10 +94,11 @@ private:
         std::chrono::steady_clock::time_point bonesAt{};
     };
     std::unordered_map<ptr, PoseState> poseSeen_;
+    //Per player: his LastRenderTimeOnScreen as last read, and when it last changed (the game rewrites it every frame it draws him)
+    struct DrawnState { float rt = 0; std::chrono::steady_clock::time_point changed{}; };
+    std::unordered_map<ptr, DrawnState> drawnSeen_;
     //What a standing / crouched, idle / moving player looks like, learned from players the game IS animating (you
     //included). Frozen players are drawn with the one that matches their stance and speed. Index: crouch * 2 + moving.
-    float clockVal_ = -1;                              //the game's clock as the newest render time showed it, and when
-    std::chrono::steady_clock::time_point clockAt_{};
     skeleton::Pose tmpl_[4];
     bool haveTmpl_[4] = {false, false, false, false};
     std::chrono::steady_clock::time_point lastScan_{};
