@@ -583,6 +583,13 @@ void GameState::selfCheckIfAsked(const FminimalViewInfo& vm) {
     const ptr lc = ReadMemory<ptr>(link[3] + off::LEVEL_COLLECTIONS), level = ReadMemory<ptr>(lc + off::PERSISTENT_LEVEL);
     const ptr arr = ReadMemory<ptr>(level + off::ACTORS_PTR);
     const int count = ReadMemory<int>(level + off::ACTORS_PTR + 8);
+    //A menu or lobby has far fewer actors than a raid: after a report there (stage 3), wait for the raid and run again
+    constexpr int RAID_ACTORS = 1000;
+    if (self_.stage == 3) {
+        if (count < RAID_ACTORS) return;
+        self_.stage = 1;
+        self_.looks = 0;
+    }
     std::vector<ptr> actors(isValidPtr(arr) && count > 0 && count < 250000 ? (size_t)count : 0);
     if (!actors.empty()) ReadMemoryBuffer(arr, actors.data(), actors.size() * sizeof(ptr));
     std::erase_if(actors, [](ptr a) { return !isValidPtr(a); });
@@ -622,12 +629,14 @@ void GameState::selfCheckIfAsked(const FminimalViewInfo& vm) {
         if (!byController && ++self_.looks < 10) return; //not spawned yet: wait up to 10 s for the pawn your PlayerController controls
         if (meA) { self_.stage = 2; self_.me = meA; self_.rt = rt[1]; return; } //the report comes at the next look, 1 s later
     }
-    self_.stage = 0; //once per run
+    const bool raid = count >= RAID_ACTORS;
+    self_.stage = raid ? 0 : 3; //once per run in a raid; a menu or lobby report is followed by one in the raid
 
     constexpr int FAIL = 0, PASS = 1, SKIP = 2;
     static const char* const word[3] = {"FAIL", "PASS", "SKIP"};
     int total[3] = {0, 0, 0};
     std::string rep = "\n=== SELF-CHECK: the game numbers in config.h, checked live (read only) ===\n";
+    if (!raid) rep += say("NOT A RAID: only %d actors (menu, lobby or hideout). Don't put these numbers in config.h: it runs again in a raid.\n", count);
     //need: what this check needs (else SKIP, saying skipWhy); ok: the number looks right
     auto line = [&](bool need, bool ok, const std::string& name, const std::string& why, const char* skipWhy) {
         const int st = !need ? SKIP : ok ? PASS : FAIL;

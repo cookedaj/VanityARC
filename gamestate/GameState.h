@@ -141,7 +141,7 @@ private:
     //A kind is kept until the world changes; NONE is asked again after a while (next).
     struct Learned { Object kind = Object::NONE; int votes = 0; bool decided = false; std::chrono::steady_clock::time_point next{}; };
     std::unordered_map<ptr, Learned> learned_;
-    //KWINHELPER_SELFCHECK (Fast.cpp). stage: 0 off or done, 1 looking for you, 2 first look taken (the report comes 1 s later)
+    //KWINHELPER_SELFCHECK (Fast.cpp). stage: 0 off or done, 1 looking for you, 2 first look taken (the report comes 1 s later), 3 reported outside a raid, waiting for one
     struct SelfCheck { int stage = 0; int looks = 0; ptr me = 0; float rt = 0; std::chrono::steady_clock::time_point at{}; std::chrono::steady_clock::time_point chainAt{}; };
     SelfCheck self_;
 

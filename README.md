@@ -147,7 +147,7 @@ After a game update, this tells you which game numbers (offsets) still work, one
 KWINHELPER_SELFCHECK=1 bash start.sh
 ```
 
-Start a raid and wait a few seconds after you spawn. The console then prints one report (once each time the game is started), also saved to `~/.config/kwin-helper/selfcheck.txt`. Every line starts with:
+Start a raid and wait a few seconds after you spawn. The console then prints one report (once each time the game is started; if it ran in a menu or lobby, under 1000 actors, it says NOT A RAID and runs again by itself once you are in a raid), also saved to `~/.config/kwin-helper/selfcheck.txt`. Every line starts with:
 
 - **PASS**: the number looks right.
 - **FAIL**: the number is wrong for this game version; the line says what was read. Fix the first FAIL first: the ones after it often follow from it.

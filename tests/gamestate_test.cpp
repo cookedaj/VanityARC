@@ -507,6 +507,24 @@ int main() {
         CHECK(has("PASS  CONTROLLER") && has("FAIL  PLAYER vtable") && has("0x14d777000"), "self-check: you are found without the PLAYER vtable, and your real vtable is named");
         CHECK(has("PASS  POS_PTR") && has("PASS  HEALTH_MAX") && has("PASS  HEALTH_CACHED") && has("PASS  MESH") && has("PASS  BONE_ARRAY") &&
               has("PASS  RENDER_TIME") && has("PASS  IS_DESTROYED"), "self-check: your position, health, mesh, bones, draw time and the ARC destroyed flag pass");
+        CHECK(has("NOT A RAID"), "self-check: a small level (menu, lobby) is marked as not a raid");
+        //then the raid: a second report by itself, once the level has a raid's number of actors
+        const std::vector<u64> smallLevel = actorList;
+        while (actorList.size() < 1200) actorList.push_back(0);
+        publishActors();
+        put<u64>(me + off::CONTROLLER, g_chain1);
+        for (int i = 0; i < 2; i++) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1100));
+            put<float>(meMesh + off::RENDER_TIME + 4, 102.0f + i);
+            sc.step();
+        }
+        std::ifstream f2(home + "/.config/kwin-helper/selfcheck.txt");
+        const std::string raidRep((std::istreambuf_iterator<char>(f2)), std::istreambuf_iterator<char>());
+        CHECK(raidRep.find("PASS  ACTORS_PTR") != std::string::npos && raidRep.find("NOT A RAID") == std::string::npos,
+              "self-check: entering a raid writes a new report without a restart");
+        actorList = smallLevel;
+        publishActors();
+        put<u64>(me + off::CONTROLLER, 0);
         if (keepHome.empty()) unsetenv("HOME"); else setenv("HOME", keepHome.c_str(), 1);
     }
 
