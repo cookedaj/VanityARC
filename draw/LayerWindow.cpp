@@ -137,6 +137,7 @@ struct LayerWindow::Impl {
             s->w = (int)w;
             s->h = (int)h;
             if (s->ew) wl_egl_window_resize(s->ew, s->w * s->scale, s->h * s->scale, 0, 0);
+            if (s->interactive && s->surf) s->setRegion(true); //the menu's click area follows the new size
         }
         s->configured = true;
     }
