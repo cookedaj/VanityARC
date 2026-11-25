@@ -185,9 +185,12 @@ int main() {
         std::vector<RenderEntity> feet = {player(300, 0, "mmmm")};
         feet[0].pos.z = 85; //crosshair on the feet: the middle is about 290 px above it
         CHECK(MarkNearestAtCrosshair(feet, v4, 7).kind == MarkResult::Marked && marks::isMarked("mmmm"), "aiming at the feet of a near player marks him");
-        std::vector<RenderEntity> outOfRange = {player(2000, 40, "nnnn"), player(60000, 0, "oooo")}; //600 m: past the players range
+        std::vector<RenderEntity> outOfRange = {player(2000, 40, "nnnn"), player(60000, -2600, "oooo")}; //600 m: past the players range; ~45 px vs ~21 px
         CHECK(MarkNearestAtCrosshair(outOfRange, v4, 7).kind == MarkResult::Marked && marks::isMarked("nnnn") && !marks::isMarked("oooo"),
               "a player past the players range is ignored (and does not make it ambiguous)");
+        std::vector<RenderEntity> aimFar = {player(2000, 40, "pppp"), player(60000, 0, "qqqq")}; //crosshair on the 600 m player
+        CHECK(MarkNearestAtCrosshair(aimFar, v4, 7).kind == MarkResult::NoneNearby && !marks::isMarked("pppp") && !marks::isMarked("qqqq"),
+              "aiming at a player past the players range never marks the nearer player beside him");
         marks::clear();
     }
 

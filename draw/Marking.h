@@ -33,10 +33,9 @@ inline MarkResult MarkNearestAtCrosshair(const std::vector<RenderEntity>& ents, 
     MarkResult r;
     if (!v.ok) return r;
     const RenderEntity* best = nullptr;
-    double d1 = 1e18, d2 = 1e18;
+    double d1 = 1e18, d2 = 1e18, dOut = 1e18; //dOut: the nearest player past the Players range
     for (const RenderEntity& e : ents) {
         if (e.type != Object::PLAYER) continue; //down players and your squad still count, so aiming at one never marks someone else
-        if (e.pos.Dist(v.loc) / 100.0 > config::maxPlayerDist) continue; //only players the ESP can show
         //The figure on screen: head (90 cm up) to feet (90 cm down); just the middle when one end is behind the camera
         Vector3 top = e.pos, bot = e.pos;
         top.z += 90; bot.z -= 90;
@@ -48,10 +47,11 @@ inline MarkResult MarkNearestAtCrosshair(const std::vector<RenderEntity>& ents, 
         const double ex = b.x - a.x, ey = b.y - a.y, len2 = ex * ex + ey * ey;
         const double t = len2 > 0 ? std::clamp(((v.cx - a.x) * ex + (v.cy - a.y) * ey) / len2, 0.0, 1.0) : 0.0;
         const double d = std::hypot(a.x + ex * t - v.cx, a.y + ey * t - v.cy);
+        if (e.pos.Dist(v.loc) / 100.0 > config::maxPlayerDist) { dOut = std::min(dOut, d); continue; } //only players the ESP can show are marked
         if (d < d1) { d2 = d1; d1 = d; best = &e; }
         else if (d < d2) d2 = d;
     }
-    if (!best || d1 > maxPx) return r;
+    if (!best || d1 > maxPx || dOut < d1) return r; //aiming at a player past the range never marks someone else
     if (d2 < std::max(d1 * 1.6, d1 + 40.0) && d2 <= maxPx * 1.5) { r.kind = MarkResult::Ambiguous; return r; }
     if (best->isDead || (localTeam >= 0 && best->teamID == localTeam)) { r.kind = MarkResult::NotMarkable; r.down = best->isDead; return r; } //your squad is not marked by hand
     r.name = !best->label.empty() ? best->label : best->account;
