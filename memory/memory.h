@@ -36,10 +36,15 @@ std::string ReadString(pid_t pid, long address, size_t maxLength = 128);
 
 pid_t FindGamePID();
 
+//Reads where the game's .exe is loaded (from /proc/<pid>/maps and its PE header) into ImageBase / ImageEnd.
+//False when it cannot be found: the usual base and range are used then.
+bool FindGameImage(pid_t pid);
+
 // Global variables
 //Atomic: the tracker thread finds / loses the game, the draw thread reads the camera every frame
 extern std::atomic<pid_t> ProcessId;
-extern long BaseAddress;
+//The game image is [ImageBase, ImageEnd). Set by FindGameImage on the tracker thread; read only there.
+extern uintptr_t ImageBase, ImageEnd;
 
 
 #endif //MEMORY_H

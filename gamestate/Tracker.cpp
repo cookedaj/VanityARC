@@ -116,8 +116,9 @@ void Tracker::run() {
             ProcessId = FindGamePID();
             if (ProcessId != 0) {
                 announced = false;
-                gs = GameState(); //new process: nothing from the old one is valid any more
-                names::clearCache();
+                if (!FindGameImage(ProcessId)) std::cout << "[-] The game's .exe was not found in its memory map: using the usual address" << std::endl;
+                gs = GameState(ImageBase); //new process: nothing from the old one is valid any more
+                names::setBase(ImageBase); //also empties the name cache
                 labeler::reset();
                 lastData = t0;
             } else if (!announced) {

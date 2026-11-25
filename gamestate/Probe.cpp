@@ -20,9 +20,7 @@
 
 namespace {
 
-constexpr ptr IMAGE_BASE = 0x140000000ULL;
-
-bool isModulePtr(ptr p) { return p >= IMAGE_BASE && p < 0x154000000ULL; }
+bool isModulePtr(ptr p) { return p >= ImageBase && p < ImageEnd; }
 
 //A UObject starts with a vtable pointer into the game image
 bool isObject(ptr o) { return isValidPtr(o) && isModulePtr(ReadMemory<ptr>(o)); }

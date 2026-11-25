@@ -5,6 +5,7 @@
 #include <cerrno>
 #include <cstring>
 #include <signal.h>
+#include <strings.h>
 #include <vector>
 
 #include "utils/obfstr.h"
@@ -13,7 +14,9 @@
 // Global variables, needed for easy read without a class
 
 std::atomic<pid_t> ProcessId{0};
-long BaseAddress = 0;
+//The usual base of a 64-bit .exe and the range used before the image was read from the process
+constexpr uintptr_t DEFAULT_IMAGE_BASE = 0x140000000ULL, DEFAULT_IMAGE_END = 0x154000000ULL;
+uintptr_t ImageBase = DEFAULT_IMAGE_BASE, ImageEnd = DEFAULT_IMAGE_END;
 
 #define debug false
 
@@ -240,4 +243,33 @@ pid_t FindGamePID() {
     }
 
     return 0; //not running (yet); the caller decides whether to say so and retry
+}
+
+bool FindGameImage(pid_t pid) {
+    ImageBase = DEFAULT_IMAGE_BASE;
+    ImageEnd = DEFAULT_IMAGE_END;
+    bool found = false;
+    std::ifstream maps("/proc/" + std::to_string(pid) + "/maps");
+    for (std::string line; std::getline(maps, line);) {
+        //"start-end perms offset dev inode path": the first page of a mapped .exe is its PE header
+        if (line.size() < 4 || strncasecmp(line.c_str() + line.size() - 4, ".exe", 4) != 0) continue;
+        const uintptr_t base = (uintptr_t)std::strtoull(line.c_str(), nullptr, 16);
+        unsigned char h[0x1000];
+        ReadMemoryBuffer(pid, (long)base, h, sizeof h);
+        uint32_t pe = 0, sig = 0, size = 0;
+        uint16_t magic = 0;
+        std::memcpy(&pe, h + 0x3C, 4); //e_lfanew
+        if (h[0] != 'M' || h[1] != 'Z' || pe > sizeof h - 0x54) continue;
+        std::memcpy(&sig, h + pe, 4);
+        std::memcpy(&magic, h + pe + 0x18, 2);  //OptionalHeader.Magic: 0x20B = 64-bit
+        std::memcpy(&size, h + pe + 0x50, 4);   //OptionalHeader.SizeOfImage
+        if (sig != 0x4550 || magic != 0x20B || size == 0) continue;
+        //The first .exe image, unless one sits at the usual base (that one is the game: anything else is a copy)
+        if (found && base != DEFAULT_IMAGE_BASE) continue;
+        ImageBase = base;
+        ImageEnd = base + size;
+        found = true;
+        if (base == DEFAULT_IMAGE_BASE) break;
+    }
+    return found;
 }
