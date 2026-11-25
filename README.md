@@ -157,7 +157,7 @@ It checks the UWorld chain (`UWORLD_RVA` and its 3 offsets), `LEVEL_COLLECTIONS`
 
 ## Shield and inventory: probes
 
-The shield bar and the inventory window need numbers the public dumps do not have. They are found once with a probe and saved in `~/.config/kwin-helper/offsets.txt`. One raid is enough.
+The shield bar and the inventory window need numbers the public dumps do not have. Both are **built in** (`utils/offsets.h`, probed on game build `0x6AF5C6FC`): the shield bar, and in the inventory window what a player has in their hands besides their guns. Other players' backpacks are not sent to your game. You only need the probes again after a game update, or to try something new; lines in `~/.config/kwin-helper/offsets.txt` override the built-in values.
 
 The release build has no probe code in it. Build a probe version in its own folder (it is never used for normal play):
 
@@ -178,4 +178,4 @@ The same probe build also takes `bones` (stick figures), `mesh`, `flags`, `rende
 3. **Inventory:** every 8 seconds `=== INVENTORY PROBE ===` lists your item lists and those of the two nearest players, each with a ready `offsets.txt:  inv_array ...` line. Stand near another player for a moment.
 4. Copy the console lines (or just the shield candidates that moved with health, and the inventory lists that name real items) and send them over, or put the ready lines into `offsets.txt` yourself, then go back to the release build (no probe variable).
 
-Both probes only read memory. Until the numbers are in `offsets.txt` the shield bar is not drawn and the inventory window shows the guns only.
+Both probes only read memory.

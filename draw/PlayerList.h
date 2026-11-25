@@ -207,7 +207,7 @@ inline void DrawInspectWindows() {
                 ImGui::TextUnformatted(b);
                 std::snprintf(b, sizeof b, "Health %.0f", e->playerHealth);
                 std::string line = b;
-                if (e->hasShield) { std::snprintf(b, sizeof b, "   Shield %.0f / %.0f", e->shield, e->shieldMax); line += b; }
+                if (e->hasShield && e->shieldMax > 0) { std::snprintf(b, sizeof b, "   Shield %.0f / %.0f", e->shield, e->shieldMax); line += b; }
                 ImGui::TextUnformatted(line.c_str());
                 const std::vector<ItemRow>* rows = nullptr;
                 if (g_ui.inv) { auto it = g_ui.inv->find(e->actor); if (it != g_ui.inv->end()) rows = &it->second; }
@@ -256,8 +256,8 @@ inline void DrawInspectWindows() {
                 } else if (!rows) {
                     ui::Note("Reading inventory..."); //the tracker has not read this player yet
                 } else {
-                    ui::Note("Nothing readable. Either the game does not send this player's backpack to you, or the inventory "
-                             "offsets are out of date after a game update (run the inventory probe again).");
+                    ui::Note("Nothing else to show: only what the game sends about this player can be read (their guns are "
+                             "listed above).");
                 }
             }
         }

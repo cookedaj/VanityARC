@@ -627,7 +627,7 @@ int main() {
         bool fits = true;
         for (u64 p : people) { const RenderEntity* e = findIn(sm, p); fits = fits && e && e->hasShield && e->shieldMax >= e->shield; }
         CHECK(fits, "no maximum offset: no player's full bar is shorter than his shield");
-        live::reset(); //the rest runs with the shield off, as before
+        live::reset(); live::shieldValue = -1; //the rest runs with the shield off, as before
     }
 
     //--- speed (printed; the check is only that the fast path is clearly faster)

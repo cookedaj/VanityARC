@@ -18,7 +18,9 @@ int main() {
     std::filesystem::remove_all(dir);
 
     live::load(dir); //no file
-    CHECK(live::shieldValue == -1 && live::invArrays.empty(), "no file: nothing is known, the features stay off");
+    CHECK(live::shieldComponent == -1 && live::shieldValue == 0x1D0 && live::shieldMax == 0x1D8 && !live::shieldIsFloat &&
+          live::invArrays.size() == 1 && live::invArrays[0].off == 0x530 && live::invArrays[0].stride == 0x20 && live::invArrays[0].asset == 0x10,
+          "no file: the built-in shield and held-item offsets");
 
     writeFile(dir, "# found with the probe\nshield_component -1\nshield_value 0x710   # next to health\nshield_max 0x718\nshield_is_float 0\n"
                    "inv_array 0x530 0x20 0x10 item\ninv_array_in 0x700 0x40 0x20 0x10 pockets\n");
@@ -40,8 +42,8 @@ int main() {
     writeFile(dir, "inv_array 0x530 0x4000 0x10\ninv_array 0x530 0x20 0x40\ninv_array_in 0x10 0x40 0x20 0x10\ninv_array_in 0x5000 0x40 0x20 0x10\n"
                    "inv_array -8 0x20 0x10\nshield_value banana\nbogus 5\ninv_array 0x530\n\\x01\\x02 junk\n");
     live::load(dir);
-    CHECK(live::invArrays.empty(), "absurd strides, asset outside the record, components outside the pawn, negative offsets and short lines are all refused");
-    CHECK(live::shieldValue == -1, "a shield value that is not a number is ignored");
+    CHECK(live::invArrays.size() == 1 && live::invArrays[0].category == "held", "absurd strides, asset outside the record, components outside the pawn, negative offsets and short lines are all refused: the built-in list stays");
+    CHECK(live::shieldValue == 0x1D0 && live::shieldMax == 0x1D8, "a shield value that is not a number is ignored");
 
     live::reset();
     writeFile(dir, "      if this is the shield:  shield_component 0x500  shield_value 0x100  shield_is_float 1\n"
@@ -55,7 +57,13 @@ int main() {
     writeFile(dir, "shield_value 0710\nshield_component 08\nshield_max 0x718zz\ninv_array 0x530 0x20 16q item\n");
     live::load(dir);
     CHECK(live::shieldValue == 710 && live::shieldComponent == 8, "a leading 0 is decimal, never octal");
-    CHECK(live::shieldMax == -1 && live::invArrays.empty(), "a number with junk after it is refused");
+    CHECK(live::shieldMax == -1 && live::invArrays.size() == 1 && live::invArrays[0].category == "held",
+          "a number with junk after it is refused, and a shield set without a good maximum gets none");
+
+    live::reset();
+    writeFile(dir, "shield_value -1\n");
+    live::load(dir);
+    CHECK(live::shieldValue == -1 && live::shieldMax == -1, "shield_value -1 turns the shield bar off");
 
     live::reset();
     std::string many;

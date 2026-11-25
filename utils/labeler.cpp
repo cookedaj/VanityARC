@@ -304,6 +304,8 @@ std::vector<ItemRow> inventoryOf(uintptr_t pawn) {
             const std::string raw = assetName(ReadMemory<uintptr_t>(rec + (uintptr_t)a.asset), "DA_");
             if (raw.empty()) continue;
             const std::string key = labels::itemToken(raw);
+            //The held list also has the gun in their hands, which EQUIPPED already shows
+            if (a.comp < 0 && a.off == INV_HELD && labels::isGun(key)) continue;
             const int q = a.qty >= 0 ? std::clamp(ReadMemory<int>(rec + (uintptr_t)a.qty), 1, 9999) : 1; //stack size; not known: one per slot
             bool merged = false;
             for (ItemRow& r : out) if (r.key == key && r.category == a.category) { r.count += q; merged = true; break; }

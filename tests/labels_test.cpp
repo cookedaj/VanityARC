@@ -376,7 +376,8 @@ int main() {
     u64 recs = alloc(0x20 * 4);
     put<u64>(recs, 0x10, bandAsset); put<u64>(recs, 0x30, smgAsset); put<u64>(recs, 0x50, bandAsset); //[3] stays empty
     put<u64>(invComp, 0x600, recs); put<int>(invComp, 0x608, 4);
-    CHECK(labeler::inventoryOf(invPawn).empty(), "inventory: nothing is read until the lists are named in offsets.txt");
+    live::invArrays.clear();
+    CHECK(labeler::inventoryOf(invPawn).empty(), "inventory: nothing is read when no list is named");
     live::InvArray listA; listA.off = 0x600; listA.stride = 0x20; listA.asset = 0x10; listA.category = "backpack";
     live::invArrays = {listA};
     auto rows = labeler::inventoryOf(invPawn);
@@ -405,6 +406,14 @@ int main() {
     bool pocketsOk = false;
     for (const ItemRow& r : rowsB) pocketsOk |= r.name == "Bandage" && r.count == 2 && r.category == "pockets";
     CHECK(rowsB.size() == 2 && pocketsOk, "inventory: a list in another component is read through that component's pointer");
+    //the built-in held list (offsets.h): what is in their hands, without the gun EQUIPPED already shows
+    live::reset();
+    put<u64>(invPawn, 0xCB0, invComp);
+    u64 held = alloc(0x40);
+    put<u64>(held, 0x10, smgAsset); put<u64>(held, 0x30, bandAsset);
+    put<u64>(invComp, 0x530, held); put<int>(invComp, 0x538, 2);
+    const auto inHand = labeler::inventoryOf(invPawn);
+    CHECK(inHand.size() == 1 && inHand[0].name == "Bandage" && inHand[0].category == "held", "inventory: the built-in list shows what they hold besides their gun");
     live::invArrays.clear();
 
     u64 popAsset = makeObject(0x300, 0x2080, 0);
