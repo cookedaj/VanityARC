@@ -37,23 +37,28 @@ Google/ask AI how to set up the build utility inside of CLion (Release build).
 2) some annoying stuff with stuttering and for like a split second you teammates are labeled as enemies.
 
 ## How to Configure
-All configuration options are located in the file `config.h`. It is expected that you have a system with the environment set up to properly build this project. I suggest using CLion by JetBrains for editing and building the project (that is how I do it). Look at the top of `config.h` and edit the parameters; if you are unsure about any specific parameter, just look at the code where it's used. Rebuild afterward.
+- Change ESP, radar, text size, colours and the other everyday options in the Insert menu. They are saved to `~/.config/kwin-helper/settings.txt` as one `name value` line each (for example `showArc 1`), and that file overrides `config.h`.
+- You can also edit `settings.txt` by hand, with no rebuild. Close the overlay first: it rewrites the file every time the menu closes and when it exits, so edits made while it runs are lost.
+- `config.h` holds only the starting defaults (used for any setting missing from `settings.txt`, and by "Reset all settings"), plus the options that are not in the menu: the offsets, vtables, debug flags and a few others. Those still need an edit in `config.h` and a rebuild (I suggest CLion by JetBrains for editing and building); if you are unsure about a parameter, look at the code where it's used.
+- To make a changed `config.h` default take effect for one setting, close the overlay and delete just that line from `settings.txt`.
 
 ## Updating the Source and Project Outline
 This section is dedicated to going through the code and explaining how it works for learning purposes. I will describe this at a high level; if you don't understand something, ask an AI (P.S. if it refuses to help, use a Chinese AI or Google AI Overview and paste this README in chunk by chunk).
 
 ### The Process Loop - main.cpp
 `main.cpp` is the entry point of the process. The main responsibilities of `main` are:
-1) **Initializing the process:** This includes initializing the overlay and `SignalHandler` (responsible for the overlay), as well as finding the PID and starting the `GameState` class.
-2) **Looping:** Passing information from `GameState` to the ESP (walls and radar).
+1) **Initializing the process:** This includes the `SignalHandler`, setting up the overlay window (`draw/OverlayBackend.cpp` and `draw/LayerWindow.cpp`) and starting the Tracker thread (`gamestate/Tracker.cpp`). The Tracker finds the game's PID and reads the game on its own thread.
+2) **Looping:** Each frame draws the newest Snapshot from `tracker.latest()` with the ESP (walls and radar).
 3) **Shutdown:** The loop catches when you try to close the window and destroys the window properly.
 
 The most important piece for the user is the loop (though getting the PID is also important, it is not very difficult and does not change from update to update).
 
-### Getting Info from the Game - gamestate/gamestate.cpp
-This is the only file that reads memory from the game. The job of the program is to return a list of all players (and associated info), information about your own camera, and what team you are on. From this point, I will refer to the "self player" as the **local player**.
+### Getting Info from the Game - gamestate/GameState.cpp and gamestate/Fast.cpp
+The job of this part is to return a list of all players (and associated info), information about your own camera, and what team you are on. From this point, I will refer to the "self player" as the **local player**.
 
-The main function of the `GameState` class is the `tick()` function, which actually performs the aforementioned responsibilities.
+In normal play the Tracker calls `GameState::step()` in `Fast.cpp`, which runs `scan()` (the full actor list, 10 times a second), `updateDynamic()` (players and ARC in between) and `assemble()`. `tick()` and `getRawEnt` below are the old one-read-per-actor path, which runs only with `isDebugMode` or `probeNames` and serves as the reference in the tests.
+
+**Warning:** the player, ARC and loot checks (health, dead, team, `IS_DESTROYED`) exist in both `getRawEnt` and `Fast.cpp`, so a fix to one must be copied to the other.
 
 **UWorld**
 It gets the 'UWorld' through the function `getUworld();`. While the UWorld changes every update, the function does not need to be touched because the offset for UWorld is pulled from the file `config.h` under the namespace `off`. Basically, after an update, you will get the error `[-] Invalid Uworld`, at which point you should look on UnknownCheats in the ARC Raiders reversal and offset thread for the new UWorld.
@@ -73,7 +78,7 @@ Next, it gets the `rootComp`, which is needed to get the player position. Then, 
 We then perform player-specific checks (except in debug mode), covering health, death status, and team. There are also bot-specific checks to determine if they are killed. Finally, we save the entity into a list and return it with the camera info.
 
 ### Drawing the Info - draw/ESP.h
-The actual drawing is done by the `Overlay.h` file, which is standalone. The ESP logic is simple: when `tick()` returns the info, it is passed to the ESP function, which performs the math to transpose 3D coordinates onto a 2D overlay.
+`Overlay.h` holds the drawing helpers (fonts, outlined shapes, labels), not the window. The ESP logic is simple: `DrawESP` gets the tracker's Snapshot and performs the math to transpose 3D coordinates onto a 2D overlay.
 
 The only thing to note is the **Debug Mode**. Normally, only players, loot, and ARC AI are rendered. In debug mode, every object is rendered along with its vtable value.
 
@@ -108,10 +113,10 @@ They cover the name decoders, the label tables, the keyboard layout, the Insert 
 - **Tracker thread** (`gamestate/Tracker.cpp`): reads the game on its own thread, so drawing never waits for it. A full scan of the actor list runs 10 times a second (`gamestate/Fast.cpp`), and in between only players and ARC are re-read (about 120 times a second, many reads per system call). The old one-read-per-actor path is still there as `GameState::tick()` for the debug modes and as the reference in the tests.
 - **Camera**: read again at the start of every frame, so markers follow the view without lag.
 - **Window** (`draw/LayerWindow.cpp`, `draw/OverlayBackend.cpp`): the overlay is a Wayland layer-shell surface, which KDE keeps above an active fullscreen window (the game in borderless fullscreen, or gamescope `-f`). A normal window with a "keep above" rule cannot do that. If the compositor has no layer-shell the old GLFW window is used instead (windowed games only). `bash start.sh` picks your primary monitor; `bash start.sh DP-1` picks another.
-- **Stretched resolution / gamescope**: the game draws one size (say 1440x1080) and gamescope stretches it to the screen. The overlay reads the running gamescope's command line (`-w -h -W -H -S`) and works the 3D position out in the game's own pixels, then stretches it the same way (`utils/gamescope.cpp`, `utils/gameview.h`). Insert menu > Settings > Game view shows what it found, and lets you type the size by hand.
+- **Stretched resolution / gamescope**: the game draws one size (say 1440x1080) and gamescope stretches it to the screen. The overlay reads the running gamescope's command line (`-w -h -W -H -S`) and works the 3D position out in the game's own pixels, then stretches it the same way (`utils/gamescope.cpp`, `utils/gameview.h`). Insert menu > Settings > Game view shows what it found. With Detect automatically off, you pick the game's picture size from a list (Custom gives big -100 to +100 step buttons) and choose whether it is stretched to fill the screen.
 - **Drawing** (`draw/ESP.h`): outlined markers, corner-bracket boxes, labels that never pile up on each other, edge arrows for enemies you cannot see on screen, and a radar with a view cone.
 - **Calibration** (Insert menu): if markers slide away from targets near the screen edge, switch "FOV is horizontal" first, then adjust Zoom and Shift. Saved with the other settings.
-- **Stats** (Insert menu): fps, updates per second and read times, to check it is all running smoothly.
+- **Status card** (Insert menu > Settings > OTHER > Status card): a card at the top middle of the screen with fps, updates per second and read times, to check it is all running smoothly.
 
 ## The Insert menu, hotkeys and the player list
 
@@ -119,10 +124,10 @@ Insert opens the menu: black and white, tabs on the left.
 
 | Tab | What it has |
 | --- | --- |
-| ESP | master switch, what to show, names, box style / colour / thickness, health and shield bars, monochrome, skeleton (range, dim players behind cover and how faint), ranges |
+| ESP | High visibility button, master switch, what to show (players, ARC, edge arrows, ARC edge arrows, items, containers), names and label cards, box style / colour / thickness, monochrome, health and shield bars, which way they face, your health (big HP/SH readout, red LOW HEALTH card under 35), skeleton (range, dim players behind cover and how faint), ranges, close enemy warning (big card and its Warning card range) |
 | Players | the player list options, teammate marks, and every player in view (click a name for the inventory, TEAM marks a teammate) |
 | Radar | on/off, size, range, position presets |
-| Settings | overlay and menu opacity, text size, spoken cues, update rate (30-240 Hz), game view (stretched resolution, gamescope, calibration), status card, hotkeys, stream hide, reset, quit |
+| Settings | High visibility button, overlay and menu opacity, text size, spoken cues (Spoken warning range), update rate (30-240 Hz), game view (stretched resolution, gamescope, calibration), status card, hotkeys, keyboard controls the menu, stream hide, overlay window (which monitor, setup problem), reset all settings / reset to high visibility, quit |
 
 - **Hotkeys** (read from /dev/input, switch off in Settings): F6 marks or unmarks the player nearest your crosshair as a teammate (only when one player is clearly meant), F7 clears all marks, F10 closes the overlay, F8 turns stream hide on or off. F7 and F10 only act on a second press within 2 seconds (a message asks for it). Insert opens and closes the menu whatever else is held (Shift to sprint, Ctrl, Alt, movement keys); it is the only key that opens it, and it cannot be changed. With "Keyboard controls the menu" on, Esc also closes it. F7, F8 and F10 do nothing while Ctrl, Shift, Alt or Meta is held (F6: only Alt or Meta), so shortcuts like Shift+F10 in other programs leave the overlay alone. Marks are kept by account id in `~/.config/kwin-helper/teammates.txt`.
 - **Stream hide (F8)**: while on, the overlay draws nothing, so a screen recording or stream shows none of it. Its see-through layer is also taken off the screen, so nothing sits over the game and the desktop can show the game directly (smoother, a little less lag); F8 puts it back. F8 works even with Hotkeys off, and while it is on the menu cannot be opened (press F8 first). It is not saved: the overlay always starts visible. From a terminal: `pkill -USR2 -x kwin-helper` does the same as F8.
