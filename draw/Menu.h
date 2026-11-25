@@ -143,6 +143,7 @@ inline void PagePlayers() {
     if (ImGui::Button("Clear teammate marks")) { marks::clear(); marks::save(); Toast("Teammate marks cleared"); }
     ImGui::SameLine();
     Note("F6 marks the player at your crosshair, F7 clears all.");
+    DrawSavedMarks();
     Section("PLAYERS IN VIEW");
     DrawPlayerRows(16);
 }
