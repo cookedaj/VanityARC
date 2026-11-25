@@ -14,6 +14,8 @@
 //Set by the drawing thread from the settings, read here: read players' poses only when they will be drawn
 inline std::atomic<bool> g_skeletonOn{true};
 inline std::atomic<int> g_skeletonDist{120}; //m
+//The larger of the ARC range and the radar range (m). ARC well beyond it are drawn nowhere, so they are read less often.
+inline std::atomic<double> g_arcDrawDist{200};
 
 struct gsRet {
     std::vector<RenderEntity> entities{};
@@ -64,11 +66,13 @@ private:
     //--- step() (gamestate/Fast.cpp)
     struct Tracked {
         RenderEntity ent;
-        ptr root = 0;       //RootComponent when last read
+        ptr root = 0;       //RootComponent, found by the scan
+        ptr hc = 0, sc = 0, mesh = 0; //a player's health, shield and mesh components: found once per scan (0: looked for again)
+        std::chrono::steady_clock::time_point readAt{}; //when updateDynamic last read it (far ARC are read less often)
         bool live = false;  //passed this update's checks, so it is drawn
     };
     std::vector<Tracked> statics_; //containers and ground items: position read at each scan
-    std::vector<Tracked> dyn_;     //players and ARC: re-read every step
+    std::vector<Tracked> dyn_;     //players and ARC: re-read every step (ARC far beyond any range about 15 times a second)
     ptr camActor_ = 0;
     FminimalViewInfo goodVm_{};                          //the last usable view, and when it was read: one bad read reuses it
     std::chrono::steady_clock::time_point goodVmAt_{};

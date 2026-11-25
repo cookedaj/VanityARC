@@ -2,6 +2,7 @@
 #include <sys/file.h>
 #include <sys/prctl.h>
 
+#include <algorithm>
 #include <atomic>
 #include <cerrno>
 #include <chrono>
@@ -121,6 +122,7 @@ int main() {
         g_trackerHz = (int)config::trackerHz; //the tracker thread reads the update rate from here
         g_skeletonOn = config::showSkeleton && config::showPlayers && config::espEnabled; //poses are read only when they will be drawn
         g_skeletonDist = (int)config::skeletonMaxDist;
+        g_arcDrawDist = std::max(config::maxArcDist, (double)config::radarRadius * config::scale / 100.0); //ARC beyond both are read less often
 
         //Where the game's picture is on screen (differs from the screen with gamescope / a stretched resolution)
         GameViewSettings gvs;

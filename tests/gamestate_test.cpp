@@ -363,6 +363,31 @@ int main() {
     compare("FOV 5 (a high-zoom scope): both paths still draw");
     setCamera(cx, cy, cz, 0, 0, 70.0f);
 
+    //--- an ARC far beyond the ARC and radar ranges is read less often, but stays in the list at a place it really was
+    {
+        const u64 farArc = makeActor(vtabels::ARC, cx + 60000, cy, cz - 50); //600 m away
+        actorList.push_back(farArc);
+        publishActors();
+        std::this_thread::sleep_for(std::chrono::milliseconds(150)); //the next step scans and finds it
+        fast.step();
+        setPos(farArc, cx + 60100, cy, cz - 50);
+        bool always = true;
+        for (int i = 0; i < 5; i++) {
+            const gsRet rf = fast.step();
+            bool seen = false;
+            for (const auto& e : rf.entities) if (e.actor == farArc) seen = e.pos.x == cx + 60000 || e.pos.x == cx + 60100;
+            always = always && seen;
+        }
+        CHECK(always, "a far ARC stays in the list between its reads, never at a zero or made-up place");
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        const gsRet rf = fast.step();
+        bool moved = false;
+        for (const auto& e : rf.entities) if (e.actor == farArc) moved = e.pos.x == cx + 60100;
+        CHECK(moved, "and it is followed within about 100 ms");
+        actorList.pop_back();
+        publishActors();
+    }
+
     //--- speed (printed; the check is only that the fast path is clearly faster)
     {
         std::vector<u64> saved = actorList;
