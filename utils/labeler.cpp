@@ -45,7 +45,7 @@ double nowSec() {
     return duration<double>(steady_clock::now().time_since_epoch()).count();
 }
 
-bool isImagePtr(uintptr_t p) { return p >= 0x140000000ULL && p < 0x154000000ULL; }
+bool isImagePtr(uintptr_t p) { return p >= ImageBase && p < ImageEnd; }
 bool isObj(uintptr_t o) { return isValidPtr(o) && isImagePtr(ReadMemory<uintptr_t>(o)); }
 bool startsWith(const std::string& s, const char* p) { return s.compare(0, std::char_traits<char>::length(p), p) == 0; }
 
