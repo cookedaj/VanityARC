@@ -715,6 +715,12 @@ gsRet GameState::step() {
     if (isDebugMode || probeNames) return tick(); //the diagnostic modes want the unfiltered view
 
     const auto t0 = clk::now();
+    //No world or camera: no self-check report either (it needs them, and a menu or loading screen looks the same as a
+    //stale offset), so while one is asked for the console says why it has not come yet
+    auto failed = [&](const char* why) -> gsRet {
+        if (self_.stage) logThrottled((std::string("[-] Self-check waiting, no report until a world and camera are found: ") + why).c_str());
+        return {.fault = why};
+    };
     //The world takes 4 reads one after another, so it is checked before every scan and about 30 times a second, not on
     //every step: leaving a raid or loading a map is still noticed within a few hundredths of a second
     const bool scanDue = camActor_ == 0 || t0 - lastScan_ >= nextScanGap();
@@ -723,7 +729,7 @@ gsRet GameState::step() {
         const ptr world = getUworld();
         if (scanDue || world != lastWorld_ || !isValidPtr(world)) {
             lastScan_ = t0;
-            if (!scan(world)) { statics_.clear(); dyn_.clear(); slots_.clear(); camActor_ = 0; poseOkAt_ = t0; return {.fault = fault_}; }
+            if (!scan(world)) { statics_.clear(); dyn_.clear(); slots_.clear(); camActor_ = 0; poseOkAt_ = t0; return failed(fault_); }
         }
     }
     FminimalViewInfo vm{}; //no camera: stays zero, which is not a usable view
@@ -737,7 +743,7 @@ gsRet GameState::step() {
     else {
         logThrottled("[-] Invalid rawEntities or no viewMatrix");
         camActor_ = 0; //find the camera again at the next step
-        return {.fault = "no camera found (CAMMANAGER vtable or VIEW_MATRIX is stale?)"};
+        return failed("no camera found (CAMMANAGER vtable or VIEW_MATRIX is stale?)");
     }
     if (statics_.empty() && dyn_.empty()) logThrottled("[-] No ent found, may be in practice range or its just not working");
 
