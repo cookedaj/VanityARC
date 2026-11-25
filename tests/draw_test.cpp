@@ -176,6 +176,15 @@ int main() {
         CHECK(r4.kind == MarkResult::NotMarkable && r4.down && !marks::isMarked("hhhh"), "a down player is not marked");
         std::vector<RenderEntity> behind = {player(-2000, 0, "iiii")};
         CHECK(MarkNearestAtCrosshair(behind, v4, 7).kind == MarkResult::NoneNearby, "someone behind you is not at the crosshair");
+        std::vector<RenderEntity> head = {player(300, 0, "llll")};
+        head[0].pos.z = -70; //3 m away, crosshair on the head: the body's middle is about 240 px below it
+        CHECK(MarkNearestAtCrosshair(head, v4, 7).kind == MarkResult::Marked && marks::isMarked("llll"), "aiming at the head of a near player marks him");
+        std::vector<RenderEntity> feet = {player(300, 0, "mmmm")};
+        feet[0].pos.z = 85; //crosshair on the feet: the middle is about 290 px above it
+        CHECK(MarkNearestAtCrosshair(feet, v4, 7).kind == MarkResult::Marked && marks::isMarked("mmmm"), "aiming at the feet of a near player marks him");
+        std::vector<RenderEntity> outOfRange = {player(2000, 40, "nnnn"), player(60000, 0, "oooo")}; //600 m: past the players range
+        CHECK(MarkNearestAtCrosshair(outOfRange, v4, 7).kind == MarkResult::Marked && marks::isMarked("nnnn") && !marks::isMarked("oooo"),
+              "a player past the players range is ignored (and does not make it ambiguous)");
         marks::clear();
     }
 
