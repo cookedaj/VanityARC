@@ -19,6 +19,9 @@ T ReadMemory(uintptr_t address); //Overload thats to be used
 
 void ReadMemoryBuffer(pid_t pid, long address, void* buffer, size_t size);
 void ReadMemoryBuffer(uintptr_t address, void* buffer, size_t size); //Overload thats to be used
+//Like ReadMemoryBuffer, but when only the end of the block cannot be read it keeps the part that was read and zeroes
+//the rest. Returns how many bytes were read. For the probes; the live path stays all-or-nothing.
+size_t ReadMemoryPrefix(uintptr_t address, void* buffer, size_t size);
 
 //Many small reads in one go (one system call per up to 1024 reads instead of one each). Each request that could not
 //be read is zeroed and left with ok = false; the others are filled. Returns how many were read.

@@ -74,6 +74,25 @@ int main() {
 
     CHECK(ReadScatter(nullptr, 0) == 0, "an empty list is fine");
 
+    //ReadMemoryPrefix: a block whose end runs into the unreadable page 4 keeps the part before it
+    std::vector<uint8_t> blk(PG + 200, 0xAA);
+    size_t got = ReadMemoryPrefix((uintptr_t)m + 3 * PG + 100, blk.data(), blk.size());
+    bool head = std::memcmp(blk.data(), m + 3 * PG + 100, PG - 100) == 0, tail = true;
+    for (size_t i = PG - 100; i < blk.size(); i++) tail &= blk[i] == 0;
+    CHECK(got == PG - 100 && head && tail, "prefix read: the readable part is kept, the rest is zeroed");
+    std::vector<uint8_t> full(PG, 0xAA);
+    CHECK(ReadMemoryPrefix((uintptr_t)m + 5 * PG, full.data(), PG) == PG && std::memcmp(full.data(), m + 5 * PG, PG) == 0,
+          "prefix read of a fully readable block reads all of it");
+    std::vector<uint8_t> none(64, 0xAA);
+    bool allZero = ReadMemoryPrefix((uintptr_t)0x10, none.data(), none.size()) == 0;
+    for (uint8_t c : none) allZero &= c == 0;
+    CHECK(allZero, "prefix read of an unmapped address reads nothing and is zeroed");
+    std::vector<uint8_t> whole(PG + 200, 0xAA);
+    ReadMemoryBuffer((uintptr_t)m + 3 * PG + 100, whole.data(), whole.size());
+    bool wholeZero = true;
+    for (uint8_t c : whole) wholeZero &= c == 0;
+    CHECK(wholeZero, "ReadMemoryBuffer stays all-or-nothing");
+
     //FindGameImage: a mapped .exe with a 64-bit PE header gives its base and build stamp; an unreadable one gives none
     {
         char path[] = "/tmp/kwh_peXXXXXX.exe";

@@ -29,7 +29,7 @@ bool isObject(ptr o) { return isValidPtr(o) && isModulePtr(ReadMemory<ptr>(o)); 
 
 std::vector<uint8_t> readBlock(ptr addr, size_t n) {
     std::vector<uint8_t> b(n, 0);
-    ReadMemoryBuffer(addr, b.data(), n);
+    ReadMemoryPrefix(addr, b.data(), n); //a window larger than the object keeps the part that could be read
     return b;
 }
 
