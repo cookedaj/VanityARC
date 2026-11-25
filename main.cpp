@@ -46,6 +46,8 @@ int main() {
     std::signal(SIGINT, SignalHandler);
     std::signal(SIGTERM, SignalHandler); //pkill / logout: leave cleanly so settings and names are saved
     std::signal(SIGHUP, SignalHandler);
+    std::signal(SIGUSR1, MenuSignalHandler);   //before InitOverlay: an early pkill -USR1/-USR2 must not kill the overlay
+    std::signal(SIGUSR2, StreamSignalHandler);
     if (!InitOverlay()) {
         std::cerr << "[-] Failed to init Overlay (GLFW/Wayland)" << std::endl;
         return 1;
