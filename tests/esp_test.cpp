@@ -88,6 +88,29 @@ int main() {
         config::closeWarning = true;
     }
 
+    //a live ARC close behind you gets its own arrow; not when dead, beyond 50 m, or with ARC edge arrows off; at most 4
+    {
+        std::vector<RenderEntity> arcBehind = {ent(Object::ARC, -2000, 200, 0)}; //20 m
+        const int arcArrow = draw([&] { DrawESP(arcBehind, cam, 3); });
+        config::showArcOffscreen = false;
+        const int arcOff = draw([&] { DrawESP(arcBehind, cam, 3); });
+        config::showArcOffscreen = true;
+        arcBehind[0].isDead = true;
+        const int arcDead = draw([&] { DrawESP(arcBehind, cam, 3); });
+        std::vector<RenderEntity> arcFar = {ent(Object::ARC, -8000, 200, 0)}; //80 m
+        const int arcFarN = draw([&] { DrawESP(arcFar, cam, 3); });
+        CHECK(arcArrow > 0 && arcOff == 0 && arcDead == 0 && arcFarN == 0,
+              "a live ARC 20 m behind you shows as an edge arrow; dead, 80 m away or the switch off: none");
+        std::vector<RenderEntity> four, ten;
+        for (int i = 0; i < 10; i++) {
+            RenderEntity e = ent(Object::ARC, -2000 - i * 100, 200 + i * 400, 0); e.actor += i;
+            if (i < 4) four.push_back(e);
+            ten.push_back(e);
+        }
+        const int n4 = draw([&] { DrawESP(four, cam, 3); }), n10 = draw([&] { DrawESP(ten, cam, 3); });
+        CHECK(n4 > arcArrow && n10 == n4, "ten ARC behind you: only the nearest four get an arrow");
+    }
+
     //teammates
     std::vector<RenderEntity> mate = {ent(Object::PLAYER, 3000, 200, 0, 3)};
     config::showTeammates = false;

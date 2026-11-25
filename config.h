@@ -47,6 +47,7 @@ namespace config {
     inline bool showOffscreen = true;      //arrows at the screen edge for enemy players you cannot see on screen
     inline bool closeWarning = true;       //a big "ENEMY 9 m BEHIND" card under the middle of the screen
     inline double warnDist = 25;           //m, enemies closer than this trigger that card
+    inline bool showArcOffscreen = true;   //orange kite-shaped arrows at the screen edge for live ARC within 50 m you cannot see
     inline bool showTeammates = false;     //draw your squad mates too (green); off = hidden like before
     inline bool espEnabled = true;         //master switch for boxes, labels and arrows (the radar has its own switch)
     inline bool labelCards = false;        //labels on a dark card instead of outlined text

@@ -295,12 +295,13 @@ inline float DrawPlayerBars(float x0, float y0, float w, float h, const RenderEn
 inline LabelRect g_listRect;
 
 //Arrows at the screen edge for players outside your squad who are not on screen (to the side, or behind you). The arrows
-//keep other labels away from them; their distance labels only appear where there is room.
-struct EdgeArrow { const RenderEntity* ent; double dist; ImU32 color; }; //color: enemy, or teammate for a hand mark
-inline void DrawEdgeArrows(const View& v, std::vector<EdgeArrow>& edge) {
+//keep other labels away from them; their distance labels only appear where there is room. Nearby live ARC get the same
+//arrows, kite-shaped and in the ARC colour. cap: the most arrows drawn (the nearest ones).
+struct EdgeArrow { const RenderEntity* ent; double dist; ImU32 color; bool arc = false; }; //color: enemy, or teammate for a hand mark
+inline void DrawEdgeArrows(const View& v, std::vector<EdgeArrow>& edge, size_t cap = 8) {
     if (edge.empty()) return;
     std::sort(edge.begin(), edge.end(), [](const EdgeArrow& a, const EdgeArrow& b) { return a.dist < b.dist; });
-    if (edge.size() > 8) edge.resize(8);
+    if (edge.size() > cap) edge.resize(cap);
     const float hx = std::max(20.0f, (float)v.rw / 2 - 46), hy = std::max(20.0f, (float)v.rh / 2 - 46); //edges of the game's picture
     const float k = std::max(1.0f, config::labelSize / 15.0f); //grows with the text size, never below the 15 px default
     const float as = 15.0f * k, half = 14.0f * k;              //arrow length, half its reserved square
@@ -319,7 +320,7 @@ inline void DrawEdgeArrows(const View& v, std::vector<EdgeArrow>& edge) {
         float py = (float)v.cy + (float)uy * t;
         const LabelRect& L = g_listRect;
         if (L.x1 > L.x0 && px > L.x0 - 20 && px < L.x1 + 20 && py > L.y0 - 20 && py < L.y1 + 20) py = L.y0 - 20; //not under the player list: just above it
-        DrawArrow(px, py, (float)ux, (float)uy, as, e.color);
+        (e.arc ? DrawKiteArrow : DrawArrow)(px, py, (float)ux, (float)uy, as, e.color);
         QueueReserve({px - half, py - half, px + half, py + half});
         std::snprintf(buf, sizeof buf, "%.0fm", e.dist);
         //Far enough back to clear the arrow's own reserved square (half + LabelAt's 2 px x pad / 1 px y pad), or a
@@ -328,7 +329,7 @@ inline void DrawEdgeArrows(const View& v, std::vector<EdgeArrow>& edge) {
         const ImVec2 ts = LabelSize(buf, ls);
         const float ax = std::max(std::abs((float)ux), 1e-3f), ay = std::max(std::abs((float)uy), 1e-3f);
         const float back = std::max(2.0f * as, 1.0f + std::min((half + 2.0f + ts.x / 2) / ax, (half + 1.0f + ts.y / 2) / ay));
-        QueueLabel(px - (float)ux * back, py - (float)uy * back, buf, ls, 0, e.dist);
+        QueueLabel(px - (float)ux * back, py - (float)uy * back, buf, ls, e.arc ? 1 : 0, e.dist); //ARC: same rank as its marker labels
     }
 }
 
@@ -388,7 +389,7 @@ inline void DrawESP(const std::vector<RenderEntity>& entities, FminimalViewInfo 
     const float ls = config::labelSize, ls2 = config::labelSize * 0.9f;
     const float pad = config::labelCards ? 2.0f : 0.0f; //a card reaches 2 px past its text, top and bottom
     auto onScreen = [&](double x, double y) { return x > -60 && x < W + 60 && y > -60 && y < H + 60; };
-    std::vector<EdgeArrow> edge;
+    std::vector<EdgeArrow> edge, arcEdge;
     char buf[64];
 
     for (const auto& ent : entities) {
@@ -477,7 +478,13 @@ inline void DrawESP(const std::vector<RenderEntity>& entities, FminimalViewInfo 
             QueueLabel((float)sHead.x, below, buf, ls2, 0, dist, true, lineStep);
             if (config::showPlayerGuns) QueueLabel((float)sHead.x, below + lineH, ent.sub, ls2, 0, dist, true, lineStep);
         } else {
-            if (!front || !onScreen(sp.x, sp.y)) continue;
+            if (!front || !onScreen(sp.x, sp.y)) {
+                //a live ARC within 50 m that is off screen or behind you: an arrow at the screen edge
+                if (ent.type == Object::ARC && !ent.isDead && config::showArc && config::showArcOffscreen &&
+                    (!ent.isTurret || config::showTurrets) && dist <= std::min(config::maxArcDist, 50.0))
+                    arcEdge.push_back({&ent, dist, COLOR::arc(false), true});
+                continue;
+            }
             ImU32 color;
             double radius;
             int prio;
@@ -520,6 +527,7 @@ inline void DrawESP(const std::vector<RenderEntity>& entities, FminimalViewInfo 
     }
     if (g_listRect.x1 > g_listRect.x0) QueueReserve(g_listRect); //labels stay off the player list
     DrawEdgeArrows(v, edge);
+    DrawEdgeArrows(v, arcEdge, 4); //after the players, so player arrows keep their room first
     FlushLabels();
 }
 
