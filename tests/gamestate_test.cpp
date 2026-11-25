@@ -275,26 +275,34 @@ int main() {
         }
     }
 
-    //--- visibility: the game's clock at the last draw; behind the newest by a while means not drawn right now
+    //--- visibility: the game rewrites the time of its last draw on every frame it draws him; a time that stopped changing means not drawn right now
     {
         auto findPlayer = [&](const gsRet& r, u64 actor) -> const RenderEntity* {
             for (const auto& e : r.entities) if (e.actor == actor) return &e;
             return nullptr;
         };
         const u64 m1 = get<u64>(enemy1 + off::MESH), m2 = get<u64>(mate + off::MESH);
-        put<float>(m1 + off::RENDER_TIME, 100.0f); put<float>(m1 + off::RENDER_TIME + 4, 100.0f);
-        put<float>(m2 + off::RENDER_TIME, 90.0f);  put<float>(m2 + off::RENDER_TIME + 4, 90.0f);
+        auto drawAt = [](u64 m, float t) { put<float>(m + off::RENDER_TIME, t); put<float>(m + off::RENDER_TIME + 4, t); };
+        drawAt(m1, 100.0f); drawAt(m2, 90.0f);
+        fast.step();
+        std::this_thread::sleep_for(std::chrono::milliseconds(300)); //the game draws enemy1 again, not the mate
+        drawAt(m1, 100.3f);
         fast.step();
         gsRet rv = fast.step();
         const RenderEntity* a = findPlayer(rv, enemy1);
         const RenderEntity* b = findPlayer(rv, mate);
-        CHECK(a && a->isVisible, "a player drawn at the newest time is visible");
-        CHECK(b && !b->isVisible, "a player last drawn 10 s ago is not");
-        put<float>(m2 + off::RENDER_TIME, 100.0f); put<float>(m2 + off::RENDER_TIME + 4, 100.0f);
+        CHECK(a && a->isVisible, "a player the game keeps drawing is visible");
+        CHECK(b && !b->isVisible, "a player whose draw time stopped changing is not");
+        drawAt(m2, 100.3f);
         fast.step();
         gsRet rv2 = fast.step();
         const RenderEntity* b2 = findPlayer(rv2, mate);
         CHECK(b2 && b2->isVisible, "and visible again once he is drawn");
+        drawAt(m2, 1e9f); drawAt(m1, 100.6f); //one garbage time (a reused mesh, say)
+        fast.step();
+        gsRet rv3 = fast.step();
+        const RenderEntity* a3 = findPlayer(rv3, enemy1);
+        CHECK(a3 && a3->isVisible, "one player's garbage draw time does not dim the others");
     }
 
     //--- the pawn with a PlayerController is you, wherever the camera is
