@@ -6,6 +6,7 @@
 //keyboard is grabbed so the game does not see the keys, and the key presses are handed to the menu.
 //This needs read access to /dev/input (group "input"). Without it the menu can still
 //be toggled with:   pkill -USR1 -x kwin-helper
+#include <algorithm>
 #include <atomic>
 #include <cerrno>
 #include <csignal>
@@ -75,16 +76,20 @@ inline bool HandleKeyEvents(int fd) {
     }
 }
 
-//Opens every event device that has an Insert key (= keyboards). denied counts devices we may not read.
-inline std::vector<int> OpenKeyboards(int* denied) {
-    std::vector<int> fds;
+//Keyboards the hotkey thread has open right now; -1 until the first scan. main.cpp shows a message when it changes.
+inline std::atomic<int> g_KeyboardCount{-1};
+
+//Opens every event device that has an Insert key (= keyboards) and is not in paths yet, and appends it to
+//fds and paths (same order). denied counts devices we may not read.
+inline void OpenKeyboards(std::vector<int>& fds, std::vector<std::string>& paths, int* denied) {
     *denied = 0;
     DIR* dir = opendir("/dev/input");
-    if (!dir) return fds;
+    if (!dir) return;
     constexpr size_t BITS = 8 * sizeof(unsigned long);
     while (dirent* e = readdir(dir)) {
         if (std::strncmp(e->d_name, "event", 5) != 0) continue;
         std::string path = std::string("/dev/input/") + e->d_name;
+        if (std::find(paths.begin(), paths.end(), path) != paths.end()) continue; //already open
         int fd = open(path.c_str(), O_RDONLY | O_NONBLOCK | O_CLOEXEC);
         if (fd < 0) {
             if (errno == EACCES) (*denied)++;
@@ -93,15 +98,17 @@ inline std::vector<int> OpenKeyboards(int* denied) {
         unsigned long keys[KEY_MAX / BITS + 1] = {};
         bool hasKey = ioctl(fd, EVIOCGBIT(EV_KEY, sizeof keys), keys) >= 0 &&
                       ((keys[MENU_KEY / BITS] >> (MENU_KEY % BITS)) & 1UL);
-        if (hasKey) fds.push_back(fd); else close(fd);
+        if (hasKey) { fds.push_back(fd); paths.push_back(path); } else close(fd);
     }
     closedir(dir);
-    return fds;
 }
 
 inline void HotkeyThread() {
     int denied = 0;
-    std::vector<int> fds = OpenKeyboards(&denied);
+    std::vector<int> fds;
+    std::vector<std::string> paths; //same order as fds
+    OpenKeyboards(fds, paths, &denied);
+    g_KeyboardCount = (int)fds.size();
     if (fds.empty()) {
         if (denied) {
             std::printf("[!] Insert hotkey is off: no permission to read the keyboard (/dev/input).\n"
@@ -110,14 +117,14 @@ inline void HotkeyThread() {
             std::printf("[!] Insert hotkey is off: no keyboard found.\n");
         }
         std::printf("    Meanwhile you can toggle the menu with:  pkill -USR1 -x kwin-helper\n");
-        std::fflush(stdout);
-        return;
+    } else {
+        std::printf("[+] Press Insert to open the menu (%zu keyboard device%s)\n", fds.size(), fds.size() == 1 ? "" : "s");
     }
-    std::printf("[+] Press Insert to open the menu (%zu keyboard device%s)\n", fds.size(), fds.size() == 1 ? "" : "s");
     std::fflush(stdout);
 
     bool grabbed = false;
-    while (!g_HotkeyStop && !fds.empty()) {
+    long long lastScan = NowMs();
+    while (!g_HotkeyStop) { //keeps running with no keyboard, so one that comes back is found again
         bool wantGrab = g_TextGrab;
         if (wantGrab && NowMs() - g_GrabBeatMs > GRAB_TIMEOUT_MS) { //the menu stopped asking: let go
             g_TextGrab = false;
@@ -128,17 +135,26 @@ inline void HotkeyThread() {
             grabbed = wantGrab;
             if (!grabbed) { std::lock_guard<std::mutex> lk(g_KeyMutex); g_KeyQueue.clear(); }
         }
+        //A keyboard that reconnects (Bluetooth wake, replug, resume) comes back as a new /dev/input/eventN: look every 2 s
+        if (NowMs() - lastScan >= 2000) {
+            lastScan = NowMs();
+            const size_t before = fds.size();
+            OpenKeyboards(fds, paths, &denied);
+            if (grabbed) for (size_t i = before; i < fds.size(); i++) ioctl(fds[i], EVIOCGRAB, 1);
+        }
         std::vector<pollfd> p;
         for (int fd : fds) p.push_back({fd, POLLIN, 0});
-        poll(p.data(), p.size(), 50);
+        poll(p.data(), p.size(), 50); //with no keyboard this just waits 50 ms
         for (size_t i = p.size(); i-- > 0;) { //backwards so erasing keeps the earlier indexes valid
             bool gone = (p[i].revents & (POLLERR | POLLHUP | POLLNVAL)) != 0;
             if (!gone && (p[i].revents & POLLIN)) gone = !HandleKeyEvents(p[i].fd);
             if (gone) {
                 close(p[i].fd);
                 fds.erase(fds.begin() + i);
+                paths.erase(paths.begin() + i);
             }
         }
+        g_KeyboardCount = (int)fds.size();
     }
     for (int fd : fds) close(fd);
 }

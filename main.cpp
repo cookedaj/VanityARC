@@ -66,6 +66,7 @@ int main() {
     tracker.start();
 
     const std::vector<RenderEntity> noEntities;
+    int lastKeyboards = -1; //what g_KeyboardCount was last frame
     while (g_Running && !OverlayShouldClose()) {
         MenuPollToggle();
         //Stream-hide (F8, SIGUSR2 or the menu switch): while on, the overlay draws nothing and takes no mouse, so a screen
@@ -131,6 +132,13 @@ int main() {
             }
         } else {
             g_KeyQuit = g_KeyClear = g_KeyMark = false;
+        }
+        //Insert and the F-keys need a keyboard: say so when the last one goes away (Bluetooth sleep, unplugged) and when one is back
+        const int keyboards = g_KeyboardCount;
+        if (keyboards != lastKeyboards) {
+            if (keyboards == 0 && lastKeyboards > 0) Toast("Keyboard lost: Insert will not work", 5.0);
+            else if (keyboards > 0 && lastKeyboards == 0) Toast("Keyboard found");
+            lastKeyboards = keyboards;
         }
 
         if (!snap->gameFound) DrawLabelCentered(110, 14, OBF("Waiting for ARC Raiders...").c_str(), 14.0f);
