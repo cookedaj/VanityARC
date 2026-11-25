@@ -163,7 +163,9 @@ inline void DrawInspectWindows() {
         const std::string who = e && !e->label.empty() ? e->label : (e && !e->account.empty() ? e->account.substr(0, 8) : "Player");
         const std::string title = who + "  -  inventory###inv" + key;
         ImGui::SetNextWindowSize(ImVec2(360, 420), ImGuiCond_FirstUseEver);
-        ImGui::SetNextWindowPos(ImVec2(140.0f + 36.0f * n, 120.0f + 36.0f * n), ImGuiCond_FirstUseEver);
+        //beside the menu (820 wide at x 120), not on its player list; kept on the screen
+        ImGui::SetNextWindowPos(ImVec2(std::max(0.0f, std::min(960.0f + 36.0f * n, (float)config::SCREEN_W - 380.0f)),
+                                       std::max(0.0f, std::min(110.0f + 36.0f * n, (float)config::SCREEN_H - 430.0f))), ImGuiCond_FirstUseEver);
         n++;
         bool open = true;
         if (ImGui::Begin(title.c_str(), &open, ImGuiWindowFlags_NoCollapse)) {
