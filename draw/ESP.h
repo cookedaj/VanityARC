@@ -122,6 +122,27 @@ inline void DrawToast(float y) {
     DrawLabelCentered((float)config::SCREEN_W * 0.5f, y, g_toast.c_str(), config::labelSize, COLOR::white, true);
 }
 
+//Your own health and shield in big white text on a dark card, at the bottom left just above the game's health bar,
+//and a big red LOW HEALTH card below the crosshair under 35. hp < 0: not read, so nothing (never a guessed number).
+//shield < 0: not read or no shield offset, so health only.
+inline void DrawSelfHealth(double hp, double shield) {
+    if (!(hp >= 0)) return; //also NaN
+    const int h = (int)std::lround(hp);
+    char buf[48];
+    if (shield >= 0) std::snprintf(buf, sizeof buf, "HP %d   SH %.0f", h, shield);
+    else std::snprintf(buf, sizeof buf, "HP %d", h);
+    const float ls = config::labelSize, big = ls * 1.8f;
+    DrawLabelCentered(40 + LabelSize(buf, big).x / 2, (float)config::SCREEN_H - 300, buf, big, COLOR::white, true);
+    if (h < 1 || h >= 35) return; //at 0 you are down: the game shows that itself
+    const char* warn = "LOW HEALTH";
+    const float huge = ls * 2.4f, x = (float)config::SCREEN_W * 0.5f, y = (float)config::SCREEN_H * 0.62f;
+    if (!COLOR::mono()) { //white on solid red; monochrome: white on the dark card
+        const ImVec2 ts = LabelSize(warn, huge);
+        DrawRectFilled(x - ts.x / 2 - 14, y - ts.y / 2 - 6, x + ts.x / 2 + 14, y + ts.y / 2 + 6, COLOR::red);
+    }
+    DrawLabelCentered(x, y, warn, huge, COLOR::white, COLOR::mono());
+}
+
 //--- labels: collected while drawing, then the ones that would overlap are moved or dropped (see Declutter.h)
 struct PendingLabel {
     LabelReq box;

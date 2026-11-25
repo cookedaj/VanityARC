@@ -37,7 +37,7 @@ inline std::vector<Entry>& table() {
         B("showSkeleton", &config::showSkeleton); B("dimHidden", &config::dimHidden); D("hiddenAlpha", &config::hiddenAlpha, 40, 255); B("showBars", &config::showBars); D("skeletonMaxDist", &config::skeletonMaxDist, 20, 300);
         B("showOffscreen", &config::showOffscreen); B("showTeammates", &config::showTeammates);
         B("hideUnknownTeams", &config::hideUnknownTeams); B("monochrome", &config::monochrome);
-        B("enableRadar", &config::enableRadar);
+        B("enableRadar", &config::enableRadar); B("showSelfHealth", &config::showSelfHealth);
         D("maxPlayerDist", &config::maxPlayerDist, 50, 800); D("maxArcDist", &config::maxArcDist, 20, 500);
         D("maxLootDist", &config::maxLootDist, 5, 150); D("nameMaxLootDist", &config::nameMaxLootDist, 3, 150);
         D("boxStyle", &config::boxStyle, 0, 2); D("boxColor", &config::boxColor, 0, 5);

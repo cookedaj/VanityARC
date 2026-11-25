@@ -246,6 +246,19 @@ int main() {
         CHECK(draw([&] { DrawToast(DrawStatusCard("live", "120 fps")); }) > 0, "status card and toast draw");
     }
 
+    //---- your own health: nothing when not read, the readout when read, the LOW HEALTH card under 35 (not at 0: down)
+    {
+        const int unread = draw([&] { DrawSelfHealth(-1, 50); });
+        const int nan = draw([&] { DrawSelfHealth(NAN, -1); });
+        const int fine = draw([&] { DrawSelfHealth(80, 50); });
+        const int low = draw([&] { DrawSelfHealth(30, 50); });
+        const int down = draw([&] { DrawSelfHealth(0, 50); });
+        CHECK(unread == 0 && nan == 0, "own health not read: nothing is drawn");
+        CHECK(fine > 0 && low > fine && down < low, "own health: readout, plus the LOW HEALTH card under 35 only");
+        draw([&] { DrawSelfHealth(30, 50); });
+        CHECK(g_finite, "own health: every vertex is a finite number");
+    }
+
     //---- the radar panel
     {
         std::vector<RenderEntity> radarEnts = {ent(Object::PLAYER, 3000, 200, 0), ent(Object::ARC, -2500, 1000, 0)};
