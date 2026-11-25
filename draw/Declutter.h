@@ -17,7 +17,7 @@ struct LabelReq {
     double dist = 0;                      //metres: for the same prio, closer wins
     bool force = false;                   //always drawn: in a free place if any, else in its first place over another label (players)
     std::vector<LabelRect> alts;          //other places to try, in order, when the first one is taken
-    bool body = false;                    //an enemy's box kept clear: other labels move off it, forced ones (players) ignore it
+    bool body = false;                    //an enemy's box kept clear: other labels move off it, players' (forced or prio <= 0) ignore it
 };
 
 inline bool RectsOverlap(const LabelRect& a, const LabelRect& b) {
@@ -44,18 +44,19 @@ inline std::vector<LabelPick> ChoosePlaces(const std::vector<LabelReq>& reqs) {
     });
     std::vector<LabelPick> chosen;
     chosen.reserve(order.size());
-    auto free = [&](const LabelRect& r, bool force) {
+    auto free = [&](const LabelRect& r, bool skipBody) {
         for (const LabelPick& c : chosen)
-            if (RectsOverlap(r, c.where) && !(force && reqs[c.index].body)) return false;
+            if (RectsOverlap(r, c.where) && !(skipBody && reqs[c.index].body)) return false;
         return true;
     };
     for (size_t i : order) {
         const LabelReq& q = reqs[i];
         const LabelRect first{q.x0, q.y0, q.x1, q.y1};
-        if (free(first, q.force)) { chosen.push_back({i, -1, first}); continue; }
+        const bool skipBody = q.force || q.prio <= 0; //players' labels, the distance by an edge arrow included
+        if (free(first, skipBody)) { chosen.push_back({i, -1, first}); continue; }
         bool placed = false;
         for (size_t k = 0; k < q.alts.size() && !placed; k++)
-            if (free(q.alts[k], q.force)) { chosen.push_back({i, (int)k, q.alts[k]}); placed = true; }
+            if (free(q.alts[k], skipBody)) { chosen.push_back({i, (int)k, q.alts[k]}); placed = true; }
         if (!placed && q.force) chosen.push_back({i, -1, first}); //nowhere free: forced labels still go in their first place
     }
     return chosen;

@@ -115,6 +115,9 @@ int main() {
         auto onBody = ChoosePlaces(b);
         CHECK(onBody.size() == 3 && onBody[1].index == 1 && onBody[1].alt == -1 && onBody[2].index == 2 && onBody[2].alt == 0,
               "an enemy's box moves loot labels off it, never a player's lines");
+        b[2].prio = 0; //now the distance by an off-screen enemy's edge arrow (not forced)
+        auto edgeLbl = ChoosePlaces(b);
+        CHECK(edgeLbl.size() == 3 && edgeLbl[1].index == 2 && edgeLbl[1].alt == -1, "an edge arrow's distance stays over an enemy's box");
     }
 
     //--- camera roll: Unreal's rotation matrix
