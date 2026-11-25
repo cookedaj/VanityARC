@@ -87,6 +87,12 @@ int main() {
             }
             g_TextGrab = false;
         }
+        if (!OverlayReady()) { //the overlay surface is gone and is being made again; the tracker keeps running
+            g_TextGrab = false; //no text box to type into: the keyboard stays with the game
+            if (config::hotkeysEnabled && g_KeyQuit.exchange(false)) g_Running = false; //F10 still quits
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            continue;
+        }
         MenuFeedKeys(); //typing into the menu's text boxes
         RenderBegin();
 

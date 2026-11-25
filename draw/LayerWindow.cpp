@@ -150,6 +150,11 @@ LayerWindow::~LayerWindow() { destroy(); delete p_; }
 bool LayerWindow::create(const std::string& monitor, std::string* error) {
     Impl& d = *p_;
     auto fail = [&](const std::string& why) { if (error) *error = why; destroy(); return false; };
+    //A new surface starts clean, also when this is a retry after the compositor closed the old one
+    d.w = d.h = 0;
+    d.configured = d.closed = d.interactive = d.inside = false;
+    d.monitor.clear();
+    d.input.clear();
 
     d.dpy = wl_display_connect(nullptr);
     if (!d.dpy) return fail("no Wayland display (WAYLAND_DISPLAY is not set or the compositor is not running)");
@@ -253,7 +258,8 @@ void LayerWindow::destroy() {
 bool LayerWindow::pump() {
     Impl& d = *p_;
     if (!d.dpy) return false;
-    while (wl_display_prepare_read(d.dpy) != 0) wl_display_dispatch_pending(d.dpy);
+    while (wl_display_prepare_read(d.dpy) != 0)
+        if (wl_display_dispatch_pending(d.dpy) < 0) return false; //a broken connection never empties the queue
     wl_display_flush(d.dpy);
     pollfd pfd{wl_display_get_fd(d.dpy), POLLIN, 0};
     if (poll(&pfd, 1, 0) > 0) wl_display_read_events(d.dpy);
