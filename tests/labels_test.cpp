@@ -152,6 +152,7 @@ int main() {
     CHECK(D(Cat::Item, "DA_Item_Shotgun_PumpAction_01_MoreReload_SlugRounds") == "Il Toro", "gun variant keeps its base name");
     CHECK(D(Cat::Item, "DA_Item_SMG_Medium_01_Carbine") == "Canto", "gun Canto variant");
     CHECK(D(Cat::Item, "DA_Item_Bandage_01") == "Bandage", "item fallback");
+    CHECK(D(Cat::Item, "DA_Item_ESRAnalyzer_01") == "ESR Analyzer", "item wiki spelling despite the _01 suffix");
 
     //--- your own names, saved and loaded
     std::string dir = testDir("cfgtest");
