@@ -237,6 +237,12 @@ int main() {
     bool keyOk = false;
     for (const ItemRow& r : rows) keyOk |= r.name == "Bandage" && r.key == "Bandage_01";
     CHECK(keyOk, "inventory: a row keeps the internal name as its key (for prices)");
+    put<int>(recs, 0x18, 5); put<int>(recs, 0x58, 3); //stack sizes; [1] keeps 0, which counts as 1
+    listA.qty = 0x18;
+    live::invArrays = {listA};
+    bool stackBand = false, stackSmg = false;
+    for (const ItemRow& r : labeler::inventoryOf(invPawn)) { stackBand |= r.name == "Bandage" && r.count == 8; stackSmg |= r.name == "Stitcher" && r.count == 1; }
+    CHECK(stackBand && stackSmg, "inventory: with the stack size offset known, rows count items, not slots");
     put<int>(invComp, 0x608, 100000);
     CHECK(labeler::inventoryOf(invPawn).empty(), "inventory: an absurd count is not trusted");
     put<int>(invComp, 0x608, 4); put<u64>(invPawn, 0xCB0, 0);
