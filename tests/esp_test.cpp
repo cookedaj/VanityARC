@@ -80,6 +80,11 @@ int main() {
         CHECK(warn({ent(Object::PLAYER, 2000, 300, 0)}) == "ENEMY 20 m AHEAD", "in front: AHEAD");
         CHECK(warn({ent(Object::PLAYER, 2000, 300, 0), ent(Object::PLAYER, -500, 100, 0)}) == "2 ENEMIES - NEAREST 5 m BEHIND",
               "two close enemies: the count and the nearest one");
+        {   //looking 45 deg down, an enemy 40 deg right of ahead: still AHEAD, as the voice says
+            FminimalViewInfo down = cam; down.Rotation.x = -45;
+            std::string s; draw([&] { s = DrawCloseEnemyWarning({ent(Object::PLAYER, 1532, 1286, 0)}, down, 3); });
+            CHECK(s == "ENEMY 20 m AHEAD", "looking down does not change the card's direction (flat, like the voice)");
+        }
         RenderEntity dead = ent(Object::PLAYER, -900, 0, 0); dead.isDead = true;
         CHECK(warn({ent(Object::PLAYER, -900, 0, 0, 3), dead, ent(Object::PLAYER, -3000, 0, 0), ent(Object::ARC, -500, 0, 0)}).empty() && g_verts == 0,
               "a teammate, a dead player, an enemy beyond the warning range or an ARC: no card");

@@ -122,6 +122,15 @@ inline void DrawToast(float y) {
     DrawLabelCentered((float)config::SCREEN_W * 0.5f, y, g_toast.c_str(), config::labelSize, COLOR::white, true);
 }
 
+//Which way a point is from the camera, flat (the camera's yaw only, so looking up or down changes nothing): 0 ahead,
+//1 behind, 2 left, 3 right, each a quarter of the circle; -1 when it cannot be told. The card and the voice both use it.
+inline int FlatDir(const FminimalViewInfo& cam, const Vector3& pos) {
+    const double yaw = cam.Rotation.y * 3.14159265358979 / 180.0;
+    const double dx = pos.x - cam.Location.x, dy = pos.y - cam.Location.y;
+    const double f = dx * std::cos(yaw) + dy * std::sin(yaw), r = dy * std::cos(yaw) - dx * std::sin(yaw);
+    return !std::isfinite(f + r) ? -1 : f >= std::abs(r) ? 0 : -f >= std::abs(r) ? 1 : r > 0 ? 3 : 2;
+}
+
 //--- the spoken warning when an enemy player first comes within config::cueRange ("Enemy behind, 30 meters").
 //At most one every 2 s, the nearest first; one who has to wait is said at the next free moment if he is still that
 //close. He is said again only after going more than 5 m past the range, so walking along its edge does not repeat it.
@@ -146,11 +155,9 @@ struct NearCue {
         if (best && now - last >= 2.0) {
             keep.insert(best->actor);
             last = now;
-            //Which way, flat (the camera's yaw only): ahead, behind, left or right, each a quarter of the circle
-            const double yaw = cam.Rotation.y * 3.14159265358979 / 180.0;
-            const double dx = best->pos.x - cam.Location.x, dy = best->pos.y - cam.Location.y;
-            const double f = dx * std::cos(yaw) + dy * std::sin(yaw), r = dy * std::cos(yaw) - dx * std::sin(yaw);
-            const char* dir = !std::isfinite(f + r) ? "near" : f >= std::abs(r) ? "ahead" : -f >= std::abs(r) ? "behind" : r > 0 ? "right" : "left";
+            static const char* const words[] = {"ahead", "behind", "left", "right"};
+            const int d = FlatDir(cam, best->pos);
+            const char* dir = d < 0 ? "near" : words[d];
             text = std::string("Enemy ") + dir + ", " + std::to_string((long)std::lround(bestD)) + " meters";
         }
         said.swap(keep);
@@ -604,9 +611,9 @@ inline std::string DrawCloseEnemyWarning(const std::vector<RenderEntity>& entiti
         if (!nearest || dist < best) { best = dist; nearest = &ent; }
     }
     if (!nearest) return {};
-    double x, y, z;
-    v.toCamera(nearest->pos, x, y, z);
-    const char* where = z < -std::abs(x) ? "BEHIND" : x < -std::abs(z) ? "LEFT" : x > std::abs(z) ? "RIGHT" : "AHEAD";
+    static const char* const words[] = {"AHEAD", "BEHIND", "LEFT", "RIGHT"};
+    const int d = FlatDir(vm, nearest->pos); //the same way as the spoken warning says
+    const char* where = d < 0 ? "NEAR" : words[d];
     char buf[96];
     if (count == 1) std::snprintf(buf, sizeof buf, "ENEMY %.0f m %s", best, where);
     else std::snprintf(buf, sizeof buf, "%d ENEMIES - NEAREST %.0f m %s", count, best, where);
