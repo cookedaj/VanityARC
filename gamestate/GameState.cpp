@@ -185,7 +185,7 @@ GameState::RawInfo GameState::getRawEnt(ptr uworld) {
         if (std::abs(pos.x) > 1e8 || std::abs(pos.y) > 1e8 || std::abs(pos.z) > 1e8) continue; //garbage, not a world position
         ent.pos = pos;
         if (otherClass) {
-            if (ri.unknown.size() < 1500) ri.unknown.push_back(ent);
+            ri.unknown.push_back(ent); //all of them: the probe keeps the nearest (runNameProbe)
             continue;
         }
 
