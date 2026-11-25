@@ -41,11 +41,9 @@ inline Projection MakeProjection() {
 namespace COLOR {
     inline ImU32 red = IM_COL32(207, 56, 56, 255);
     inline ImU32 darkred = IM_COL32(147, 36, 36, 255);
-    inline ImU32 blue = IM_COL32(58, 45, 237, 255);
     inline ImU32 orange = IM_COL32(240, 168, 43, 255);
     inline ImU32 darkorange = IM_COL32(120, 85, 21, 255);
     inline ImU32 green = IM_COL32(34, 189, 39, 255);
-    inline ImU32 greenHealth = IM_COL32(34, 189, 39, 255); //because the green for items and for health CAN be different
     inline ImU32 cyan = IM_COL32(39, 219, 217, 255);
     inline ImU32 white = IM_COL32(255, 255, 255, 255);
     inline ImU32 grey = IM_COL32(170, 170, 170, 255);

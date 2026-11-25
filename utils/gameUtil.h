@@ -73,23 +73,4 @@ struct Vector2 {
         : x(_x), y(_y) {}
 };
 
-struct Matrix4x4 {
-    double m[4][4];
-
-    void Print() const {
-        std::cout << "Matrix4x4:" << std::endl;
-        for (int i = 0; i < 4; ++i) {
-            std::cout << "  [ ";
-            for (int j = 0; j < 4; ++j) {
-                std::cout << std::fixed << std::setprecision(2) << m[i][j] << (j < 3 ? ", " : "");
-            }
-            std::cout << " ]" << std::endl;
-        }
-    }
-};
-
-struct ScreenPos {
-    float x, y;
-};
-
 #endif //KWINHELPER_GAMEUTIL_H

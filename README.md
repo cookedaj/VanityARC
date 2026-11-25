@@ -84,7 +84,7 @@ Go to the ARC Raiders thread on UnknownCheats and check the last page for a "dum
 
 This cheat uses no decryption. I have used creative solutions like vtable identification and finding the `ViewMatrix` from the actor array.
 
-To update the `ViewMatrix`: in `getRawEnt`, uncomment the line `// getViewMatrix(actor);`. Ensure your FOV is at 70.0 and you are not scoped in. It will dump memory; look for a pattern of three numbers (~20,000), two spaces, another three numbers, two spaces, and then your FOV number. Look at the hex code to the left (e.g., `0xC88`); that is your new `off::VIEW_MATRIX`.
+To update the `ViewMatrix`: also set `scanForCamera = true` in `config.h` and rebuild. In a raid, not scoped in, the console prints `=== CAMERA FOUND` with your new `off::VIEW_MATRIX` and `vtabels::CAMMANAGER`.
 
 You can also use a tool like `memsed`. If you find your exact health value, you can scan for it using `void FindDeepHealthOffset(ptr actor, float targetHealth)` if the pointer chain is not posted on UC.
 

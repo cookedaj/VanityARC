@@ -42,7 +42,6 @@ void ReadMemoryBuffer(pid_t pid, long address, void* buffer, size_t size)
                   << " bytes at address 0x" << std::hex << address
                   << " (pid " << pid << "). nread=" << nread << std::endl;
         perror("[ReadMemory (Buffer)] process_vm_readv");
-        //std::cout << "Trace: " << __FILE__ << ":" << __LINE__ << " in " << __func__ << std::endl;
 #endif
     }
 }
@@ -102,31 +101,6 @@ size_t ReadScatter(pid_t pid, ReadReq* r, size_t n)
 size_t ReadScatter(ReadReq* reqs, size_t n)
 {
     return ReadScatter(ProcessId, reqs, n);
-}
-
-// Read a string from memory with maximum length
-std::string ReadString(pid_t pid, long address, size_t maxLength)
-{
-    if (maxLength == 0) return "";
-    std::vector<char> buffer(maxLength, 0);
-
-    struct iovec local[1];
-    struct iovec remote[1];
-
-    local[0].iov_base = buffer.data();
-    local[0].iov_len = maxLength;
-    remote[0].iov_base = (void*)address;
-    remote[0].iov_len = maxLength;
-
-    ssize_t nread = process_vm_readv(pid, local, 1, remote, 1, 0);
-    if (nread <= 0)
-    {
-        return "";
-    }
-
-    // Ensure null-termination
-    buffer[maxLength - 1] = '\0';
-    return std::string(buffer.data());
 }
 
 #include <cctype>

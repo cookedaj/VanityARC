@@ -70,22 +70,12 @@ inline void DrawEllipseRing(float x, float y, float rx, float ry, ImU32 color, f
     ImGui::GetBackgroundDrawList()->AddEllipse(ImVec2(x, y), ImVec2(rx, ry), Fade(color), 0.0f, 0, thickness);
 }
 
-inline void DrawBox(float x, float y, float w, float h, ImU32 color, float thickness = 1.5f) {
-    ImGui::GetBackgroundDrawList()->AddRect(ImVec2(x, y), ImVec2(x + w, y + h), Fade(color), 0.0f, 0, thickness);
-}
-
 inline void DrawLine(float x1, float y1, float x2, float y2, ImU32 color, float thickness = 1.5f) {
     ImGui::GetBackgroundDrawList()->AddLine(ImVec2(x1, y1), ImVec2(x2, y2), Fade(color), thickness);
 }
 
 inline void DrawTextImGui(float x, float y, ImU32 color, const char* text) {
     ImGui::GetBackgroundDrawList()->AddText(ImVec2(x, y), Fade(color), text);
-}
-
-inline void DrawTextCentered(float x, float y, ImU32 color, const char* text) {
-    ImVec2 textSize = ImGui::CalcTextSize(text);
-    ImVec2 pos = ImVec2(x - (textSize.x / 2.0f), y - (textSize.y / 2.0f));
-    ImGui::GetBackgroundDrawList()->AddText(pos, Fade(color), text);
 }
 
 //Width and height a label will take
@@ -118,12 +108,6 @@ inline void DrawRectFilled(float x0, float y0, float x1, float y1, ImU32 color) 
 
 inline void DrawRectOutline(float x0, float y0, float x1, float y1, ImU32 color, float t = 1.0f) {
     ImGui::GetBackgroundDrawList()->AddRect(ImVec2(x0, y0), ImVec2(x1, y1), Fade(color), 0.0f, 0, t);
-}
-
-inline void DrawCircleOutlined(float x, float y, float radius, ImU32 color) {
-    ImDrawList* dl = ImGui::GetBackgroundDrawList();
-    dl->AddCircleFilled(ImVec2(x, y), radius, Fade(color), 0);
-    dl->AddCircle(ImVec2(x, y), radius, Fade(IM_COL32(0, 0, 0, 200)), 0, 1.5f);
 }
 
 //Full rectangle with a dark edge so it shows on any background

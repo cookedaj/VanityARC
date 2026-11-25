@@ -64,11 +64,6 @@ struct RenderEntity {
     bool isTurret = false; //ARC: a turret
     std::shared_ptr<const skeleton::Pose> pose; //players: the stick figure in world space, null when it could not be read
     bool poseLive = true; //false: the game has stopped animating this player (not drawn / out of range), so the pose is old
-
-    void Print() {
-        pos.Print();
-        std::cout << "Type: " << type << std::endl;
-    }
 };
 
 #endif //KWINHELPER_LOCALUTIL_H

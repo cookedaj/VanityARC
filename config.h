@@ -86,7 +86,6 @@ namespace config {
     inline float radarCenterY = 150; //coords px
     inline float radarRadius = 100;  //size px
     inline float scale = 200.0f; //cm per radar pixel: range in m = radarRadius x scale / 100 (the menu's Radar Range sets it)
-    inline float selfDot = false;
 
     //Set this to your monitor resolution
     inline int SCREEN_H = 1440 /*<-Make you monitor height*/ * 0.94/*just trust me, this helps with distortion around screen edge*/;
@@ -158,10 +157,6 @@ namespace off {
     inline constexpr uintptr_t RENDER_TIME = 0x500;    //mesh: two floats, LastRenderTime and LastRenderTimeOnScreen (the game's clock when it last drew him; seen live)
     inline constexpr uintptr_t CONTROLLER = 0x3F8;     //pawn -> its PlayerController: set only on the pawn you control
     inline constexpr uintptr_t BONE_ARRAY = 0xBE8;     //mesh -> TArray of 97 bone transforms (0x60 bytes each), each relative to its parent bone
-
-    //im just guessing for this one
-    // find under "namespace EmbarkCharacterMovementComponentBase" OR "namespace CharacterMovementComponent"
-    inline constexpr uintptr_t LAST_SUBMIT_TIME = 0x4CC; //NetworkMinTimeBetweenClientAckGoodMoves
 
     inline constexpr uintptr_t IS_DESTROYED = 0x1230; //PioneerConstructablePawn::bIsDestroyed
 

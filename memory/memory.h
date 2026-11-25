@@ -40,9 +40,6 @@ struct ReadReq {
 size_t ReadScatter(pid_t pid, ReadReq* reqs, size_t n);
 size_t ReadScatter(ReadReq* reqs, size_t n); //Overload thats to be used
 
-// Read a string from memory with maximum length
-std::string ReadString(pid_t pid, long address, size_t maxLength = 128);
-
 pid_t FindGamePID();
 
 //Reads where the game's .exe is loaded (from /proc/<pid>/maps and its PE header) into ImageBase / ImageEnd.

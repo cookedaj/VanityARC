@@ -231,29 +231,12 @@ GameState::RawInfo GameState::getRawEnt(ptr uworld) {
 
         //Only if player or debugging
         if (ent.type == Object::PLAYER || isDebugMode) {
-            //Not adding this to offsets because they cannot typically be found in SDK dumps
-            //can also use method below to find another pointer chain to memory
             ptr healthComponent = ReadMemory<ptr>(actor + off::HEALTH_COMPONENT);
             if (isValidPtr(healthComponent)) {
                 ent.playerHealth= ReadMemory<double>(healthComponent + off::HEALTH_CACHED);
                 if (ent.playerHealth < 1) ent.isDead = true;
             }
-            // // FindDeepHealthOffset(actor, 75.1292); //find second value from memsed
-            // auto dep1 = ReadMemory<ptr>(actor + 0xdc8);
-            // auto dep2 = ReadMemory<ptr>(dep1 + 0x1b0);
-            // float health = ReadMemory<float>(dep2 + 0xb8);
             if (ent.playerHealth < 1) ent.isDead = true;
-
-            //Does not work
-            // ptr mesh = ReadMemory<ptr>(actor + off::MESH);
-            // if (isValidPtr(mesh)) {
-            //     float lastSubmitTime = ReadMemory<float>(mesh + off::LAST_SUBMIT_TIME);
-            //     float lastRenderTime = ReadMemory<float>(mesh + off::LAST_SUBMIT_TIME + sizeof(float));
-            //     float lastRenderTimeOnScreen = ReadMemory<float>(mesh + off::LAST_SUBMIT_TIME + sizeof(float)*2);
-            //     bool isOnScreen = (lastRenderTime == lastRenderTimeOnScreen);
-            //     bool isRecent = (lastSubmitTime - lastRenderTime) <= 0.06f;
-            //     ent.isVisible = isOnScreen && isRecent;
-            // }
 
             ent.teamID = ReadMemory<int>(actor + off::TEAM_ID) & 0xFF; //the byte at TeamId only; the bytes after it belong to other fields
 
@@ -274,10 +257,6 @@ GameState::RawInfo GameState::getRawEnt(ptr uworld) {
         } else if (ent.type == Object::ARC) {
             ent.isDead = ReadMemory<uint8_t>(actor + off::IS_DESTROYED) == 1; //same rule as step(): only exactly 1 is destroyed
         }
-
-
-        // getViewMatrix is called higher up, before the rootComp/pos checks
-        // getPosPtr(actor); //can find both Root Component AND position, print out is Off: rootComp posPtr
 
         //Ground items use the container vtable; the actor's name tells them apart
         if (ent.type == Object::SEARCH) labeler::refine(ent);
