@@ -1,6 +1,9 @@
+#include <fcntl.h>
+#include <sys/file.h>
 #include <sys/prctl.h>
 
 #include <atomic>
+#include <cerrno>
 #include <chrono>
 #include <csignal>
 #include <cstdlib>
@@ -43,6 +46,19 @@ void migrateConfigDir() {
 int main() {
     prctl(PR_SET_NAME, "kwin-helper", 0, 0, 0);
     migrateConfigDir();
+    //One copy at a time: two would each save their own settings and marks over the other's. The lock is held until
+    //the process ends (the fd is never closed). Only a lock held by another copy stops the start, never a lock error.
+    {
+        const char* home = std::getenv("HOME");
+        const std::string cfgDir = std::string(home ? home : ".") + "/.config/kwin-helper";
+        std::error_code ec;
+        std::filesystem::create_directories(cfgDir, ec);
+        const int lockFd = open((cfgDir + "/running.lock").c_str(), O_RDWR | O_CREAT | O_CLOEXEC, 0600);
+        if (lockFd >= 0 && flock(lockFd, LOCK_EX | LOCK_NB) != 0 && errno == EWOULDBLOCK) {
+            std::cerr << "[-] kwin-helper is already running. If you cannot see it, stream hide may be on: press F8." << std::endl;
+            return 1;
+        }
+    }
     std::signal(SIGINT, SignalHandler);
     std::signal(SIGTERM, SignalHandler); //pkill / logout: leave cleanly so settings and names are saved
     std::signal(SIGHUP, SignalHandler);
