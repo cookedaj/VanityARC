@@ -1,7 +1,10 @@
 //Tests for the item sell values (utils/itemvalues.cpp): parsing, lookups and unpriced items.
 #include "../utils/itemvalues.h"
 
+#include <chrono>
 #include <cstdio>
+#include <filesystem>
+#include <fstream>
 
 static int fails = 0;
 #define CHECK(cond, what) do { if (!(cond)) { std::printf("FAIL  %s\n", what); fails++; } else std::printf("PASS  %s\n", what); } while (0)
@@ -36,6 +39,37 @@ int main() {
     itemvalues::clear();
     CHECK(itemvalues::valueOf("Snap Hook") == -1, "clear empties the table");
     CHECK(itemvalues::count() == 0, "no prices loaded: count is 0");
+
+    //values.txt is read again when it is saved, added or removed (no restart)
+    {
+        namespace fs = std::filesystem;
+        const fs::path dir = fs::temp_directory_path() / "kwinhelper_test_itemvalues";
+        fs::remove_all(dir);
+        fs::create_directories(dir);
+        const fs::path file = dir / "values.txt";
+        auto save = [&](const char* text, int ageSec) {
+            { std::ofstream f(file); f << text; }
+            fs::last_write_time(file, fs::file_time_type::clock::now() - std::chrono::seconds(ageSec)); //each save a distinct time
+        };
+        itemvalues::setDir(dir.string());
+        itemvalues::load();
+        CHECK(itemvalues::count() == 0, "no values.txt: no prices");
+        save("Snap Hook | 100\n", 30);
+        itemvalues::reloadIfChanged(0);
+        CHECK(itemvalues::valueOf("Snap Hook") == 100, "a values.txt created while running is read");
+        save("Snap Hook | 200\n", 20);
+        itemvalues::reloadIfChanged(60000);
+        CHECK(itemvalues::valueOf("Snap Hook") == 100, "the file is not checked again before the gap is up");
+        itemvalues::reloadIfChanged(0);
+        CHECK(itemvalues::valueOf("Snap Hook") == 200, "an edited price shows at the next check");
+        itemvalues::setValueForTest("Snap Hook", 5);
+        itemvalues::reloadIfChanged(0);
+        CHECK(itemvalues::valueOf("Snap Hook") == 5, "an unchanged file is not read again");
+        fs::remove(file);
+        itemvalues::reloadIfChanged(0);
+        CHECK(itemvalues::count() == 0, "removing values.txt clears the prices");
+        fs::remove_all(dir);
+    }
 
     std::printf(fails ? "SOME TESTS FAILED\n" : "ALL TESTS PASSED\n");
     return fails ? 1 : 0;
