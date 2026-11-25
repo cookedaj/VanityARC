@@ -108,6 +108,13 @@ int main() {
         r[2].alts = {{0, 30, 100, 50}, {200, 0, 300, 20}};
         auto moved = ChoosePlaces(r);
         CHECK(moved.size() == 3 && moved[2].index == 2 && moved[2].alt == 1, "a forced label whose first place is taken moves to a free place");
+        std::vector<LabelReq> b(3);
+        b[0] = {0, 0, 100, 100, -1, 0.0, true}; b[0].body = true;  //an enemy's box
+        b[1] = {10, 10, 60, 30, 0, 5.0, true, {{10, 110, 60, 130}}}; //a player's line over it
+        b[2] = {10, 40, 60, 60, 3, 1.0, false, {{10, 140, 60, 160}}}; //a container's label over it
+        auto onBody = ChoosePlaces(b);
+        CHECK(onBody.size() == 3 && onBody[1].index == 1 && onBody[1].alt == -1 && onBody[2].index == 2 && onBody[2].alt == 0,
+              "an enemy's box moves loot labels off it, never a player's lines");
     }
 
     //--- camera roll: Unreal's rotation matrix

@@ -240,6 +240,40 @@ int main() {
         CHECK(cards != plain, "label cards: drawn differently from outlined text (a card behind the text)");
     }
 
+    //---- loot labels keep off an enemy's box and bars; the enemy's own name and distance stay where they were
+    {
+        std::vector<RenderEntity> enemy = {ent(Object::PLAYER, 3000, 200, 0)};
+        enemy[0].label = "Enemy";
+        RenderEntity box = ent(Object::SEARCH, 3750, 250, 50); //behind the enemy's chest, 38 m away: its label falls on the body
+        box.label = "Trash can";
+        const std::vector<RenderEntity> lootOnly = {box}, both = {enemy[0], box};
+        float bx0 = 1e9f, by0 = 1e9f, bx1 = -1e9f, by1 = -1e9f; //the enemy's box and bars
+        auto textOf = [&](const std::vector<RenderEntity>& list, bool learnBox) {
+            std::vector<ImVec2> text;
+            draw([&] {
+                DrawESP(list, cam, 3);
+                const ImVec2 wp = ImGui::GetDrawListSharedData()->TexUvWhitePixel;
+                for (const ImDrawVert& v : ImGui::GetBackgroundDrawList()->VtxBuffer) {
+                    if (std::abs(v.uv.x - wp.x) > 1e-6f || std::abs(v.uv.y - wp.y) > 1e-6f) text.push_back(v.pos);
+                    else if (learnBox) { bx0 = std::min(bx0, v.pos.x); by0 = std::min(by0, v.pos.y); bx1 = std::max(bx1, v.pos.x); by1 = std::max(by1, v.pos.y); }
+                }
+            });
+            return text;
+        };
+        const std::vector<ImVec2> own = textOf(enemy, true), alone = textOf(lootOnly, false), mixed = textOf(both, false);
+        auto inBody = [&](const std::vector<ImVec2>& t) {
+            int n = 0;
+            for (const ImVec2& p : t) n += p.x > bx0 + 4 && p.x < bx1 - 4 && p.y > by0 + 4 && p.y < by1 - 4;
+            return n;
+        };
+        bool kept = !own.empty();
+        for (const ImVec2& p : own)
+            kept &= std::any_of(mixed.begin(), mixed.end(), [&](const ImVec2& q) { return std::abs(p.x - q.x) < 0.01f && std::abs(p.y - q.y) < 0.01f; });
+        CHECK(inBody(alone) > 0 && inBody(own) == 0, "(setup) the container's label alone falls on the enemy's body");
+        CHECK(inBody(mixed) == 0, "loot labels move off an enemy's box and bars (or drop) instead of covering the body");
+        CHECK(kept, "the enemy's own name and distance stay exactly where they were");
+    }
+
     //---- status card and toast
     {
         Toast("Teammate marked: cooked", 5.0);
