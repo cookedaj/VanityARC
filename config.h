@@ -44,6 +44,7 @@ namespace config {
     inline double listMode = 1;            //player list at the bottom: 0 off, 1 always, 2 only while the menu is open
     inline double listRows = 8;            //most players shown in the list
     inline bool showOffscreen = true;      //arrows at the screen edge for enemy players you cannot see on screen
+    inline bool showArcOffscreen = true;   //orange kite-shaped arrows at the screen edge for live ARC within 50 m you cannot see
     inline bool showTeammates = false;     //draw your squad mates too (green); off = hidden like before
     inline bool espEnabled = true;         //master switch for boxes, labels and arrows (the radar has its own switch)
     inline bool labelCards = false;        //labels on a dark card instead of outlined text

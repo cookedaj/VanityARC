@@ -157,6 +157,17 @@ inline void DrawArrow(float x, float y, float dx, float dy, float size, ImU32 co
     dl->AddTriangle(tip, a, b, Fade(IM_COL32(0, 0, 0, 220)), 1.5f);
 }
 
+//The ARC arrow: like DrawArrow but kite-shaped (a pointed tail instead of a flat base), so it is told apart from a
+//player arrow by its shape too, and it echoes the ARC diamond marker
+inline void DrawKiteArrow(float x, float y, float dx, float dy, float size, ImU32 color) {
+    ImDrawList* dl = ImGui::GetBackgroundDrawList();
+    const float wb = size * 0.75f, hw = size * 0.6f, tl = size * 1.3f;
+    const ImVec2 p[4] = {ImVec2(x, y), ImVec2(x - dx * wb - dy * hw, y - dy * wb + dx * hw),
+                         ImVec2(x - dx * tl, y - dy * tl), ImVec2(x - dx * wb + dy * hw, y - dy * wb - dx * hw)};
+    dl->AddConvexPolyFilled(p, 4, Fade(color));
+    dl->AddPolyline(p, 4, Fade(IM_COL32(0, 0, 0, 220)), ImDrawFlags_Closed, 1.5f);
+}
+
 inline void DrawDiamondFilled(float x, float y, float r, ImU32 color) {
     ImDrawList* dl = ImGui::GetBackgroundDrawList();
     const ImVec2 p[4] = {ImVec2(x, y - r), ImVec2(x + r, y), ImVec2(x, y + r), ImVec2(x - r, y)};

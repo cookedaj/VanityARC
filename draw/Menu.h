@@ -144,6 +144,7 @@ inline void PageEsp() {
     Switch("ARC", &config::showArc); ImGui::NextColumn();
     Switch("Dead ARC", &config::showDeadArc); ImGui::NextColumn();
     Switch("Turrets", &config::showTurrets); ImGui::NextColumn();
+    Switch("ARC edge arrows", &config::showArcOffscreen); ImGui::NextColumn();
     Switch("Ground items", &config::showPickups); ImGui::NextColumn();
     Switch("Containers", &config::showContainers); ImGui::NextColumn();
     ImGui::Columns(1);
