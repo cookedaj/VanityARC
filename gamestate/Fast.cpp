@@ -153,7 +153,7 @@ void GameState::updatePose(Tracked& t, const std::vector<uint8_t>& bones, const 
     using namespace std::chrono;
     const auto now = clk::now();
     PoseState& ps = poseSeen_[t.ent.actor];
-    if (!ps.init) { ps.init = true; ps.changed = now; }
+    if (!ps.init) { ps.init = true; ps.changed = now - POSE_FROZEN_AFTER; } //not animated until his list is seen to change
 
     //Ground speed, over at least 150 ms so the replication jitter averages out
     if (!ps.havePos) { ps.havePos = true; ps.lastPos = t.ent.pos; ps.lastPosAt = now; }
@@ -162,6 +162,7 @@ void GameState::updatePose(Tracked& t, const std::vector<uint8_t>& bones, const 
         if (dt >= 0.15) {
             const double dx = t.ent.pos.x - ps.lastPos.x, dy = t.ent.pos.y - ps.lastPos.y;
             ps.speed = std::sqrt(dx * dx + dy * dy) / dt;
+            ps.speedKnown = true;
             ps.lastPos = t.ent.pos;
             ps.lastPosAt = now;
         }
@@ -175,15 +176,16 @@ void GameState::updatePose(Tracked& t, const std::vector<uint8_t>& bones, const 
     bool readOk = false;
     skeleton::Pose comp;
     if (haveBones) {
-        if (freshBones) { //a list read just now: compare it with the last one, and keep it for the next steps
-            const uint64_t h = fnv1a(bones.data(), bones.size());
-            if (h != ps.hash) { ps.hash = h; ps.changed = now; }
-            ps.bones.assign(bones.begin(), bones.end());
-            ps.bonesAt = now;
-        }
         skeleton::Xform local[skeleton::BONES];
         skeleton::decode(bones.data(), local);
         readOk = skeleton::componentPose(local, comp);
+        if (freshBones && readOk) { //a whole list read just now: compare it with the last one, and keep it for the next steps
+            const uint64_t h = fnv1a(bones.data(), bones.size());
+            if (ps.hash && h != ps.hash) ps.changed = now; //the first list has nothing to differ from
+            ps.hash = h;
+            ps.bones.assign(bones.begin(), bones.end());
+            ps.bonesAt = now;
+        }
     }
     const bool animated = now - ps.changed < POSE_FROZEN_AFTER; //a failed read leaves the hash alone: still animated if it was
     if (readOk) {
@@ -193,7 +195,7 @@ void GameState::updatePose(Tracked& t, const std::vector<uint8_t>& bones, const 
         const bool idle = ps.speed < 40.0;
         const bool plausible = crouched ? (pelvisZ > 25.0 && pelvisZ < 60.0) : pelvisZ > 70.0;
         //Not from a roll or a sprint: those poses are not a stance to copy (450 cm/s is above a walk, below a sprint)
-        if (animated && !t.ent.isDead && plausible && (idle || moving) && ps.speed < 450.0) { tmpl_[cls] = comp; haveTmpl_[cls] = true; }
+        if (animated && ps.speedKnown && !t.ent.isDead && plausible && (idle || moving) && ps.speed < 450.0) { tmpl_[cls] = comp; haveTmpl_[cls] = true; }
     } else if (ps.haveGood && now - ps.goodAt < milliseconds(400)) {
         comp = ps.good; readOk = true;   //a half-written list: the last whole one, moved with the player
     }

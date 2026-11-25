@@ -84,6 +84,7 @@ private:
         Vector3 lastPos;
         std::chrono::steady_clock::time_point lastPosAt{};
         double speed = 0;                      //cm/s on the ground
+        bool speedKnown = false;               //speed measured at least once (until then it reads 0: idle)
         bool haveGood = false;
         skeleton::Pose good;                   //mesh space
         std::chrono::steady_clock::time_point goodAt{};
