@@ -1,6 +1,8 @@
 #include <cstdio>
 #include <set>
+#include <string>
 #include "utils/keytext.h"
+#include "utils/hotkey.h"
 int main() {
     int bad = 0, typed = 0;
     std::set<char> seen;
@@ -20,6 +22,12 @@ int main() {
     if (KeyToChar(KEY_A, false, true) != 'A' || KeyToChar(KEY_A, true, true) != 'a' ||
         KeyToChar(KEY_1, false, true) != '1' || KeyToChar(KEY_LEFTBRACE, false, true) != '[') wrong++;
     std::printf("%d wrong number pad / Caps Lock results\n", wrong);
+    //the on-screen "Insert does not work" card: only with no keyboard open, and with the right reason
+    auto why = [](int kb, int denied, bool had) { const char* w = HotkeyProblem(kb, denied, had).why; return std::string(w ? w : ""); };
+    if (why(-1, 3, false) != "" || why(2, 3, false) != "" || why(1, 0, true) != "" ||
+        why(0, 3, false) != "no permission to read the keyboard" || why(0, 0, false) != "no keyboard found" ||
+        why(0, 3, true) != "keyboard lost" || !HotkeyProblem(0, 0, false).fix) wrong++;
+    std::printf("%d wrong results after the hotkey problem check\n", wrong);
     std::printf("%s\n", bad == 0 && wrong == 0 ? "ALL PASSED" : "FAILED");
     return bad + wrong;
 }
