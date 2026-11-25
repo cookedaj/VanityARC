@@ -679,7 +679,8 @@ void inventoryProbeOne(ptr pawn, const char* who, FILE* out) {
             if (!ptrLike(data) || num < 1 || num > 200 || mx < num || mx > 2000) continue;
             int bestStride = 0, bestHits = 0, bestAsset = 0;
             for (int stride : {8, 0x10, 0x18, 0x20, 0x28, 0x30, 0x40}) {
-                int hits = 0, assetOff = -1;
+                //score = records with a DA_ in the best single slot; a multiple of the true stride only ties, and loses on '>'
+                int hits = 0, assetOff = -1, slotHits[8] = {};
                 const int n = (int)std::min<uint32_t>(num, 8);
                 auto elems = readBlock((ptr)data, (size_t)stride * n);
                 for (int i = 0; i < n; i++)
@@ -687,12 +688,13 @@ void inventoryProbeOne(ptr pawn, const char* who, FILE* out) {
                         uint64_t v = q64(elems, (size_t)i * stride + k * 8);
                         if (!ptrLike(v) || !isObject((ptr)v)) continue;
                         std::string name = names::name((ptr)v);
-                        if (name.compare(0, 3, "DA_") == 0) { hits++; if (assetOff < 0) assetOff = k * 8; }
+                        if (name.compare(0, 3, "DA_") == 0) slotHits[k]++;
                     }
+                for (int k = 0; k * 8 < stride; k++) if (slotHits[k] > hits) { hits = slotHits[k]; assetOff = k * 8; }
                 if (hits > bestHits) { bestHits = hits; bestStride = stride; bestAsset = assetOff; }
             }
             if (bestHits == 0) continue;
-            std::fprintf(out, "  pawn+0x%x (%s)  +0x%zx  TArray num %u  stride 0x%x  asset at +0x%x  ->", c.pawnOff, nm(c.obj).c_str(), o, num, bestStride, bestAsset);
+            std::fprintf(out, "  pawn+0x%x (%s)  +0x%zx  TArray num %u  stride 0x%x  item at +0x%x in %d of %d records  ->", c.pawnOff, nm(c.obj).c_str(), o, num, bestStride, bestAsset, bestHits, (int)std::min<uint32_t>(num, 8));
             auto elems = readBlock((ptr)data, (size_t)bestStride * std::min<uint32_t>(num, 6));
             for (uint32_t i = 0; i < std::min<uint32_t>(num, 6); i++) {
                 uint64_t v = q64(elems, (size_t)i * bestStride + bestAsset);
