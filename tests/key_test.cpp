@@ -1,6 +1,7 @@
 #include <cstdio>
 #include <set>
 #include "utils/keytext.h"
+#include "utils/hotkey.h"
 int main() {
     int bad = 0, typed = 0;
     std::set<char> seen;
@@ -20,6 +21,23 @@ int main() {
     if (KeyToChar(KEY_A, false, true) != 'A' || KeyToChar(KEY_A, true, true) != 'a' ||
         KeyToChar(KEY_1, false, true) != '1' || KeyToChar(KEY_LEFTBRACE, false, true) != '[') wrong++;
     std::printf("%d wrong number pad / Caps Lock results\n", wrong);
-    std::printf("%s\n", bad == 0 && wrong == 0 ? "ALL PASSED" : "FAILED");
-    return bad + wrong;
+    //Insert toggles the menu with Shift held (sprinting); its release and key repeat do nothing.
+    //A pipe stands in for the keyboard device (it cannot report held keys, so this checks the event path).
+    int menu = 0, p[2];
+    if (pipe2(p, O_NONBLOCK) != 0) menu++;
+    else {
+        auto feed = [&](int code, int value) {
+            input_event e{}; e.type = EV_KEY; e.code = (unsigned short)code; e.value = value;
+            if (write(p[1], &e, sizeof e) != (ssize_t)sizeof e) menu++;
+        };
+        feed(KEY_LEFTSHIFT, 1); feed(MENU_KEY, 1);
+        if (!HandleKeyEvents(p[0]) || !g_MenuToggle.exchange(false)) menu++;
+        feed(MENU_KEY, 2); feed(MENU_KEY, 0); feed(KEY_LEFTSHIFT, 0);
+        HandleKeyEvents(p[0]);
+        if (g_MenuToggle.exchange(false)) menu++;
+        close(p[0]); close(p[1]);
+    }
+    std::printf("%d wrong Insert menu results\n", menu);
+    std::printf("%s\n", bad == 0 && wrong == 0 && menu == 0 ? "ALL PASSED" : "FAILED");
+    return bad + wrong + menu;
 }
