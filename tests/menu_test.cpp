@@ -193,6 +193,20 @@ int main() {
         io.AddMousePosEvent(-1000, -1000); frame(list); frame(list);
     }
 
+    //the High visibility preset: every value it sets is inside its saved range, and it is written to settings.txt
+    {
+        settings::defaults(); //remember the config.h values before anything changes them
+        std::error_code ec;
+        std::filesystem::remove(settings::path(), ec); //$HOME is the test folder (set above)
+        ApplyHighVisibility();
+        CHECK(config::labelSize == 28.0f && config::boxThickness >= 4.0f && config::labelCards && config::boxStyle == 1 &&
+              config::overlayOpacity == 1.0f && config::menuOpacity == 1.0f && config::hiddenAlpha == 200, "High visibility sets the readable values");
+        settings::clampAll();
+        CHECK(config::labelSize == 28.0f && config::boxThickness >= 4.0f && config::hiddenAlpha == 200, "High visibility values are inside their safe ranges");
+        CHECK(std::filesystem::exists(settings::path()), "High visibility is saved at once");
+        settings::resetAll();
+    }
+
     ImGui::DestroyContext();
     std::printf("%s\n", fails ? "SOME TESTS FAILED" : "ALL PASSED");
     return fails;
