@@ -658,7 +658,6 @@ inline void DrawRadar(const std::vector<RenderEntity>& entities, FminimalViewInf
     for (int i = 1; i <= 3; i++) DrawCircleRing(cx, cy, R * i / 3.0f, IM_COL32(255, 255, 255, i == 3 ? 90 : 35), 1.0f);
     DrawLine(cx - R, cy, cx + R, cy, IM_COL32(255, 255, 255, 40), 1);
     DrawLine(cx, cy - R, cx, cy + R, IM_COL32(255, 255, 255, 40), 1);
-    DrawLabelCentered(cx, cy - R - 7 - ts / 2, RadarTitle().c_str(), ts, IM_COL32(190, 190, 190, 255)); //in the middle of the title strip
 
     //What you can see: the edges of the view, drawn as two lines
     if (viewUsable(cameraInfo)) {
@@ -717,6 +716,8 @@ inline void DrawRadar(const std::vector<RenderEntity>& entities, FminimalViewInf
     }
 
     DrawArrow(cx, cy - 7 * k, 0, -1, 10 * k, COLOR::white); //you, looking up
+    //In the middle of the title strip, drawn last so a facing line reaching up into the strip never covers it
+    DrawLabelCentered(cx, cy - R - 7 - ts / 2, RadarTitle().c_str(), ts, IM_COL32(190, 190, 190, 255));
 }
 
 #endif //KWINHELPER_ESP_H
