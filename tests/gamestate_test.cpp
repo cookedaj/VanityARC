@@ -219,6 +219,7 @@ int main() {
             for (const auto& e : r.entities) if (e.actor == actor) return &e;
             return nullptr;
         };
+        setCamera(cx + 10, cy, cz, -3, 1, 75.0f); //facing enemy1 (and the mate, 44 degrees to the left): bones are read only in view
         fast.step(); //the first step after the camera moved only learns where the camera is
         gsRet rs = fast.step();
         const RenderEntity* e1 = findPlayer(rs, enemy1);
@@ -289,6 +290,38 @@ int main() {
             CHECK(std::abs(mh - eh) < 1e-6, "and it is the shape the game animates for that stance, not his own old list");
             CHECK(std::abs(m->pose->j[skeleton::PELVIS].z - (cz - 182 + 85)) < 1e-6, "placed on him, at his own place");
         }
+    }
+
+    //--- bones are read only for players whose skeleton is drawn: not for a hidden squad mate, anyone behind you, or the dead
+    {
+        auto findPlayer = [&](const gsRet& r, u64 actor) -> const RenderEntity* {
+            for (const auto& e : r.entities) if (e.actor == actor) return &e;
+            return nullptr;
+        };
+        g_showTeammates = false;
+        gsRet rh = fast.step();
+        const RenderEntity* hm = findPlayer(rh, mate);
+        const RenderEntity* he = findPlayer(rh, enemy1);
+        CHECK(hm && !hm->pose, "a squad mate who is not drawn gets no bones read");
+        CHECK(he && he->pose, "an enemy in view still gets his");
+        g_showTeammates = true;
+        setCamera(cx + 10, cy, cz, -3, 181, 75.0f); //turned around: enemy1 is behind the camera, 41 m away
+        fast.step();
+        gsRet rb = fast.step();
+        const RenderEntity* be = findPlayer(rb, enemy1);
+        CHECK(be && !be->pose, "a player behind the camera gets no bones read");
+        setCamera(cx + 10, cy, cz, -3, 1, 75.0f);
+        fast.step();
+        gsRet rf = fast.step();
+        const RenderEntity* fe = findPlayer(rf, enemy1);
+        CHECK(fe && fe->pose, "facing him again: his bones are read again");
+        setHp(enemy1, 0);
+        fast.step();
+        gsRet rd = fast.step();
+        const RenderEntity* de = findPlayer(rd, enemy1);
+        CHECK(de && de->isDead && !de->pose, "a dead player (drawn as a cross) gets no bones read");
+        setHp(enemy1, 20);
+        fast.step();
     }
 
     //--- visibility: the game rewrites the time of its last draw on every frame it draws him; a time that stopped changing means not drawn right now

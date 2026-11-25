@@ -52,6 +52,16 @@ int main() {
     for (int k = 0; k < JOINT_COUNT; k++) CHECK(JOINT_BONE[k] >= 0 && JOINT_BONE[k] < BONES, "joint bone in range");
     for (int l = 0; l < LINE_COUNT; l++) CHECK(LINES[l][0] >= 0 && LINES[l][1] < JOINT_COUNT && LINES[l][0] != LINES[l][1], "line joints in range");
 
+    //Only READ_RANGES are read from the game: they must hold every joint and every bone above it
+    {
+        auto isRead = [](int b) { for (const auto& rg : READ_RANGES) if (b >= rg[0] && b <= rg[1]) return true; return false; };
+        int n = 0;
+        for (const auto& rg : READ_RANGES) n += rg[1] - rg[0] + 1;
+        CHECK(n == READ_BONES, "READ_BONES is the size of the ranges");
+        for (int k = 0; k < JOINT_COUNT; k++)
+            for (int b = JOINT_BONE[k]; b >= 0; b = PARENT[b]) CHECK(isRead(b), "a joint and every bone above it are read");
+    }
+
     //Rotation: a quarter turn about Z sends +X to +Y
     {
         const Vector3 r = rotate(aboutZ(90), Vector3(1, 0, 0));
@@ -98,6 +108,21 @@ int main() {
         CHECK(worldPose(local, mesh, Vector3(1000, 2000, 300), pose), "pose near the player is accepted");
         CHECK(near(pose.j[HEAD].x, 1000) && near(pose.j[HEAD].y, 2000) && near(pose.j[HEAD].z, 370), "head position in the world");
         CHECK(!worldPose(local, mesh, Vector3(0, 0, 0), pose), "pose far from the player is rejected");
+
+        //the packed READ_RANGES records give the same figure as the whole list
+        {
+            std::vector<uint8_t> packed;
+            for (const auto& rg : READ_RANGES)
+                packed.insert(packed.end(), buf.begin() + (long)(rg[0] * RECORD), buf.begin() + (long)((rg[1] + 1) * RECORD));
+            CHECK(packed.size() == (size_t)READ_BONES * RECORD, "packed list size");
+            Xform readOnly[BONES];
+            decodeRead(packed.data(), readOnly);
+            Pose a, b;
+            CHECK(componentPose(local, a) && componentPose(readOnly, b), "both lists give a figure");
+            bool same = true;
+            for (int k = 0; k < JOINT_COUNT; k++) same = same && near(a.j[k].x, b.j[k].x) && near(a.j[k].y, b.j[k].y) && near(a.j[k].z, b.j[k].z);
+            CHECK(same, "the bones read are all the figure needs");
+        }
 
         //a bone that is not a unit rotation (half-written list) makes the whole pose invalid
         Xform bad;

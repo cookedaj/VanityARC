@@ -241,12 +241,12 @@ const char* GameState::updatePose(Tracked& t, const std::vector<uint8_t>& bones,
     const bool moving = ps.speed > 120.0;
     const int cls = (crouched ? 2 : 0) + (moving ? 1 : 0);
 
-    const bool haveBones = bones.size() == (size_t)skeleton::BONES * skeleton::RECORD;
+    const bool haveBones = bones.size() == (size_t)skeleton::READ_BONES * skeleton::RECORD;
     bool readOk = false;
     skeleton::Pose comp;
     if (haveBones) {
         skeleton::Xform local[skeleton::BONES];
-        skeleton::decode(bones.data(), local);
+        skeleton::decodeRead(bones.data(), local);
         readOk = skeleton::componentPose(local, comp);
         if (freshBones && readOk) { //a whole list read just now: compare it with the last one, and keep it for the next steps
             const uint64_t h = fnv1a(bones.data(), bones.size());
@@ -300,6 +300,21 @@ void GameState::updateDynamic() {
     const bool shieldOn = live::shieldValue >= 0;
     const bool skeletonOn = g_skeletonOn.load(std::memory_order_relaxed);
     const double skeletonRange = g_skeletonDist.load(std::memory_order_relaxed) * 100.0; //cm
+    const bool matesShown = g_showTeammates.load(std::memory_order_relaxed);
+    //The last step's view as a cone: the picture's corners plus 15 degrees, for a camera that turns before the next step
+    const double Pi = 3.14159265358979, yaw = lastView_.Rotation.y * Pi / 180.0, pitch = lastView_.Rotation.x * Pi / 180.0;
+    const Vector3 fwd(std::cos(pitch) * std::cos(yaw), std::cos(pitch) * std::sin(yaw), std::sin(pitch));
+    const double cosCone = !viewUsable(lastView_) ? -1.0 //no view yet: every direction
+        : std::cos(std::atan(g_viewSpread.load(std::memory_order_relaxed) * std::tan(lastView_.FOV * Pi / 360.0)) + 15.0 * Pi / 180.0);
+    //Would DrawESP draw this player's skeleton (as of the last step)? Only then are his bones read.
+    auto skeletonDrawn = [&](const RenderEntity& e) {
+        const Vector3 d = e.pos - lastView_.Location;
+        const double dist = std::sqrt(d.Dot(d));
+        if (!skeletonOn || dist > skeletonRange) return false;
+        if (e.actor == meActor_) return true; //you: never drawn, but always animated, so the stance templates are learned from you
+        if (e.isDead || (!matesShown && lastTeamID >= 0 && e.teamID == lastTeamID)) return false; //a cross, or a hidden squad mate
+        return dist <= 500.0 || d.Dot(fwd) >= cosCone * dist; //within 5 m, or in front of the camera
+    };
     std::vector<Row> rows(n);
     std::vector<ReadReq> rq;
     rq.reserve(n * 5);
@@ -312,7 +327,7 @@ void GameState::updateDynamic() {
             queue(rq, e.actor + off::HEALTH_COMPONENT, &r.hc);
             r.teamAt = (int)rq.size(); queue(rq, e.actor + off::TEAM_ID, &r.team);
             if (shieldOn && live::shieldComponent >= 0) queue(rq, e.actor + (ptr)live::shieldComponent, &r.sc); //the shield lives in another component
-            r.wantPose = skeletonOn && e.pos.Dist(lastCamPos_) <= skeletonRange; //only near players are drawn as a skeleton
+            r.wantPose = skeletonDrawn(e);
             queue(rq, e.actor + off::CONTROLLER, &r.ctrl);
             queue(rq, e.actor + off::MESH, &r.mesh); //for the pose and for when the game last drew him
         } else {
@@ -352,11 +367,12 @@ void GameState::updateDynamic() {
         r.shOk = r.shAt >= 0 && rq[(size_t)r.shAt].ok;
     }
 
-    //Third round: the bone list itself, only for players whose mesh and a list of exactly 97 bones were readable. A list
-    //read less than BONE_PERIOD ago is reused instead: reading it on every step would cost the game and the CPU for no gain.
+    //Third round: the bone list itself, only for players whose mesh and a list of exactly 97 bones were readable, and
+    //only the 24 bones the stick figure uses (skeleton::READ_RANGES). A list read less than BONE_PERIOD ago is reused
+    //instead: reading it on every step would cost the game and the CPU for no gain.
     rq.clear();
     const auto boneNow = clk::now();
-    const size_t boneBytes = (size_t)skeleton::BONES * skeleton::RECORD;
+    const size_t boneBytes = (size_t)skeleton::READ_BONES * skeleton::RECORD;
     for (size_t i = 0; i < n; i++) {
         Row& r = rows[i];
         if (!r.wantPose || r.boneNum != skeleton::BONES || !isValidPtr(r.boneData)) continue;
@@ -368,7 +384,12 @@ void GameState::updateDynamic() {
         r.bones.resize(boneBytes);
         r.view = &r.bones;
         r.freshBones = true;
-        rq.push_back({r.boneData, r.bones.data(), boneBytes, false});
+        uint8_t* dst = r.bones.data();
+        for (const auto& rg : skeleton::READ_RANGES) {
+            const size_t len = (size_t)(rg[1] - rg[0] + 1) * skeleton::RECORD;
+            rq.push_back({r.boneData + (ptr)rg[0] * skeleton::RECORD, dst, len, false});
+            dst += len;
+        }
     }
     if (!rq.empty()) ReadScatter(rq.data(), rq.size());
 
@@ -440,7 +461,7 @@ void GameState::updateDynamic() {
 }
 
 gsRet GameState::assemble(const FminimalViewInfo& vm) {
-    lastCamPos_ = vm.Location;
+    lastView_ = vm;
     //You are the player closest to the camera (third person puts it about 2 m away). Only that one is you: another
     //player standing right next to the camera (a teammate being revived, an enemy in melee range) must still be drawn.
     //The pawn with a PlayerController is the one you control. If that is not exactly one player, fall back to proximity.

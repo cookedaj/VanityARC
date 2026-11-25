@@ -2,9 +2,11 @@
 #include <sys/file.h>
 #include <sys/prctl.h>
 
+#include <algorithm>
 #include <atomic>
 #include <cerrno>
 #include <chrono>
+#include <cmath>
 #include <csignal>
 #include <cstdlib>
 #include <filesystem>
@@ -137,7 +139,8 @@ int main() {
         g_trackerHz = (int)config::trackerHz; //the tracker thread reads the update rate from here
         //poses are read only when they will be drawn (not while stream hide is on: nothing is drawn then)
         g_skeletonOn = config::showSkeleton && config::showPlayers && config::espEnabled && !config::streamHide;
-        g_skeletonDist = (int)config::skeletonMaxDist;
+        g_skeletonDist = (int)std::ceil(std::min(config::skeletonMaxDist, config::maxPlayerDist));
+        g_showTeammates = config::showTeammates;
 
         //Where the game's picture is on screen (differs from the screen with gamescope / a stretched resolution)
         GameViewSettings gvs;
@@ -146,6 +149,17 @@ int main() {
         gvs.manualH = (int)config::gameRenderH;
         gvs.manualStretch = config::gameStretch;
         g_gameView = ComputeGameView(config::SCREEN_W, config::SCREEN_H, tracker.gamescopeInfo(), gvs);
+        { //How far from the middle DrawESP draws (the screen's corners, 60 px past them) at a FOV of 90 (tan 1): the tracker
+          //reads poses only inside that cone, whatever the picture's shape and the Calibration settings
+            FminimalViewInfo unit{};
+            unit.FOV = 90.0f;
+            const View u(unit, MakeProjection());
+            if (u.ok) {
+                const double W = config::SCREEN_W, H = config::SCREEN_H;
+                const double ax = (std::max(u.cx, W - u.cx) + 60) / (u.focal * u.sx), ay = (std::max(u.cy, H - u.cy) + 60) / (u.focal * u.sy);
+                if (std::isfinite(ax) && std::isfinite(ay)) g_viewSpread = std::hypot(ax, ay);
+            }
+        }
 
         const std::shared_ptr<const Snapshot> snap = tracker.latest();
         //The camera is read again right now: the markers follow the view exactly, not as it was a few milliseconds ago
