@@ -1,4 +1,4 @@
-//ReadScatter: many reads in one system call, with some of them failing in the middle.
+//ReadScatter: many reads in one system call, with some of them failing in the middle. Also ReadMemory<T>.
 #include <sys/mman.h>
 #include <unistd.h>
 #include <cstdio>
@@ -115,6 +115,15 @@ int main() {
         if (img != MAP_FAILED) munmap(img, sizeof h);
         if (fd >= 0) { close(fd); unlink(path); }
     }
+
+    //ReadMemory works for any plain type (these were never listed in memory.cpp), and a failed read gives zero
+    uint32_t w32; std::memcpy(&w32, m + 12, 4);
+    uint16_t w16; std::memcpy(&w16, m + 6, 2);
+    CHECK(ReadMemory<uint32_t>((uintptr_t)m + 12) == w32, "ReadMemory<uint32_t>");
+    CHECK(ReadMemory<uint16_t>((uintptr_t)m + 6) == w16, "ReadMemory<uint16_t>");
+    CHECK(ReadMemory<uint32_t>((uintptr_t)m + 4 * PG) == 0, "ReadMemory of an unreadable page gives 0");
+    const Vector3 bad = ReadMemory<Vector3>((uintptr_t)0x10);
+    CHECK(bad.x == 0 && bad.y == 0 && bad.z == 0, "ReadMemory<Vector3> of an unmapped address gives all zero");
 
     std::printf("%s\n", fails ? "SOME TESTS FAILED" : "ALL PASSED");
     return fails;

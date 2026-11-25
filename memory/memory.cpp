@@ -21,61 +21,6 @@ uint32_t ImageStamp = 0;
 
 #define debug false
 
-// Memory read/write function templates implementation
-template<typename T>
-T ReadMemory(pid_t pid, long address)
-#if !debug
-{
-    T buffer;
-    struct iovec local[1];
-    struct iovec remote[1];
-
-    local[0].iov_base = &buffer;
-    local[0].iov_len = sizeof(T);
-    remote[0].iov_base = (void*)address;
-    remote[0].iov_len = sizeof(T);
-
-    ssize_t nread = process_vm_readv(pid, local, 1, remote, 1, 0);
-    if (nread != sizeof(T))
-    {
-        // Silent failure - don't spam console
-        buffer = T{};
-    }
-
-    return buffer;
-}
-#else
-{
-    T buffer;
-    struct iovec local[1];
-    struct iovec remote[1];
-
-    local[0].iov_base = &buffer;
-    local[0].iov_len = sizeof(T);
-    remote[0].iov_base = (void*)address;
-    remote[0].iov_len = sizeof(T);
-
-    ssize_t nread = process_vm_readv(pid, local, 1, remote, 1, 0);
-    if (nread != sizeof(T))
-    {
-        std::cerr << "[ReadMemory] Failed to read " << sizeof(T)
-                  << " bytes at address 0x" << std::hex << address
-                  << " (pid " << pid << "). nread=" << nread << std::endl;
-        perror("[ReadMemory] process_vm_readv");
-        buffer = T{};
-    }
-
-    return buffer;
-}
-#endif
-
-// Implementation for GameData.h template
-template<typename T>
-T ReadMemory(uintptr_t address)
-{
-    return ReadMemory<T>(ProcessId, address);
-}
-
 void ReadMemoryBuffer(pid_t pid, long address, void* buffer, size_t size)
 {
 
@@ -183,43 +128,6 @@ std::string ReadString(pid_t pid, long address, size_t maxLength)
     buffer[maxLength - 1] = '\0';
     return std::string(buffer.data());
 }
-
-
-// Explicit template instantiations for common types
-template int ReadMemory<int>(pid_t pid, long address);
-template long ReadMemory<long>(pid_t pid, long address);
-template float ReadMemory<float>(pid_t pid, long address);
-template double ReadMemory<double>(pid_t pid, long address);
-template uintptr_t ReadMemory<uintptr_t>(pid_t pid, long address);
-
-
-// Explicit template instantiations for GameData.h template
-template int ReadMemory<int>(uintptr_t address);
-template long ReadMemory<long>(uintptr_t address);
-template float ReadMemory<float>(uintptr_t address);
-template double ReadMemory<double>(uintptr_t address);
-template uintptr_t ReadMemory<uintptr_t>(uintptr_t address);
-template Vector3 ReadMemory<Vector3>(uintptr_t address);
-template Matrix4x4 ReadMemory<Matrix4x4>(uintptr_t address);
-template FminimalViewInfo ReadMemory<FminimalViewInfo>(uintptr_t address);
-template uint8_t ReadMemory<uint8_t>(uintptr_t address);
-
-//For reading player list or bone list and stuff
-// template TArray<uintptr_t> ReadMemory<TArray<uintptr_t>>(uintptr_t address);
-// template TArray<FTransform> ReadMemory<TArray<FTransform>>(uintptr_t address);
-// //For Camera Stuff
-// template FCameraCacheEntry ReadMemory<FCameraCacheEntry>(uintptr_t address);
-// //For player location
-// template FVector ReadMemory<FVector>(uintptr_t address);
-// template FRotator ReadMemory<FRotator>(uintptr_t address);
-// template FQuat ReadMemory<FQuat>(uintptr_t address);
-// //For TRansform (bones, ship holes, etc.)
-// template FTransform ReadMemory<FTransform>(uintptr_t address);
-// template GUID ReadMemory<GUID>(uintptr_t address);
-// template RepMovement ReadMemory<RepMovement>(uintptr_t address);
-
-template char ReadMemory<char>(uintptr_t address);
-template bool ReadMemory<bool>(uintptr_t address);
 
 #include <cctype>
 #include <filesystem>
