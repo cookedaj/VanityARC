@@ -392,6 +392,32 @@ int main() {
         publishActors();
     }
 
+    //--- the draw loop's stale-data rule (main.cpp): old or invalid data must blank the markers, fresh data must not
+    {
+        const int64_t now = 1000000000000LL, ms = 1000000LL;
+        Snapshot s;
+        s.valid = true;
+        s.capturedNs = now - 100 * ms;
+        CHECK(snapshotAgeMs(s, now) == 100.0, "stale rule: a snapshot read 100 ms ago is 100 ms old (ns to ms)");
+        s.capturedNs = now;
+        CHECK(snapshotIsLive(s, snapshotAgeMs(s, now), true) && snapshotIsLive(s, snapshotAgeMs(s, now), false), "stale rule: fresh data is drawn, with or without the live camera");
+        s.capturedNs = now - 8 * ms;
+        CHECK(snapshotIsLive(s, snapshotAgeMs(s, now), true) && snapshotIsLive(s, snapshotAgeMs(s, now), false), "stale rule: data one tracker step (8 ms) old is drawn");
+        s.capturedNs = now - (int64_t)STALE_MS * ms;
+        CHECK(snapshotIsLive(s, snapshotAgeMs(s, now), true), "stale rule: exactly STALE_MS old is still drawn");
+        s.capturedNs = now - (int64_t)STALE_MS * ms - ms;
+        CHECK(!snapshotIsLive(s, snapshotAgeMs(s, now), true), "stale rule: past STALE_MS is hidden (a stuck tracker)");
+        s.capturedNs = now - (int64_t)NO_CAMERA_MS * ms;
+        CHECK(snapshotIsLive(s, snapshotAgeMs(s, now), false), "stale rule: without the live camera, exactly NO_CAMERA_MS old is drawn");
+        s.capturedNs = now - (int64_t)NO_CAMERA_MS * ms - ms;
+        CHECK(!snapshotIsLive(s, snapshotAgeMs(s, now), false) && snapshotIsLive(s, snapshotAgeMs(s, now), true), "stale rule: without the live camera, past NO_CAMERA_MS is hidden");
+        s.capturedNs = 0;
+        CHECK(snapshotAgeMs(s, now) > STALE_MS && !snapshotIsLive(s, snapshotAgeMs(s, now), true), "stale rule: a snapshot never read (time 0) is hidden");
+        s.capturedNs = now; s.valid = false;
+        CHECK(!snapshotIsLive(s, snapshotAgeMs(s, now), true), "stale rule: an invalid snapshot (not in a raid) is hidden even when fresh");
+        CHECK(!snapshotIsLive(Snapshot{}, snapshotAgeMs(Snapshot{}, now), true), "stale rule: the empty start-up snapshot is hidden");
+    }
+
     //--- the tracker thread
     {
         Tracker tr;
