@@ -9,6 +9,12 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
 endif()
 
+set(IMGUI_DIR "${CMAKE_SOURCE_DIR}/imgui")
+
+# Tests only, without the overlay program, so no Wayland, EGL, GLFW or OpenGL packages are needed:
+#   cmake -B cmake-build-tests -DKWINHELPER_TESTS_ONLY=ON
+option(KWINHELPER_TESTS_ONLY "Build only the headless tests (no graphics packages needed)" OFF)
+if(NOT KWINHELPER_TESTS_ONLY)
 find_package(glfw3 REQUIRED)
 find_package(OpenGL REQUIRED)
 
@@ -28,8 +34,6 @@ add_custom_command(OUTPUT ${GEN_DIR}/wlr-layer-shell-client.c
         DEPENDS ${LAYER_XML})
 
 # --- 1. DEFINE SOURCES FIRST ---
-set(IMGUI_DIR "${CMAKE_SOURCE_DIR}/imgui")
-
 set(IMGUI_SOURCES
         ${IMGUI_DIR}/imgui.cpp
         ${IMGUI_DIR}/imgui_draw.cpp
@@ -97,15 +101,19 @@ if(CMAKE_BUILD_TYPE STREQUAL "Release")
     target_compile_options(kwin-helper PRIVATE -ffunction-sections -fdata-sections)
     target_link_options(kwin-helper PRIVATE -s -Wl,--gc-sections)
 endif()
+endif() # NOT KWINHELPER_TESTS_ONLY
 # --- Headless tests (they need no game and no display): cmake -B cmake-build-tests -DKWINHELPER_TESTS=ON
 option(KWINHELPER_TESTS "Build the headless tests" OFF)
-if(KWINHELPER_TESTS)
+if(KWINHELPER_TESTS OR KWINHELPER_TESTS_ONLY)
     enable_testing()
+    set(TEST_HOME ${CMAKE_BINARY_DIR}/test-home) #every test runs with this HOME, never the real ~/.config/kwin-helper
+    file(MAKE_DIRECTORY ${TEST_HOME})
     function(kwinhelper_test name)
         add_executable(${name} tests/${name}.cpp ${ARGN})
         target_include_directories(${name} PRIVATE ${CMAKE_SOURCE_DIR} ${IMGUI_DIR} ${IMGUI_DIR}/backends)
         target_compile_definitions(${name} PRIVATE KWINHELPER_PROBES) #the tests always exercise the probes
         add_test(NAME ${name} COMMAND ${name})
+        set_tests_properties(${name} PROPERTIES ENVIRONMENT "HOME=${TEST_HOME}")
     endfunction()
     kwinhelper_test(key_test)
     kwinhelper_test(scatter_test memory/memory.cpp)
@@ -124,11 +132,7 @@ if(KWINHELPER_TESTS)
     kwinhelper_test(marks_test)
     kwinhelper_test(fuzz_test utils/names.cpp utils/labels.cpp utils/labeler.cpp memory/memory.cpp)
     kwinhelper_test(menu_test utils/labels.cpp utils/itemvalues.cpp
-            ${IMGUI_DIR}/imgui.cpp ${IMGUI_DIR}/imgui_draw.cpp ${IMGUI_DIR}/imgui_tables.cpp ${IMGUI_DIR}/imgui_widgets.cpp
-            ${IMGUI_DIR}/backends/imgui_impl_glfw.cpp ${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp)
-    target_link_libraries(menu_test PRIVATE glfw OpenGL::GL)
+            ${IMGUI_DIR}/imgui.cpp ${IMGUI_DIR}/imgui_draw.cpp ${IMGUI_DIR}/imgui_tables.cpp ${IMGUI_DIR}/imgui_widgets.cpp)
     kwinhelper_test(esp_test utils/labels.cpp utils/itemvalues.cpp
-            ${IMGUI_DIR}/imgui.cpp ${IMGUI_DIR}/imgui_draw.cpp ${IMGUI_DIR}/imgui_tables.cpp ${IMGUI_DIR}/imgui_widgets.cpp
-            ${IMGUI_DIR}/backends/imgui_impl_glfw.cpp ${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp)
-    target_link_libraries(esp_test PRIVATE glfw OpenGL::GL)
+            ${IMGUI_DIR}/imgui.cpp ${IMGUI_DIR}/imgui_draw.cpp ${IMGUI_DIR}/imgui_tables.cpp ${IMGUI_DIR}/imgui_widgets.cpp)
 endif()
