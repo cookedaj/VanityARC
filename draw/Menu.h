@@ -86,6 +86,26 @@ inline void MenuFeedKeys() {
     }
 }
 
+//A button for something that cannot be undone. The first click arms it: "Cancel" takes its place (same width) and
+//the real action appears to its right. The action only counts 0.6 s after arming, so a double-click never reaches
+//it, and the offer goes away by itself after 6 s. armedAt: a static the caller keeps, below 0 = not armed.
+inline bool ConfirmButton(const char* label, const char* confirm, double* armedAt) {
+    const double now = ImGui::GetTime();
+    if (*armedAt >= 0 && now - *armedAt > 6.0) *armedAt = -1;
+    ImGui::PushID(label);
+    bool yes = false;
+    if (*armedAt < 0) {
+        if (ImGui::Button(label)) *armedAt = now;
+    } else {
+        const float w = ImGui::CalcTextSize(label).x + ImGui::GetStyle().FramePadding.x * 2;
+        if (ImGui::Button("Cancel", ImVec2(w, 0))) *armedAt = -1;
+        ImGui::SameLine();
+        if (ImGui::Button(confirm) && *armedAt >= 0 && now - *armedAt >= 0.6) { yes = true; *armedAt = -1; }
+    }
+    ImGui::PopID();
+    return yes;
+}
+
 //--- the pages
 inline void PageEsp() {
     using namespace ui;
@@ -138,7 +158,8 @@ inline void PagePlayers() {
     SliderD("List rows", &config::listRows, 3, 16, "%.0f");
     Section("TEAMMATES");
     Switch("Hide players with unknown team", &config::hideUnknownTeams);
-    if (ImGui::Button("Clear teammate marks")) { marks::clear(); marks::save(); Toast("Teammate marks cleared"); }
+    static double clearArmedAt = -1;
+    if (ConfirmButton("Clear teammate marks", "Yes, clear all marks", &clearArmedAt)) { marks::clear(); marks::save(); Toast("Teammate marks cleared"); }
     ImGui::SameLine();
     Note("F6 marks the player at your crosshair, F7 clears all.");
     DrawSavedMarks();
@@ -210,12 +231,8 @@ inline void PageSettings() {
     Note("Stream hide draws nothing, so recordings and streams show no overlay. F8 always works, even with Hotkeys off. While it is on the menu cannot be opened: press F8 first.");
     Section("FILES");
     Note("Settings, names, offsets and marks are in ~/.config/kwin-helper/");
-    static bool armed = false;
-    if (ImGui::Button(armed ? "Click again to reset everything" : "Reset all settings")) {
-        if (armed) { settings::resetAll(); armed = false; Toast("Settings reset"); }
-        else armed = true;
-    }
-    if (armed) { ImGui::SameLine(); if (ImGui::Button("Cancel")) armed = false; }
+    static double resetArmedAt = -1;
+    if (ConfirmButton("Reset all settings", "Yes, reset everything", &resetArmedAt)) { settings::resetAll(); Toast("Settings reset"); }
     Section("QUIT");
     if (ImGui::Button("Quit overlay")) g_MenuQuit = true;
 }
