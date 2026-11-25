@@ -7,7 +7,7 @@ https://youtu.be/tiK0ihPw6m8
 3) Steam MUST be installed under Flatpak, or else the game can see your process. Using Flatpak provides PID isolation and hides the process. To check it, run `bash check-isolation.sh` with the game open (best: in a raid), and again after a game or Steam update. It only reads and needs no sudo.
 4) No KDE window rule is needed: the overlay is a Wayland layer-shell surface and stays above the game by itself (see step 11 if it cannot).
 5) Download CLion from JetBrains (the non-commercial version is free).
-6) Install dependencies: `sudo apt install cmake g++ libglfw3-dev libgl-dev`
+6) Install dependencies: `sudo apt install cmake g++ pkg-config libglfw3-dev libgl-dev libwayland-dev libwayland-bin libegl-dev`
 7) Download the code (which you have presumably done already) and unzip it.
 8) Build:
 ```
