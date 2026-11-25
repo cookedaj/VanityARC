@@ -319,7 +319,7 @@ int main() {
             DrawLabelCentered(x, y, "OVERLAY WINDOW PROBLEM", big, COLOR::white, true);
             y += big / 2 + 8 + bh / 2;
             DrawLabelCentered(x, y, body.c_str(), ls, COLOR::white, true);
-            below = y + bh / 2 + 10;
+            below = y + bh / 2 + 10 + ls / 2;
         }
         DrawToast(below);
 
