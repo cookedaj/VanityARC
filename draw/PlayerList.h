@@ -205,7 +205,7 @@ inline void DrawInspectWindows() {
                 if (rows) for (const ItemRow& r : *rows) {
                     std::string cat = r.category;
                     for (char& c : cat) c = (char)std::tolower((unsigned char)c);
-                    if (cat == "mod" || cat == "mods") ampLvl = std::max(ampLvl, amp::moduleLevel(r.name));
+                    if (cat == "mod" || cat == "mods") ampLvl = std::max({ampLvl, amp::moduleLevel(r.key), amp::moduleLevel(r.name)});
                 }
                 std::vector<std::string> guns;
                 size_t start = 0;
@@ -230,21 +230,28 @@ inline void DrawInspectWindows() {
                 }
                 ui::Section("CARRYING");
                 if (rows && !rows->empty()) {
+                    //values.txt may name the internal key or the display name
+                    auto price = [](const ItemRow& r) { long v = itemvalues::valueOf(r.key); return v >= 0 ? v : itemvalues::valueOf(r.name); };
+                    const bool havePrices = itemvalues::count() > 0;
                     long total = 0;
                     int unpriced = 0;
                     for (const ItemRow& r : *rows) {
-                        long v = itemvalues::valueOf(r.name);
+                        long v = price(r);
                         if (v < 0) unpriced++;
                         else total += v * r.count;
                     }
                     char tb[120];
-                    if (unpriced) std::snprintf(tb, sizeof tb, "Value %ld  (%d item%s with no price)", total, unpriced, unpriced == 1 ? "" : "s");
-                    else std::snprintf(tb, sizeof tb, "Value %ld", total);
-                    ImGui::TextUnformatted(tb);
+                    if (!havePrices) ui::Note("No prices yet: add lines like 'Snap Hook | 14000' to ~/.config/kwin-helper/values.txt");
+                    else {
+                        if (unpriced) std::snprintf(tb, sizeof tb, "Value at least %ld  (%d with no price)", total, unpriced);
+                        else std::snprintf(tb, sizeof tb, "Value %ld", total);
+                        ImGui::TextUnformatted(tb);
+                    }
                     std::string lastCat;
                     for (const ItemRow& r : *rows) {
                         if (r.category != lastCat) { lastCat = r.category; ImGui::TextColored(ImColor(ui::GREY), "%s", r.category.c_str()); }
-                        if (r.count > 1) ImGui::Text("  %s  x%d", r.name.c_str(), r.count); else ImGui::Text("  %s", r.name.c_str());
+                        const char* np = havePrices && price(r) < 0 ? "  (no price)" : "";
+                        if (r.count > 1) ImGui::Text("  %s  x%d%s", r.name.c_str(), r.count, np); else ImGui::Text("  %s%s", r.name.c_str(), np);
                     }
                 } else if (live::invArrays.empty()) {
                     ui::Note("The inventory lists are not set up yet (see offsets.txt in the config folder).");

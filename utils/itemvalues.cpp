@@ -47,6 +47,8 @@ long valueOf(const std::string& name) {
     return it == table().end() ? -1 : it->second;
 }
 
+size_t count() { return table().size(); }
+
 void parse(const std::string& text) {
     table().clear();
     std::istringstream in(text);

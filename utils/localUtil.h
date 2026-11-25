@@ -30,6 +30,7 @@ enum Object {
 //One kind of item in a player's inventory (the inventory window)
 struct ItemRow {
     std::string name;      //"Ferro", "Bandage"
+    std::string key;       //internal name ("Bandage_01"): rows merge on it, prices look it up before the name
     std::string category;  //which list it came from (offsets.txt)
     int count = 1;
 };
