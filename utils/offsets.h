@@ -6,6 +6,7 @@
 #define KWINHELPER_OFFSETS_H
 
 #include <cstdint>
+#include <cstdio>
 #include <cstdlib>
 #include <fstream>
 #include <sstream>
@@ -49,9 +50,14 @@ inline void load(const std::string& dir = "") {
         auto num = [&](int64_t& out) {
             std::string s;
             if (!(in >> s)) return false;
+            const size_t sign = s[0] == '-' || s[0] == '+';
+            const bool hex = s.compare(sign, 2, "0x") == 0 || s.compare(sign, 2, "0X") == 0;
             char* end = nullptr;
-            long long v = std::strtoll(s.c_str(), &end, 0);
-            if (end == s.c_str()) return false;
+            long long v = std::strtoll(s.c_str(), &end, hex ? 16 : 10); //never octal: "0710" is 710
+            if (end == s.c_str() || *end != '\0') { //the whole token must be the number ("0x718zz", "12abc" are refused)
+                std::printf("[!] offsets.txt: ignored \"%s\" (\"%s\" is not a decimal or 0x hex number)\n", line.c_str(), s.c_str());
+                return false;
+            }
             out = v;
             return true;
         };
