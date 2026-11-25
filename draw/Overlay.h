@@ -159,3 +159,28 @@ inline void DrawDiamondFilled(float x, float y, float r, ImU32 color) {
     dl->AddConvexPolyFilled(p, 4, Fade(color));
     dl->AddPolyline(p, 4, Fade(IM_COL32(0, 0, 0, 200)), ImDrawFlags_Closed, 1.5f);
 }
+
+//Marker shapes, so each kind has its own silhouette and colour is never the only difference
+inline void DrawSquareFilled(float x, float y, float r, ImU32 color) {
+    ImDrawList* dl = ImGui::GetBackgroundDrawList();
+    dl->AddRectFilled(ImVec2(x - r, y - r), ImVec2(x + r, y + r), Fade(color));
+    dl->AddRect(ImVec2(x - r, y - r), ImVec2(x + r, y + r), Fade(IM_COL32(0, 0, 0, 200)), 0.0f, 0, 1.5f);
+}
+
+//Point up, flat base
+inline void DrawTriangleFilled(float x, float y, float r, ImU32 color) {
+    ImDrawList* dl = ImGui::GetBackgroundDrawList();
+    const ImVec2 a(x, y - r), b(x + r, y + r), c(x - r, y + r);
+    dl->AddTriangleFilled(a, b, c, Fade(color));
+    dl->AddTriangle(a, b, c, Fade(IM_COL32(0, 0, 0, 200)), 1.5f);
+}
+
+//An X, thick enough to read as a solid mark, with a dark edge
+inline void DrawCross(float x, float y, float r, ImU32 color) {
+    ImDrawList* dl = ImGui::GetBackgroundDrawList();
+    const float t = std::max(2.0f, r * 0.5f), e = r + 1.0f; //the dark lines run 1 px further so the ends are edged too
+    dl->AddLine(ImVec2(x - e, y - e), ImVec2(x + e, y + e), Fade(IM_COL32(0, 0, 0, 200)), t + 2.0f);
+    dl->AddLine(ImVec2(x - e, y + e), ImVec2(x + e, y - e), Fade(IM_COL32(0, 0, 0, 200)), t + 2.0f);
+    dl->AddLine(ImVec2(x - r, y - r), ImVec2(x + r, y + r), Fade(color), t);
+    dl->AddLine(ImVec2(x - r, y + r), ImVec2(x + r, y - r), Fade(color), t);
+}

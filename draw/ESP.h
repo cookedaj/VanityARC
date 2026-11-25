@@ -309,7 +309,7 @@ inline void DrawESP(const std::vector<RenderEntity>& entities, FminimalViewInfo 
             if (ent.isDead) {
                 if (!config::showDeadPlayers || !front || !onScreen(sp.x, sp.y)) continue;
                 const double rad = getProportionalRadius(dist, config::maxPlayerDist);
-                DrawCircleOutlined((float)sp.x, (float)sp.y, (float)rad, COLOR::deadPlayer());
+                DrawCross((float)sp.x, (float)sp.y, (float)rad, COLOR::deadPlayer());
                 snprintf(buf, sizeof buf, "%.0fm", dist);
                 QueueMarkerLabel((float)sp.x, (float)sp.y, (float)rad, buf, ls2, 2, dist);
                 if (config::showPlayerNames) QueueLabel((float)sp.x, (float)(sp.y - rad - 10), ent.label, ls, 1, dist);
@@ -355,7 +355,7 @@ inline void DrawESP(const std::vector<RenderEntity>& entities, FminimalViewInfo 
             double radius;
             int prio;
             bool nameOn;
-            bool diamond = false;
+            void (*shape)(float, float, float, ImU32); //each kind its own shape, in colour and in monochrome
             if (ent.type == Object::ARC) {
                 if (!config::showArc || (ent.isDead && !config::showDeadArc)) continue;
                 if (ent.isTurret && !config::showTurrets) continue;
@@ -364,25 +364,26 @@ inline void DrawESP(const std::vector<RenderEntity>& entities, FminimalViewInfo 
                 radius = getProportionalRadius(dist, config::maxArcDist);
                 prio = 1;
                 nameOn = config::showArcNames;
-                diamond = COLOR::mono(); //in white and grey a diamond tells ARC from loot
+                shape = DrawDiamondFilled;
             } else if (ent.type == Object::SEARCH) {
                 if (!config::showContainers || dist > config::maxLootDist) continue;
                 color = COLOR::container();
                 radius = getProportionalRadius(dist, config::maxLootDist);
                 prio = 3;
                 nameOn = config::showContainerNames && dist <= config::nameMaxLootDist;
+                shape = DrawSquareFilled;
             } else if (ent.type == Object::PICKUP) {
                 if (!config::showPickups || dist > config::maxLootDist) continue;
                 color = COLOR::pickup();
                 radius = getProportionalRadius(dist, config::maxLootDist);
                 prio = 2;
                 nameOn = config::showItemNames && dist <= config::nameMaxLootDist;
+                shape = DrawTriangleFilled;
             } else {
                 continue;
             }
 
-            if (diamond) DrawDiamondFilled((float)sp.x, (float)sp.y, (float)radius, color);
-            else DrawCircleOutlined((float)sp.x, (float)sp.y, (float)radius, color);
+            shape((float)sp.x, (float)sp.y, (float)radius, color);
             std::string text;
             if (nameOn && !ent.label.empty()) text = ent.label + "  ";
             snprintf(buf, sizeof buf, "%.0fm", dist);
@@ -452,12 +453,10 @@ inline void DrawRadar(const std::vector<RenderEntity>& entities, FminimalViewInf
             screenY = cy + dy * clampScale;
         }
 
-        if (ent.type == Object::ARC) {
-            if (COLOR::mono()) DrawDiamondFilled(screenX, screenY, 4, COLOR::arc(false));
-            else DrawCircleFilled(screenX, screenY, 3, COLOR::arc(false));
-        } else {
-            DrawCircleFilled(screenX, screenY, 3, IsTeammate(ent, localPlayerTeam) ? COLOR::mate() : COLOR::enemy());
-        }
+        //ARC a diamond, enemy a filled dot, teammate a hollow ring: told apart by shape, not only by colour
+        if (ent.type == Object::ARC) DrawDiamondFilled(screenX, screenY, 5, COLOR::arc(false));
+        else if (IsTeammate(ent, localPlayerTeam)) DrawCircleRing(screenX, screenY, 4.5f, COLOR::mate(), 2.0f);
+        else DrawCircleFilled(screenX, screenY, 5, COLOR::enemy());
     }
 
     DrawArrow(cx, cy - 7, 0, -1, 10, COLOR::white); //you, looking up
