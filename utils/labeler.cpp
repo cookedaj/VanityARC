@@ -1,5 +1,6 @@
 #include "labeler.h"
 
+#include <algorithm>
 #include <cctype>
 #include <chrono>
 #include <cstdio>
@@ -7,6 +8,7 @@
 #include <vector>
 
 #include "labels.h"
+#include "log.h"
 #include "names.h"
 #include "offsets.h"
 
@@ -24,11 +26,14 @@ constexpr int PICKUP_ITEM_ASSET = 0x518;      //BP_PickupBase_C -> DA_Item_<thin
 constexpr int ARC_TYPE_ASSET = 0x11C0;        //EnemyTypeDataAsset
 
 constexpr double CLASS_TTL = 5.0, PLAYER_TTL = 3.0, GUNS_TTL = 1.5, RETRY_TTL = 1.0, ASSET_RECHECK = 2.0, FORGET_AFTER = 20.0;
+constexpr double PICKUP_RETRY_MAX = 30.0; //a ground item whose asset cannot be read is tried after 1 s, 2 s, 4 s ... then every 30 s
 
 struct Info {
     double seen = 0, classT = -1e9, labelT = -1e9, gunsT = -1e9, assetT = -1e9;
     uint32_t nameIndex = 0;
     uintptr_t assetPtr = 0; //the asset the key came from; a different pointer later means the actor is a new one
+    int assetOff = PICKUP_ITEM_ASSET; //pickups: the field assetPtr was read from
+    double retry = 0;   //pickups: wait before the next read after a failed one (0 = none failed yet)
     std::string cls;    //actor name, e.g. BP_PickupBase_C
     std::string key;    //raw key of what it is (asset name or class name), once known
     bool resolved = false;
@@ -39,6 +44,7 @@ struct Info {
 };
 
 std::unordered_map<uintptr_t, Info> g_cache;
+int g_pickupOff = PICKUP_ITEM_ASSET; //where the fallback last found a ground item's asset (a patch moved the field)
 
 double nowSec() {
     using namespace std::chrono;
@@ -66,6 +72,7 @@ void refreshClass(Info& in, uintptr_t actor, double t) {
         in.label.clear();
         in.sub.clear();
         in.assetPtr = 0;
+        in.retry = 0;
         in.labelT = in.gunsT = in.assetT = -1e9;
     }
     in.nameIndex = d.index;
@@ -168,22 +175,55 @@ void fillContainer(Info& in) {
     }
 }
 
+//The DA_Item_ a ground item points at, its pointer (a) and field (off). Tries the usual field, then the one the
+//fallback last found, then the first item asset in actor+0x400..0x700 (read in one go). "" when there is none.
+std::string findItemAsset(uintptr_t actor, uintptr_t& a, int& off) {
+    std::string n;
+    for (int o : {PICKUP_ITEM_ASSET, g_pickupOff}) {
+        a = ReadMemory<uintptr_t>(actor + o);
+        n = assetName(a, "DA_Item_");
+        if (!n.empty()) { off = o; return n; }
+        if (o == g_pickupOff) break; //nothing learned yet: one field to try
+    }
+    //offset moved in a patch. ponytail: one isObj read per pointer-looking word; ReadScatter the vtables if this gets hot
+    uintptr_t w[(0x700 - 0x400) / 8];
+    ReadMemoryBuffer(actor + 0x400, w, sizeof w);
+    for (int i = 0; i < (int)(sizeof w / sizeof *w); i++) {
+        if (!isValidPtr(w[i])) continue; //nulls and small numbers cost no read
+        n = assetName(w[i], "DA_Item_");
+        if (n.empty()) continue;
+        a = w[i];
+        off = 0x400 + i * 8;
+        if (off != g_pickupOff) {
+            char msg[112];
+            std::snprintf(msg, sizeof msg, "[!] Ground items: the item asset is at actor+0x%X, not +0x%X (game update?)", off, PICKUP_ITEM_ASSET);
+            logThrottled(msg);
+            g_pickupOff = off; //every pickup shares one layout: try this field before scanning next time
+        }
+        return n;
+    }
+    return "";
+}
+
 void fillPickup(Info& in, uintptr_t actor, double t) {
-    if (t - in.assetT >= (in.resolved ? ASSET_RECHECK : RETRY_TTL)) {
+    if (t - in.assetT >= (in.resolved ? std::max(ASSET_RECHECK, in.retry) : in.retry)) {
         in.assetT = t;
-        uintptr_t a = ReadMemory<uintptr_t>(actor + PICKUP_ITEM_ASSET);
-        if (!in.resolved || a != in.assetPtr) {
-            std::string n = assetName(a, "DA_Item_");
-            if (n.empty()) { //offset moved in a patch: take the first item asset the actor points at
-                for (int off = 0x400; off < 0x700 && n.empty(); off += 8) {
-                    a = ReadMemory<uintptr_t>(actor + off);
-                    n = assetName(a, "DA_Item_");
-                }
+        if (in.resolved && ReadMemory<uintptr_t>(actor + in.assetOff) == in.assetPtr) {
+            in.retry = 0; //still the same item
+        } else {
+            uintptr_t a = 0;
+            int off = PICKUP_ITEM_ASSET;
+            std::string n = findItemAsset(actor, a, off);
+            if (!n.empty()) {
+                in.assetPtr = a;
+                in.assetOff = off;
+                in.key = labels::itemToken(n);
+                in.resolved = true;
+                in.retry = 0;
+                in.label.clear();
+            } else { //not readable (yet): back off; a failed recheck keeps the label it had
+                in.retry = in.retry > 0 ? std::min(in.retry * 2, PICKUP_RETRY_MAX) : RETRY_TTL;
             }
-            in.assetPtr = n.empty() ? 0 : a;
-            in.key = n.empty() ? std::string() : labels::itemToken(n);
-            in.resolved = !n.empty();
-            in.label.clear();
         }
     }
     if (in.resolved && (in.ver != labels::version() || in.label.empty())) {
@@ -242,7 +282,10 @@ std::vector<ItemRow> inventoryOf(uintptr_t pawn) {
     return out;
 }
 
-void reset() { g_cache.clear(); }
+void reset() {
+    g_cache.clear();
+    g_pickupOff = PICKUP_ITEM_ASSET;
+}
 
 void endTick() {
     static double last = 0;
