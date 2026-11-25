@@ -244,8 +244,8 @@ inline void DrawEdgeArrows(const View& v, std::vector<std::pair<const RenderEnti
 
 //The stick figure: dark outline first so it shows on any background, then the colour. A line is drawn only when both of
 //its ends are in front of the camera.
-inline void DrawSkeleton(const View& v, const skeleton::Pose& pose, ImU32 color, float thickness, bool live = true) {
-    if (!live) color = (color & ~IM_COL32_A_MASK) | (110u << IM_COL32_A_SHIFT); //an old pose is drawn fainter
+inline void DrawSkeleton(const View& v, const skeleton::Pose& pose, ImU32 color, float thickness) {
+    //color already carries the hidden-player dimming (dimHidden / hiddenAlpha): no second fade here
     Vector2 s[skeleton::JOINT_COUNT];
     bool ok[skeleton::JOINT_COUNT];
     for (int k = 0; k < skeleton::JOINT_COUNT; k++) ok[k] = v.project(pose.j[k], s[k]) && std::isfinite(s[k].x + s[k].y);
@@ -338,7 +338,7 @@ inline void DrawESP(const std::vector<RenderEntity>& entities, FminimalViewInfo 
             else if (style == 2) DrawSidesBox(x0, y0, w, h, color, th);
             else DrawCornerBox(x0, y0, w, h, color, th);
 
-            if (config::showSkeleton && ent.pose && dist <= config::skeletonMaxDist) DrawSkeleton(v, *ent.pose, color, th, ent.poseLive);
+            if (config::showSkeleton && ent.pose && dist <= config::skeletonMaxDist) DrawSkeleton(v, *ent.pose, color, th);
 
             if (config::showBars) DrawPlayerBars(x0, y0, w, h, ent); //health, and the shield next to it
 
