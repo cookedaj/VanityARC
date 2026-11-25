@@ -522,6 +522,9 @@ int main() {
         publishActors();
         for (int i = 0; i < 12; i++) look();
         CHECK(std::filesystem::exists(repFile), "self-check: a raid gets a report even before you are in your pawn");
+        std::filesystem::remove(repFile);
+        for (int i = 0; i < 12; i++) look();
+        CHECK(!std::filesystem::exists(repFile), "self-check: still not in your pawn, the guess is not written again and again");
         put<u64>(me + off::CONTROLLER, g_chain1); //now you are in it
         for (int i = 0; i < 3; i++) {
             put<float>(meMesh + off::RENDER_TIME + 4, 102.0f + i);

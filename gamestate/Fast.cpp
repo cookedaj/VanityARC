@@ -626,13 +626,16 @@ void GameState::selfCheckIfAsked(const FminimalViewInfo& vm) {
     const ptr mesh = ReadMemory<ptr>(meA + off::MESH);
     float rt[2] = {0, 0}; //LastRenderTime, LastRenderTimeOnScreen
     if (isValidPtr(mesh)) ReadMemoryBuffer(mesh + off::RENDER_TIME, rt, sizeof rt);
+    const bool raid = count >= RAID_ACTORS;
     if (self_.stage == 1) {
+        //After a raid report from a guess: write again only with you in your pawn in a raid (else it repeats all raid)
+        if (self_.guessed && !(raid && byController)) { self_.stage = 3; return; }
         if (!byController && ++self_.looks < 10) return; //not spawned yet: wait up to 10 s for the pawn your PlayerController controls
         if (meA) { self_.stage = 2; self_.me = meA; self_.rt = rt[1]; return; } //the report comes at the next look, 1 s later
     }
-    const bool raid = count >= RAID_ACTORS;
     //final only for a raid with you in your pawn; a menu report, or one before you spawned, is run again
     self_.stage = raid && byController ? 0 : 3;
+    self_.guessed = self_.guessed || (raid && !byController);
 
     constexpr int FAIL = 0, PASS = 1, SKIP = 2;
     static const char* const word[3] = {"FAIL", "PASS", "SKIP"};

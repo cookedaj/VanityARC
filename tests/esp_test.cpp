@@ -265,6 +265,24 @@ int main() {
         CHECK(verts(0, true) > two && verts(1, true) > hpOnly, "bar numbers add text beside the bars");
         sh[0].shield = 0;
         CHECK(verts(2, false) < one && verts(0, false) < two, "a used-up shield: nothing of it is drawn");
+        //a far player (box a few px tall): the name goes above the numbers, not over them
+        std::vector<RenderEntity> farOne = {ent(Object::PLAYER, 30000, 200, 0)};
+        farOne[0].label = "Someone"; farOne[0].hasShield = true; farOne[0].shield = 30; farOne[0].shieldMax = 40;
+        config::barStyle = 0; config::barNumbers = false;
+        draw([&] { DrawESP(farOne, cam, 3); });
+        const float plainTop = g_minY;
+        config::barNumbers = true;
+        draw([&] { DrawESP(farOne, cam, 3); });
+        CHECK(g_minY < plainTop - config::labelSize / 2, "bar numbers on a far player: the name moves up, clear of them");
+        //at the screen's edges the numbers stay readable
+        LabelRect mid, edge, high;
+        draw([&] {
+            DrawPlayerBars(1000, 500, 40, 100, sh[0], 3, &mid);
+            DrawPlayerBars((float)config::SCREEN_W - 50, 500, 40, 100, sh[0], 3, &edge);
+            DrawPlayerBars(1000, 0, 40, 8, sh[0], 3, &high);
+        });
+        CHECK(mid.x0 > 1040 && edge.x1 < config::SCREEN_W - 50 && high.y0 >= 0,
+              "bar numbers: right of the bars, left of the box at the screen's right edge, never above the screen");
         config::barStyle = 0; config::barNumbers = false;
         config::boxStyle = 0; config::showSkeleton = true; config::showOffscreen = true;
     }
