@@ -15,6 +15,7 @@
 namespace {
 using clk = std::chrono::steady_clock;
 constexpr int IDLE_MS = 250;      //main menu / loading: look again a few times a second
+constexpr int KEEP_MS = 250;      //a failed step this soon after a good one is a hiccup: the good snapshot stays up
 constexpr int NO_GAME_MS = 200;
 thread_local std::mt19937 jitterRng{std::random_device{}()}; //uneven step times: a fixed rhythm is easy to spot
 
@@ -83,6 +84,7 @@ void Tracker::run() {
     ProcessId = fixedPid_;
     auto lastFind = clk::now() - std::chrono::seconds(10);
     auto lastData = clk::now();
+    auto lastValid = clk::now() - std::chrono::seconds(10);
     bool announced = false;
     uint64_t seq = 0;
     auto lastGamescope = clk::now() - std::chrono::seconds(10);
@@ -143,7 +145,12 @@ void Tracker::run() {
 
         gsRet r = gs.step();
         if (!r.entities.empty()) lastData = t0;
-        cam_ = r.valid ? gs.cameraActor() : 0;
+        //A failed step soon after a good one is a hiccup (a page being remapped, a partial read): the good snapshot and
+        //the camera stay (main.cpp ages them out) and the next step comes at the normal rate. Only a failure that lasts
+        //is the main menu or a loading screen.
+        const bool hiccup = !r.valid && t0 - lastValid < std::chrono::milliseconds(KEEP_MS);
+        if (r.valid) lastValid = t0;
+        if (!hiccup) cam_ = r.valid ? gs.cameraActor() : 0;
 
         auto s = std::make_shared<Snapshot>();
         s->entities = std::move(r.entities);
@@ -154,7 +161,7 @@ void Tracker::run() {
         s->seq = ++seq;
         s->capturedNs = std::chrono::duration_cast<std::chrono::nanoseconds>(clk::now().time_since_epoch()).count();
         s->inventories = inventories;
-        publish(std::move(s));
+        if (!hiccup) publish(std::move(s));
 
         const auto t1 = clk::now();
         rateCount++;
@@ -170,7 +177,7 @@ void Tracker::run() {
         }
 
         const int spent = (int)std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count();
-        if (!r.valid) sleepFor(IDLE_MS);
+        if (!r.valid && !hiccup) sleepFor(IDLE_MS);
         else {
             const int stepMs = std::max(4, 1000 / std::max(30, std::min(240, g_trackerHz.load(std::memory_order_relaxed))));
             const int jitterMs = std::uniform_int_distribution<int>(-2, 2)(jitterRng);
