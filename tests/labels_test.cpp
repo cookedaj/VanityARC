@@ -204,7 +204,7 @@ int main() {
         {Cat::Item, "DA_Item_Salvage_BronzeMaskFragment_01", "Mask Fragment"},
         {Cat::Item, "DA_Item_Salvage_MajolicaTazza_01", "Fancy Plate"},
         {Cat::Item, "DA_Item_Salvage_Tarragon_Part", "Bully Fragmenter"},
-        {Cat::Item, "DA_Item_Salvage_Meerkat_Part", "Skulker Targeter"},
+        {Cat::Item, "DA_Item_Salvage_Meerkat_Part", "Salvage Meerkat Part"},  //not sure which Skulker part: cleaned name
         {Cat::Item, "DA_Item_Salvage_Meerkat_Part_Turret", "Skulker Targeter"},
         {Cat::Item, "DA_Item_Salvage_Trinket_BentClothesHanger", "Bent Clothes Hanger"},
         {Cat::Item, "DA_Item_Salvage_Trinket_BlownFuses", "Blown Fuses"},
@@ -257,7 +257,7 @@ int main() {
         {Cat::Item, "DA_Item_MetalDetector_02", "Mountaineer's Detector"},
         {Cat::Item, "DA_Item_Throwable_TetherGrenade", "Yank Grenade"},
         {Cat::Item, "DA_Item_BasicCamera", "Basic Camera"},
-        {Cat::Item, "DA_Item_Camera", "Advanced Camera"},
+        {Cat::Item, "DA_Item_Camera", "Camera"},  //not sure which camera: cleaned name
         {Cat::Item, "DA_Item_Salvage_Corrupted_ARC_Part_01", "Glitched ARC Power Converter"},
         {Cat::Item, "DA_Item_Salvage_Corrupted_ARC_Part_02", "Glitched ARC Transmitter"},
         {Cat::Item, "DA_Item_Salvage_Corrupted_ARC_Part_03", "Glitched ARC Phased Array"},

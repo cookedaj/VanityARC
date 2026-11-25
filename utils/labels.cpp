@@ -109,7 +109,7 @@ const Rule ARC_NAMES[] = {
 };
 
 //Containers: the first rule whose key appears inside the name wins, so specific ones come first
-//Names from the game's text where it has one, else the ARC Raiders wiki (November 2026). The game names no furniture:
+//Names from the game's text where it has one, else the ARC Raiders wiki (November 2026). Furniture has game names only as Outpost pieces, so
 //Residential Closet, Terminal, Medical Drawer and Refrigerator are the wiki's; Trash Can has no source yet.
 const Rule CONTAINER_RULES[] = {
     {"whitemedicaldrawer", "White Medical Drawer"},
@@ -287,7 +287,7 @@ const Rule KEY_NAMES[] = {
     {"salvageadvancedgunparts", "Advanced Mechanical Components"}, {"salvageexplosivemixture", "Crude Explosives"},
     {"salvagewovencloth", "Durable Cloth"}, {"salvagerefinedexplosives", "Explosive Compound"},
     {"salvageseeds", "Assorted Seeds"}, {"salvageeventitemcandleberries", "Candleberries"},
-    {"salvagetarragonpart", "Bully Fragmenter"}, {"salvagemeerkatpart", "Skulker Targeter"},
+    {"salvagetarragonpart", "Bully Fragmenter"},
     {"salvagemeerkatpartturret", "Skulker Targeter"}, {"salvagerubberband01", "Rubber Bands"},
     //Frozen Trail materials, amplification parts, Emperor and Frigate parts, books
     {"salvagefrozentrailmat1", "Steel Cable"}, {"salvagefrozentrailmat2", "Epoxy Bucket"},
@@ -351,7 +351,7 @@ const Rule KEY_NAMES[] = {
     {"gadgetinstrumentflute", "Recorder"}, {"deployablebarricade", "Barricade Kit"},
     {"remotetrapfireworkbox", "Fireworks Box"}, {"deployableremoteflaretrap", "Remote Raider Flare"},
     {"emittertrapteslacoil", "Surge Coil"}, {"crashpad", "Crash Mat"},
-    {"tethergun", "Tether Launcher"}, {"metaldetector02", "Mountaineer's Detector"}, {"camera", "Advanced Camera"},
+    {"tethergun", "Tether Launcher"}, {"metaldetector02", "Mountaineer's Detector"},
     //healing
     {"adrenalinshot", "Adrenaline Shot"}, {"healinghotsmall", "Bandage"}, {"healinghotimprovised", "Herbal Bandage"},
     {"consumableshieldovertimepack", "Shield Recharger"}, {"healinghotmedium", "Sterilized Bandage"},
