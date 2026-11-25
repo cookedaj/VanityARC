@@ -45,10 +45,17 @@ int main() {
 
     live::reset();
     std::string many;
-    for (int i = 0; i < 40; i++) many += "inv_array 0x530 0x20 0x10 item\n";
+    for (int i = 0; i < 40; i++) many += "inv_array " + std::to_string(0x530 + i * 0x10) + " 0x20 0x10 item\n";
     writeFile(dir, many);
     live::load(dir);
     CHECK(live::invArrays.size() == 16, "no more than 16 lists are accepted");
+
+    live::reset();
+    writeFile(dir, "inv_array 0x530 0x20 0x10 item\ninv_array 0x530 0x20 0x10 item\ninv_array_in 0xCB0 0x530 0x20 0x10 item\n"
+                   "inv_array_in 0x700 0x40 0x20 0x10 pockets\ninv_array_in 0x700 0x40 0x20 0x10 pockets\n");
+    live::load(dir);
+    CHECK(live::invArrays.size() == 2 && live::invArrays[0].comp == -1 && live::invArrays[0].off == 0x530 && live::invArrays[1].comp == 0x700,
+          "the same list given twice is read once, so items are not counted twice");
 
     std::filesystem::remove_all(dir);
     std::printf("%s\n", fails ? "SOME TESTS FAILED" : "ALL PASSED");

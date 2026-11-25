@@ -699,8 +699,9 @@ void inventoryProbeOne(ptr pawn, const char* who, FILE* out) {
     int found = 0;
     std::vector<Comp> comps = componentsOf(pawn);
     comps.insert(comps.begin(), {0xCB0, ReadMemory<ptr>(pawn + 0xCB0)}); //the inventory component first
+    std::set<ptr> listed; //componentsOf finds the inventory component again (and a component may sit at two pawn offsets)
     for (const Comp& c : comps) {
-        if (!isObject(c.obj)) continue;
+        if (!isObject(c.obj) || !listed.insert(c.obj).second) continue;
         auto blk = readBlock(c.obj, 0xA00);
         for (size_t o = 0; o + 16 <= blk.size(); o += 8) {
             uint64_t data = q64(blk, o);

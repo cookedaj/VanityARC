@@ -247,6 +247,7 @@ int main() {
         std::printf("%s", invReport.c_str());
         CHECK(invReport.find("INVENTORY PROBE: you") != std::string::npos && invReport.find("DA_Item_BattleRifle_BreachAction_01") != std::string::npos, "inventory probe: finds the list and names the items");
         CHECK(invReport.find("offsets.txt:  inv_array 0x530 0x20 0x10 item") != std::string::npos, "inventory probe: a list in the inventory component comes with its offsets.txt line");
+        CHECK(invReport.find("offsets.txt:  inv_array 0x530") == invReport.rfind("offsets.txt:  inv_array 0x530"), "inventory probe: the inventory component is listed once, not twice");
         CHECK(invReport.find("offsets.txt:  inv_array_in 0x700 0x40 0x20 0x10 item") != std::string::npos, "inventory probe: a list in another component names that component");
         CHECK(run("nonsense").empty(), "an unknown probe name prints nothing");
     }
