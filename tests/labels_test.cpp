@@ -316,6 +316,18 @@ int main() {
     std::this_thread::sleep_for(std::chrono::milliseconds(3000));
     CHECK(names::name(late) == "DA_Late_Name", "a name that failed to read is tried again later");
 
+    //--- account ids are sanity-checked (the first player above was last seen more than 3 s ago)
+    u64 pA = makeObject(0x1400, 0x2000, 4); put<u64>(pA, 0x3E8, makePS("\x76\x6e\x6b\x7e\x64\x46", 6, 0x793381ba5d093c9fULL));
+    RenderEntity eA = ent(Object::PLAYER, 50.0, pA); labeler::fill(eA);
+    CHECK(eA.account == "793381ba5d093c9f", "account: a player seen long ago with the same id is not a clash");
+    u64 pP = makeObject(0x1400, 0x2000, 5); put<u64>(pP, 0x3E8, makePS("\x76\x6e\x6b\x7e\x64\x46", 6, pA));
+    RenderEntity eP = ent(Object::PLAYER, 50.0, pP); labeler::fill(eP);
+    CHECK(eP.account.empty() && eP.label == "cooked", "account: an id that looks like a pointer is not trusted (the name still shows)");
+    u64 pB = makeObject(0x1400, 0x2000, 6); put<u64>(pB, 0x3E8, makePS("\x76\x6e\x6b\x7e\x64\x46", 6, 0x793381ba5d093c9fULL));
+    RenderEntity eB = ent(Object::PLAYER, 50.0, pB); labeler::fill(eB);
+    eA = ent(Object::PLAYER, 50.0, pA); labeler::fill(eA);
+    CHECK(eB.account.empty() && eA.account.empty() && eB.label == "cooked", "account: two players at once with one id: nobody gets an id, so one mark cannot hide everyone");
+
     std::filesystem::remove_all(dir);
     std::printf("%s\n", fails ? "SOME TESTS FAILED" : "ALL PASSED");
     return fails;

@@ -35,10 +35,12 @@ struct Info {
     unsigned ver = 0;
     std::string label, sub;
     std::string account;
+    uintptr_t ps = 0;   //the PlayerState the account came from
     bool turret = false;
 };
 
 std::unordered_map<uintptr_t, Info> g_cache;
+bool g_idsBad = false; //two players at once gave the same account id: the id offsets are wrong for this build
 
 double nowSec() {
     using namespace std::chrono;
@@ -125,10 +127,25 @@ void fillPlayer(Info& in, uintptr_t pawn, double t) {
             std::string name = names::playerName(ps + PS_NAME);
             uintptr_t acc = ReadMemory<uintptr_t>(ps + PS_ACCOUNT_OBJ);
             uint64_t id = isValidPtr(acc) ? (uint64_t)ReadMemory<uintptr_t>(acc + 0x18) : 0;
+            if (isValidPtr(id)) id = 0; //a pointer, not an account id
+            //Another player on screen right now (seen within PLAYER_TTL) with a different PlayerState and the same id means
+            //the id is some shared field after a patch. Marking it would hide everyone, so ids are off until the game restarts.
+            //A dead body shares its owner's PlayerState, so it does not count; neither does a player from an earlier raid.
+            if (id && !g_idsBad) {
+                const std::string h = hex64(id);
+                for (const auto& kv : g_cache) {
+                    const Info& o = kv.second;
+                    if (&o != &in && o.ps != ps && o.account == h && t - o.seen < PLAYER_TTL) { g_idsBad = true; break; }
+                }
+                if (g_idsBad) { std::printf("[!] Two players have the same account id: player marks and nicknames are off until the game restarts\n"); std::fflush(stdout); }
+            }
+            if (g_idsBad) id = 0;
+            in.ps = ps;
             in.account = id ? hex64(id) : std::string();
             if (!name.empty()) in.label = id ? labels::display(labels::Cat::Player, hex64(id), name) : name;
         }
     }
+    if (g_idsBad) in.account.clear(); //every player at once, not only at its next refresh
     if (t - in.gunsT >= GUNS_TTL || verChanged) {
         in.gunsT = t;
         in.sub = gunsOf(pawn);
@@ -242,7 +259,7 @@ std::vector<ItemRow> inventoryOf(uintptr_t pawn) {
     return out;
 }
 
-void reset() { g_cache.clear(); }
+void reset() { g_cache.clear(); g_idsBad = false; }
 
 void endTick() {
     static double last = 0;
