@@ -129,6 +129,7 @@ bool InitOverlay() {
     ImGuiStyle& style = ImGui::GetStyle();
     style.Colors[ImGuiCol_WindowBg] = ImVec4(0, 0, 0, 0);
     style.WindowBorderSize = 0.0f;
+    style.MouseCursorScale = 2.5f; //the fallback arrow (and the tooltip gap next to the cursor) large enough to see
 
     if (g_kind == Kind::Glfw) ImGui_ImplGlfw_InitForOpenGL(g_glfw, true);
     ImGui_ImplOpenGL3_Init("#version 130");
@@ -162,7 +163,7 @@ void RenderBegin() {
                 case LayerInput::Wheel: io.AddMouseWheelEvent(e.x, e.y); break;
             }
         }
-        io.MouseDrawCursor = g_interactive; //the menu draws its own arrow (the compositor's cursor is hidden)
+        io.MouseDrawCursor = g_interactive && !g_layer->hasCursor(); //an arrow only when the desktop's cursor could not be loaded
     } else {
         glfwPollEvents();
         ImGui_ImplOpenGL3_NewFrame();

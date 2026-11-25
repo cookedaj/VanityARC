@@ -14,7 +14,7 @@ find_package(OpenGL REQUIRED)
 
 # The layer-shell overlay window: Wayland client + EGL, and the protocol code made from draw/wayland/*.xml
 find_package(PkgConfig REQUIRED)
-pkg_check_modules(WAYLAND REQUIRED IMPORTED_TARGET wayland-client wayland-egl egl)
+pkg_check_modules(WAYLAND REQUIRED IMPORTED_TARGET wayland-client wayland-cursor wayland-egl egl)
 find_program(WAYLAND_SCANNER wayland-scanner REQUIRED)
 set(LAYER_XML ${CMAKE_SOURCE_DIR}/draw/wayland/wlr-layer-shell-unstable-v1.xml)
 set(GEN_DIR ${CMAKE_BINARY_DIR}/generated)

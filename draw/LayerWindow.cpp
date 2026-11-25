@@ -5,10 +5,12 @@
 #include <linux/input-event-codes.h>
 #include <poll.h>
 #include <wayland-client.h>
+#include <wayland-cursor.h>
 #include <wayland-egl.h>
 
 #include <chrono>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 
 #include "wlr-layer-shell-client.h"
@@ -20,6 +22,10 @@ struct LayerWindow::Impl {
     zwlr_layer_shell_v1* shell = nullptr;
     wl_seat* seat = nullptr;
     wl_pointer* pointer = nullptr;
+    wl_shm* shm = nullptr;
+    wl_cursor_theme* cursorTheme = nullptr; //the desktop's cursor, shown while the menu has the mouse
+    wl_cursor_image* cursorImg = nullptr;
+    wl_surface* cursorSurf = nullptr;
     struct Out { wl_output* o; std::string name; };
     std::vector<Out> outs;
 
@@ -41,6 +47,7 @@ struct LayerWindow::Impl {
         Impl* s = (Impl*)d;
         if (!std::strcmp(iface, "wl_compositor")) s->comp = (wl_compositor*)wl_registry_bind(r, name, &wl_compositor_interface, ver < 4 ? ver : 4);
         else if (!std::strcmp(iface, "zwlr_layer_shell_v1")) s->shell = (zwlr_layer_shell_v1*)wl_registry_bind(r, name, &zwlr_layer_shell_v1_interface, ver < 4 ? ver : 4);
+        else if (!std::strcmp(iface, "wl_shm")) s->shm = (wl_shm*)wl_registry_bind(r, name, &wl_shm_interface, 1);
         else if (!std::strcmp(iface, "wl_seat") && !s->seat) {
             s->seat = (wl_seat*)wl_registry_bind(r, name, &wl_seat_interface, ver < 5 ? ver : 5);
             static const wl_seat_listener sl = {onSeatCaps, onSeatName};
@@ -80,7 +87,13 @@ struct LayerWindow::Impl {
     static void onEnter(void* d, wl_pointer* p, uint32_t serial, wl_surface*, wl_fixed_t x, wl_fixed_t y) {
         Impl* s = (Impl*)d;
         s->inside = true;
-        wl_pointer_set_cursor(p, serial, nullptr, 0, 0); //the menu draws its own cursor
+        //the desktop's own cursor (the theme and size the user chose); only when it could not be loaded does the menu draw one
+        if (s->cursorSurf) {
+            wl_pointer_set_cursor(p, serial, s->cursorSurf, (int32_t)s->cursorImg->hotspot_x, (int32_t)s->cursorImg->hotspot_y);
+            wl_surface_attach(s->cursorSurf, wl_cursor_image_get_buffer(s->cursorImg), 0, 0);
+            wl_surface_damage(s->cursorSurf, 0, 0, (int32_t)s->cursorImg->width, (int32_t)s->cursorImg->height);
+            wl_surface_commit(s->cursorSurf);
+        } else wl_pointer_set_cursor(p, serial, nullptr, 0, 0);
         LayerInput e; e.type = LayerInput::Motion; e.x = (float)wl_fixed_to_double(x); e.y = (float)wl_fixed_to_double(y);
         s->input.push_back(e);
     }
@@ -147,6 +160,19 @@ bool LayerWindow::create(const std::string& monitor, std::string* error) {
     wl_display_roundtrip(d.dpy); //output names arrive after the outputs are bound
     if (!d.comp) return fail("the compositor has no wl_compositor");
     if (!d.shell) return fail("this compositor has no layer-shell (KDE and sway have it, GNOME does not)");
+
+    //The cursor over the menu: the desktop's theme and size (KDE sets XCURSOR_THEME and XCURSOR_SIZE)
+    if (d.shm) {
+        const char* sz = std::getenv("XCURSOR_SIZE");
+        const int size = sz && std::atoi(sz) > 0 ? std::atoi(sz) : 24;
+        d.cursorTheme = wl_cursor_theme_load(std::getenv("XCURSOR_THEME"), size, d.shm);
+        wl_cursor* c = d.cursorTheme ? wl_cursor_theme_get_cursor(d.cursorTheme, "left_ptr") : nullptr;
+        if (!c && d.cursorTheme) c = wl_cursor_theme_get_cursor(d.cursorTheme, "default");
+        if (c && c->image_count > 0 && wl_cursor_image_get_buffer(c->images[0])) {
+            d.cursorImg = c->images[0];
+            d.cursorSurf = wl_compositor_create_surface(d.comp);
+        }
+    }
 
     wl_output* out = nullptr;
     std::string have;
@@ -216,8 +242,11 @@ void LayerWindow::destroy() {
     d.surf = nullptr;
     if (d.pointer) wl_pointer_release(d.pointer);
     d.pointer = nullptr;
+    if (d.cursorSurf) wl_surface_destroy(d.cursorSurf);
+    if (d.cursorTheme) wl_cursor_theme_destroy(d.cursorTheme);
+    d.cursorSurf = nullptr; d.cursorTheme = nullptr; d.cursorImg = nullptr;
     if (d.dpy) { wl_display_flush(d.dpy); wl_display_disconnect(d.dpy); }
-    d.dpy = nullptr; d.reg = nullptr; d.comp = nullptr; d.shell = nullptr; d.seat = nullptr;
+    d.dpy = nullptr; d.reg = nullptr; d.comp = nullptr; d.shell = nullptr; d.seat = nullptr; d.shm = nullptr;
     d.outs.clear();
 }
 
@@ -246,6 +275,7 @@ void LayerWindow::setInteractive(bool on) {
 }
 
 bool LayerWindow::shouldClose() const { return p_->closed; }
+bool LayerWindow::hasCursor() const { return p_->cursorSurf != nullptr; }
 int LayerWindow::width() const { return p_->w; }
 int LayerWindow::height() const { return p_->h; }
 const std::string& LayerWindow::monitorName() const { return p_->monitor; }
