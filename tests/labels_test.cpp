@@ -141,14 +141,21 @@ int main() {
     CHECK(D(Cat::Arc, "DA_EnemyType_Tick") == "Tick", "arc Tick");
     CHECK(D(Cat::Arc, "DA_EnemyType_RollBot_Pop") == "Pop", "arc Pop");
     CHECK(D(Cat::Arc, "DA_EnemyType_RollBot_Flamethrower") == "Fireball", "arc Fireball");
-    CHECK(D(Cat::Arc, "DA_EnemyType_Runner") == "Runner", "arc fallback Runner");
-    CHECK(D(Cat::Arc, "DA_EnemyType_HeavyDrone_Laser") == "Heavy Drone Laser", "arc fallback spaced (title case)");
+    CHECK(D(Cat::Arc, "DA_EnemyType_Runner") == "Shredder", "arc Shredder (type Runner)");
+    CHECK(D(Cat::Arc, "DA_EnemyType_HeavyDrone_Laser") == "Vaporizer", "arc Vaporizer (type HeavyDrone_Laser)");
+    CHECK(D(Cat::Arc, "DA_EnemyType_Courier") == "ARC Reclaimer", "arc ARC Reclaimer (type Courier)");
+    CHECK(D(Cat::Arc, "DA_EnemyType_RollBot") == "ARC Surveyor", "arc ARC Surveyor (type RollBot, exact match: not Pop or Fireball)");
+    CHECK(D(Cat::Arc, "DA_EnemyType_SnitchDrone_Onboarding") == "Snitch", "arc Snitch (tutorial type)");
+    CHECK(D(Cat::Arc, "DA_EnemyType_Chonk") == "Bastion" && D(Cat::Arc, "DA_EnemyType_ChonkPlatform_Mortar") == "Bombardier", "arc Bastion and Bombardier told apart");
+    CHECK(D(Cat::Arc, "DA_EnemyType_Peppermint") == "Queen", "arc Queen (type Peppermint)");
+    CHECK(D(Cat::Arc, "DA_EnemyType_TestOnly_Walker") == "Test Only Walker", "arc fallback spaced (title case)");
     CHECK(D(Cat::Container, "BP_SocketContainer_Gvt_BinTrash_01_A_C") == "Trash Can", "container trash 1");
     CHECK(D(Cat::Container, "BP_SocketContainer_01_TrashBin_A_01_C") == "Trash Can", "container trash 2");
-    CHECK(D(Cat::Container, "BP_SocketContainer_CUL_MuseumCrate_01_A_C") == "Museum Crate", "container museum crate (not in the loot tag list: cleaned name)");
+    CHECK(D(Cat::Container, "BP_SocketContainer_CUL_MuseumCrate_01_A_C") == "Museum Crate", "container museum crate");
     CHECK(D(Cat::Container, "BP_SocketContainer_Raider_AmmoBox_01_Lid_A_Dynamic_C") == "Ammo Box", "container ammo box");
-    CHECK(D(Cat::Container, "BP_SocketContainer_Sct_LockerMedical_01_A_C") == "Locker", "container medical locker (not in the loot tag list: shown as Locker)");
-    CHECK(D(Cat::Container, "BP_SocketContainer_Sct_Locker_01_A_C") == "Locker", "container locker (patch 2.5.0 loot tag list)");
+    CHECK(D(Cat::Container, "BP_SocketContainer_Sct_LockerMedical_01_A_C") == "Locker", "container medical locker (shown as Locker)");
+    CHECK(D(Cat::Container, "BP_SocketContainer_Sct_Locker_01_A_C") == "Locker", "container locker");
+    CHECK(D(Cat::Container, "BP_SocketContainer_Raider_FruitBasket_01_Dynamic_C") == "Basket of Fruit", "container basket of fruit (type FruitBasket)");
     CHECK(D(Cat::Container, "BP_SalvageContainer_GreatMullein_C") == "Great Mullein", "container fallback (title case)");
     CHECK(D(Cat::Container, "BP_SalvageContainer_ARC_Scrap_C") == "ARC Scrap", "container fallback keeps ARC in capitals");
     CHECK(D(Cat::Item, "BattleRifle_BreachAction_01") == "Ferro", "item Ferro token");
@@ -159,16 +166,29 @@ int main() {
     CHECK(D(Cat::Item, "DA_Item_SMG_Medium_01_Carbine") == "Canto", "gun Canto variant");
     CHECK(D(Cat::Item, "DA_Item_Bandage_01") == "Bandage", "item fallback");
     CHECK(D(Cat::Item, "DA_Item_ESRAnalyzer_01") == "ESR Analyzer", "item wiki spelling despite the _01 suffix");
+    CHECK(D(Cat::Item, "DA_Item_BattleRifle_EnergyBurst_01") == "Aphelion", "gun Aphelion");
+    CHECK(D(Cat::Item, "DA_Item_HealingHoT_Small") == "Bandage", "item Bandage (real asset name)");
+    CHECK(D(Cat::Item, "DA_Item_Salvage_Chonk_Part") == "Bastion Cell", "item Bastion Cell");
+    CHECK(D(Cat::Item, "DA_Item_Salvage_Trinket_RubberDuck_Standard") == "Rubber Duck", "item Rubber Duck");
+    CHECK(D(Cat::Item, "DA_Item_Salvage_Trinket_BoatModel_C") == "\"Leviathan's Crown\" Ship Model", "item whose name ends in _C");
+    CHECK(D(Cat::Item, "DA_Item_WeaponMod_Muzzle_Silencer_02") == "Silencer II", "weapon mod keeps its level");
+    CHECK(D(Cat::Item, "DA_Item_HEGrenade") == "Heavy Fuze Grenade", "grenade Heavy Fuze Grenade");
+    CHECK(D(Cat::Item, "DA_Item_CrashPad") == "Crash Mat" && D(Cat::Item, "DA_Item_Recipe_CrashPadRecipe") == "Crash Mat Blueprint", "item and its blueprint");
+    CHECK(D(Cat::Item, "DA_Item_Recipe_LauncherAntiARCSingleShot01Recipe") == "Rascal Blueprint", "a gun blueprint is not the gun");
+    CHECK(D(Cat::Item, "DA_Item_Recipe_BattlerifleLight01Recipe") != "Stiletto", "an unknown blueprint is not shown as its gun");
+    CHECK(D(Cat::Item, "DA_Item_Salvage_Planks") == "Planks", "item name after Salvage_");
+    CHECK(D(Cat::Item, "DA_Item_Salvage_Trinket_BurntoutCandles") == "Burnt-out Candles", "item name after Salvage_Trinket_, game spelling");
+    CHECK(D(Cat::Item, "DA_Item_IntegratedDefibrillator") == "Integrated Defibrillator", "item Integrated Defibrillator");
 
     //--- your own names, read from labels.txt (the overlay never writes it)
     std::string dir = testDir("cfgtest");
     std::filesystem::remove_all(dir);
     std::filesystem::create_directories(dir);
     labels::setDir(dir);
-    CHECK(labels::display(Cat::Arc, "DA_EnemyType_Runner") == "Runner", "no labels.txt: built-in name");
+    CHECK(labels::display(Cat::Arc, "DA_EnemyType_TestOnly_Walker") == "Test Only Walker", "no labels.txt: built-in name");
     CHECK(labels::display(Cat::Player, "793381ba5d093c9f", "cooked") == "cooked", "player shows its game name");
     const std::string labelsFile = dir + "/labels.txt";
-    const std::string labelsText = "\xEF\xBB\xBF" "arc\tDA_EnemyType_Runner\tSpider\n"
+    const std::string labelsText = "\xEF\xBB\xBF" "arc\tDA_EnemyType_TestOnly_Walker\tSpider\n"
                                    "Container \t BP_SocketContainer_CUL_MuseumCrate_01_A_C \t Art crate \r\n"
                                    "# my own names\n\n"
                                    "arc DA_EnemyType_Tick Bug\n"          //spaces instead of TABs
@@ -176,17 +196,17 @@ int main() {
     { std::ofstream out(labelsFile, std::ios::binary); out << labelsText; }
     CHECK(labels::load() == 2, "labels.txt: the two bad lines are counted (a comment and a blank line are not)");
     CHECK(labels::display(Cat::Arc, "DA_EnemyType_Tick") == "Tick", "labels.txt: a bad line changes nothing");
-    CHECK(labels::display(Cat::Arc, "DA_EnemyType_Runner") == "Spider", "own name wins (first line after a UTF-8 mark)");
+    CHECK(labels::display(Cat::Arc, "DA_EnemyType_TestOnly_Walker") == "Spider", "own name wins (first line after a UTF-8 mark)");
     CHECK(labels::display(Cat::Container, "BP_SocketContainer_CUL_MuseumCrate_01_A_C") == "Art crate", "category in any case, spaces around the fields dropped");
 
     //"shown name = your name" lines (names not used further down, so the later checks keep the built-in names)
     { std::ofstream out(labelsFile, std::ios::binary | std::ios::app);
-      out << "great  MULLEIN = Plant\n" " ESR Analyzer\t=\tScanner\r\n" "# Heavy Drone Laser = Note\n" "Museum Crate = Box\n"
+      out << "great  MULLEIN = Plant\n" " ESR Analyzer\t=\tScanner\r\n" "# Vaporizer = Note\n" "Museum Crate = Box\n"
              "rival = Buddy\n" "AAAABBBBCCCCDDDD = Friend\n" "no separator here\n" " = nameless\n"; }
     labels::load();
     CHECK(labels::display(Cat::Container, "BP_SalvageContainer_GreatMullein_C") == "Plant", "shown name: capitals and spaces do not matter");
     CHECK(labels::display(Cat::Item, "DA_Item_ESRAnalyzer_01") == "Scanner", "shown name: TABs around '=' are fine");
-    CHECK(labels::display(Cat::Arc, "DA_EnemyType_HeavyDrone_Laser") == "Heavy Drone Laser", "a line starting with # is ignored");
+    CHECK(labels::display(Cat::Arc, "DA_EnemyType_HeavyDrone_Laser") == "Vaporizer", "a line starting with # is ignored");
     CHECK(labels::display(Cat::Container, "BP_SocketContainer_CUL_MuseumCrate_01_A_C") == "Art crate", "the TAB line with the raw key wins over a shown-name line");
     CHECK(labels::display(Cat::Player, "1111222233334444", "Rival") == "Buddy", "shown name: a player's game name");
     CHECK(labels::display(Cat::Player, "aaaabbbbccccdddd", "Someone") == "Friend", "the raw key works on a '=' line too");
