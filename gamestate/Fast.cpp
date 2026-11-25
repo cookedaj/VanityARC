@@ -336,7 +336,7 @@ void GameState::updateDynamic() {
                 t.ent.shieldMax = live::shieldMax >= 0 ? std::max(shieldNumber(r.shMaxRaw), t.ent.shield) : seen;
             }
         } else {
-            t.ent.isDead = r.destroyed != 0;
+            t.ent.isDead = r.destroyed == 1; //a bool is 0 or 1; any other byte means the offset moved: unknown, treated as alive
         }
     }
 }

@@ -232,7 +232,7 @@ GameState::RawInfo GameState::getRawEnt(ptr uworld) {
                 }
             }
         } else if (ent.type == Object::ARC) {
-            ent.isDead = ReadMemory<bool>(actor + off::IS_DESTROYED);
+            ent.isDead = ReadMemory<uint8_t>(actor + off::IS_DESTROYED) == 1; //same rule as step(): only exactly 1 is destroyed
         }
 
 
