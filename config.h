@@ -7,9 +7,9 @@
 //-------------------Config-------------------// btw m stands of meters
 namespace config {
     //ESP Preferences
-    inline bool makeLootESPTranslucent = true;
-    inline bool makeDeadBotESPTranslucent = true;
-    inline bool makeDeadPlayerESPTranslucent = true;
+    inline bool makeLootESPTranslucent = false;       //true halves the alpha of loot and teammates (shared green)
+    inline bool makeDeadBotESPTranslucent = false;
+    inline bool makeDeadPlayerESPTranslucent = false;
 
     //What to draw. These are also the checkboxes in the Insert menu (changes there last until kwin-helper restarts)
     inline bool showPlayers = true;
