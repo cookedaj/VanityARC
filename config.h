@@ -11,7 +11,7 @@ namespace config {
     inline bool makeDeadBotESPTranslucent = false;
     inline bool makeDeadPlayerESPTranslucent = false;
 
-    //What to draw. These are also the checkboxes in the Insert menu (changes there last until kwin-helper restarts)
+    //What to draw. These are also the switches in the Insert menu (changes there are saved in ~/.config/kwin-helper/settings.txt)
     inline bool showPlayers = true;
     inline bool showArc = true;
     inline bool showPickups = true;     //items on the ground
@@ -19,7 +19,7 @@ namespace config {
     inline bool showDeadPlayers = true;
     inline bool showDeadArc = true;
 
-    //Names next to the markers. Also in the Insert menu (Names).
+    //Names next to the markers. Also in the Insert menu (ESP tab, NAMES).
     inline bool showPlayerNames = true;
     inline bool showPlayerGuns = true;     //the guns a player carries, under the box
     inline bool showArcNames = true;
@@ -29,7 +29,7 @@ namespace config {
     inline float labelSize = 15.0f;        //text size in px
     inline bool showDebugInfo = false;     //small stats block in the top-left corner (fps, update rate, counts)
 
-    //How things look (Insert menu: Look)
+    //How things look (Insert menu: spread over the ESP, Players and Settings tabs)
     inline double boxStyle = 0;            //player boxes: 0 corner brackets, 1 full rectangle, 2 sides only
     inline double boxColor = 0;            //enemy colour: 0 red, 1 white, 2 yellow, 3 blue, 4 green, 5 violet
     inline float boxThickness = 1.5f;      //px
@@ -54,13 +54,13 @@ namespace config {
     inline bool streamHide = false;        //F8: draw nothing, so screen recordings and streams show no overlay (no startup banner)
     inline float menuOpacity = 0.94f;      //the Insert menu's background
 
-    //Stretched resolution / gamescope (Insert menu: Game view). Auto reads gamescope's command line.
+    //Stretched resolution / gamescope (Insert menu: Settings tab, GAME VIEW). Auto reads gamescope's command line.
     inline bool gameViewAuto = true;
     inline double gameRenderW = 1440;      //only used when Auto is off: the game's own picture size
     inline double gameRenderH = 1080;
     inline bool gameStretch = true;        //Auto off: stretch that picture over the whole screen (else keep its shape)
 
-    //Calibration (Insert menu: Calibration). The defaults are the old behaviour.
+    //Calibration (Insert menu: Settings tab, CALIBRATION). The defaults are the old behaviour.
     //If markers drift away from their targets towards the screen edges, flip the FOV side first, then use Zoom.
     inline bool fovIsHorizontal = false;   //false: the game's FOV number is the vertical one
     inline float fovScale = 1.0f;          //multiplies the focal length: above 1 spreads the markers out from the middle
@@ -77,7 +77,7 @@ namespace config {
     inline float radarCenterX = 150; //coords px
     inline float radarCenterY = 150; //coords px
     inline float radarRadius = 100;  //size px
-    inline float scale = 200.0f; //meters
+    inline float scale = 200.0f; //cm per radar pixel: range in m = radarRadius x scale / 100 (the menu's Radar Range sets it)
     inline float selfDot = false;
 
     //Set this to your monitor resolution
@@ -128,7 +128,7 @@ namespace off {
 
     inline constexpr uintptr_t ROOT_COMPONENT_PTR = 0x248; // AActor::RootComponent
 
-    //Find by setting scanForCamera = true (below) and reading the console.
+    //Find by setting scanForCamera = true (above) and reading the console.
     // PCM::ViewTarget(0xDF0) + TViewTarget::POV(0x10) + MinimalViewInfo::Location(0x10)
     inline constexpr uintptr_t VIEW_MATRIX = 0xE10;
     inline constexpr uintptr_t POS_PTR = 0x3B0; // SceneComponent::ComponentToWorld(0x390) + translation(0x20)
@@ -155,21 +155,22 @@ namespace off {
     inline constexpr uintptr_t HEALTH_CACHED = 0x708;    //CachedHealth (double)
 }
 
-// !!! ARC / SEARCH / PICKUP / PLAYER are STALE for v1029 (CAMMANAGER is current).
+// The overlay uses ARC, SEARCH, PLAYER and CAMMANAGER below (v1029 values).
 // These are RUNTIME addresses, not in any offset dump.
 // They change every game update and MUST be rediscovered in debug mode:
 //   1) isDebugMode = true and scanForCamera = true above, rebuild, run in a raid (not scoped)
 //      and copy the printed "vtabels::CAMMANAGER" value in here
 //   2) set scanForCamera = false, rebuild: the console now lists every vtable nearest-first every 2s
 //      (and the overlay labels objects with theirs). Your own player is the ~0 m row = PLAYER;
-//      stand next to a loot container / ground item / ARC robot to find SEARCH / PICKUP / ARC
+//      stand next to a loot container / ARC robot to find SEARCH / ARC.
+//   Ground items share the SEARCH vtable and are told apart by name, so there is no vtable to find for them.
 namespace vtabels {
 
     // v1029 best guesses from the live vtable lists (2026-11-20). SEARCH is confirmed (nearest 2.0 m while
     // looting a trash can). The others are inferred from how each row behaved:
     inline constexpr uintptr_t ARC = 0x14e12b1c0;     // count 40-55, moves while you stand still, closed to 3 m when a Shredder killed me
     inline constexpr uintptr_t SEARCH = 0x14e0e5de0;  // count ~650-740, static
-    inline constexpr uintptr_t PICKUP = 0x14dc5a3c0;  // count 4-9, static, 2.9 m while standing by gun parts on the ground
+    inline constexpr uintptr_t PICKUP = 0x14dc5a3c0;  // debug path only (probeNames): GC_StaminaDrain_C, not loot. Never drawn; no need to update it
     inline constexpr uintptr_t PLAYER = 0x14e337000;  // count 14, always 1.5-1.9 m from the camera (third person). Alt: 0x14d3b03e0
     inline constexpr uintptr_t CAMMANAGER = 0x14d8af9d0; //v1029, found by the camera scan (VIEW_MATRIX 0xE10 confirmed live)
 }
