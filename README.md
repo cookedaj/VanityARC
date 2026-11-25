@@ -4,20 +4,8 @@ https://youtu.be/tiK0ihPw6m8
 ## Setup
 1) The program ONLY works on Linux.
 2) Personally, I use Kubuntu; anything with KDE Plasma should have a similar setup, and I'm sure this can work with other Wayland displays (must be Wayland, no Xorg).
-3) Steam MUST be installed under Flatpak, or else the game can see your process. Using Flatpak provides PID isolation and hides the process.
-4) Desktop overlay rules (FOR KDE Plasma):
-```
- Go to Window Management -> Window Rules.
- Click + Add New...
- Description: KWin Helper Fix
- Window class: Choose "Exact Match" and type "KWin Helper" (or whatever you named your window in config.h).
- Click + Add Property and search for/add these:
-     Accept focus: Set to Force and No.
-     Focus stealing prevention: Set to Force and Extreme.
-     Ignore global shortcuts: Set to Force and Yes.
-     No titlebar and frame: Set to Force and Yes.
- Apply.
-```
+3) Steam MUST be installed under Flatpak, or else the game can see your process. Using Flatpak provides PID isolation and hides the process. To check it, run `bash check-isolation.sh` with the game open (best: in a raid), and again after a game or Steam update. It only reads and needs no sudo.
+4) No KDE window rule is needed: the overlay is a Wayland layer-shell surface and stays above the game by itself (see step 11 if it cannot).
 5) Download CLion from JetBrains (the non-commercial version is free).
 6) Install dependencies: `sudo apt install cmake g++ libglfw3-dev libgl-dev`
 7) Download the code (which you have presumably done already) and unzip it.
@@ -33,9 +21,9 @@ OR
 
 Google/ask AI how to set up the build utility inside of CLion (Release build).
 ```
-9) Run with: `bash start.sh`. If this does not work, it is probably because your output of kwin-helper is not in the relative path `./cmake-build-release/kwin-helper`. Find where your program built to in the last step and change the code in `start.sh` to match that path.
-10) Make sure the game is loaded in windowed mode.
-11) When you start the process, right-click the overlay -> More Actions -> Keep Above Others.
+9) Run with: `bash start.sh`. If this does not work, it is probably because your output of kwin-helper is not in the relative path `./cmake-build-release/kwin-helper`. Find where your program built to in the last step and start it with `KWINHELPER_BIN=/path/to/kwin-helper bash start.sh` (no need to edit `start.sh`). The overlay goes on your primary monitor; `bash start.sh DP-1` puts it on another (list them with `kscreen-doctor -o`).
+10) Run the game in borderless fullscreen (or fullscreen) at your monitor's own resolution. No window rule and no Keep Above are needed.
+11) Only if the console prints `[!] No layer-shell overlay (...). Using a normal window`: your desktop has no layer-shell, so the old overlay window is used. Run `bash fix-overlay-rule.sh [MONITOR]` once (the monitor the game is on, e.g. `DP-1`; default: your primary monitor), restart kwin-helper, and run the game in windowed mode.
 12) Press Insert to open the in-game menu (show/hide players, ARC, items, containers, names, distances, radar). While it is open the overlay takes the mouse; press Insert again to close it. Insert is read from /dev/input, so you need to be in the `input` group once: `sudo usermod -aG input $USER`, then log out and back in. Without that, `pkill -USR1 -x kwin-helper` toggles the menu instead. Menu settings are saved in `~/.config/kwin-helper/settings.txt`.
 13) Names: ARC machines, containers, ground items, players and the guns they carry get a name next to the marker (toggle each under ESP > Names). The names follow the ARC Raiders wiki. If you want your own name for something, add a line to `~/.config/kwin-helper/labels.txt` by hand; delete the line to go back to the built-in name.
 
@@ -111,7 +99,7 @@ They cover the name decoders, the label tables, the keyboard layout, the Insert 
 - **Tracker thread** (`gamestate/Tracker.cpp`): reads the game on its own thread, so drawing never waits for it. A full scan of the actor list runs 10 times a second (`gamestate/Fast.cpp`), and in between only players and ARC are re-read (about 120 times a second, many reads per system call). The old one-read-per-actor path is still there as `GameState::tick()` for the debug modes and as the reference in the tests.
 - **Camera**: read again at the start of every frame, so markers follow the view without lag.
 - **Window** (`draw/LayerWindow.cpp`, `draw/OverlayBackend.cpp`): the overlay is a Wayland layer-shell surface, which KDE keeps above an active fullscreen window (the game in borderless fullscreen, or gamescope `-f`). A normal window with a "keep above" rule cannot do that. If the compositor has no layer-shell the old GLFW window is used instead (windowed games only). `bash start.sh` picks your primary monitor; `bash start.sh DP-1` picks another.
-- **Stretched resolution / gamescope**: the game draws one size (say 1440x1080) and gamescope stretches it to the screen. The overlay reads the running gamescope's command line (`-w -h -W -H -S`) and works the 3D position out in the game's own pixels, then stretches it the same way (`utils/gamescope.cpp`, `utils/gameview.h`). Insert menu > Game view shows what it found, and lets you type the size by hand.
+- **Stretched resolution / gamescope**: the game draws one size (say 1440x1080) and gamescope stretches it to the screen. The overlay reads the running gamescope's command line (`-w -h -W -H -S`) and works the 3D position out in the game's own pixels, then stretches it the same way (`utils/gamescope.cpp`, `utils/gameview.h`). Insert menu > Settings > Game view shows what it found, and lets you type the size by hand.
 - **Drawing** (`draw/ESP.h`): outlined markers, corner-bracket boxes, labels that never pile up on each other, edge arrows for enemies you cannot see on screen, and a radar with a view cone.
 - **Calibration** (Insert menu): if markers slide away from targets near the screen edge, switch "FOV is horizontal" first, then adjust Zoom and Shift. Saved with the other settings.
 - **Stats** (Insert menu): fps, updates per second and read times, to check it is all running smoothly.
