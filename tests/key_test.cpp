@@ -13,6 +13,13 @@ int main() {
             if (!shift) seen.insert(c);
         }
     std::printf("%d typed characters, %d outside printable ASCII, %zu distinct unshifted characters\n", typed, bad, seen.size());
-    std::printf("%s\n", bad == 0 ? "ALL PASSED" : "FAILED");
-    return bad;
+    //the number pad types digits, and Caps Lock changes letters only
+    int wrong = 0;
+    if (KeyToChar(KEY_KP7, false) != '7' || KeyToChar(KEY_KP0, false) != '0' || KeyToChar(KEY_KPDOT, false) != '.' ||
+        KeyToChar(KEY_KPMINUS, true) != '-' || KeyToChar(KEY_KPSLASH, false) != '/' || KeyToChar(KEY_KPASTERISK, false) != '*') wrong++;
+    if (KeyToChar(KEY_A, false, true) != 'A' || KeyToChar(KEY_A, true, true) != 'a' ||
+        KeyToChar(KEY_1, false, true) != '1' || KeyToChar(KEY_LEFTBRACE, false, true) != '[') wrong++;
+    std::printf("%d wrong number pad / Caps Lock results\n", wrong);
+    std::printf("%s\n", bad == 0 && wrong == 0 ? "ALL PASSED" : "FAILED");
+    return bad + wrong;
 }
