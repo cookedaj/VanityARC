@@ -2,8 +2,9 @@
 #define KWINHELPER_HOTKEY_H
 //Menu hotkey. The overlay never has keyboard focus (and Wayland has no global key hooks), so Insert is
 //read straight from the keyboard devices in /dev/input. Only Insert, F6, F7, F8 and F10 are looked at; nothing else
-//is stored or logged, EXCEPT while you are typing into a text box in the menu: then (and only then) the
-//keyboard is grabbed so the game does not see the keys, and the key presses are handed to the menu.
+//is stored or logged, EXCEPT while you are typing into a text box in the menu, or while the menu is open with
+//"Keyboard controls the menu" on: then (and only then) the keyboard is grabbed so the game does not see the keys,
+//and the key presses are handed to the menu.
 //This needs read access to /dev/input (group "input"). Without it the menu can still
 //be toggled with:   pkill -USR1 -x kwin-helper
 #include <algorithm>
@@ -33,8 +34,8 @@ inline std::atomic<bool> g_KeyMark{false}, g_KeyClear{false}, g_KeyQuit{false};
 inline std::atomic<bool> g_KeyStream{false};
 inline constexpr int MENU_KEY = KEY_INSERT;
 
-//Typing support. The menu sets g_TextGrab while a text box is active; the hotkey thread then grabs the
-//keyboards and queues key presses here for the menu to read.
+//Typing support. The menu sets g_TextGrab while a text box is active (or while it is open with "Keyboard controls the
+//menu" on); the hotkey thread then grabs the keyboards and queues key presses here for the menu to read.
 struct KeyEv { int code; int value; }; //value: 1 press, 0 release, 2 repeat
 inline std::atomic<bool> g_TextGrab{false};
 //The menu refreshes this while it wants the keyboard. If the main loop stalls (a long pause, a crash in
@@ -63,11 +64,22 @@ inline int HeldModifiers(int fd) {
     return m;
 }
 
+//True while any key or button is down on one of these devices
+inline bool AnyKeyHeld(const std::vector<int>& fds) {
+    constexpr size_t BITS = 8 * sizeof(unsigned long);
+    for (int fd : fds) {
+        unsigned long st[KEY_MAX / BITS + 1] = {};
+        if (ioctl(fd, EVIOCGKEY(sizeof st), st) < 0) continue;
+        for (unsigned long w : st) if (w) return true;
+    }
+    return false;
+}
+
 //Reads whatever input_event structs are waiting on fd and flips g_MenuToggle on an Insert key press
-//(not on release or key repeat). Returns false once the device is gone.
+//(not on release or key repeat). queue: the keyboard is grabbed, hand every key to the menu. Returns false once the device is gone.
 //A hotkey pressed together with a modifier belongs to another program (Shift+F10 context menu, Shift+Insert paste...)
 //and is ignored. F6 still works with Shift or Ctrl held (sprinting, crouching), just not with Alt or Meta.
-inline bool HandleKeyEvents(int fd) {
+inline bool HandleKeyEvents(int fd, bool queue) {
     input_event ev[32];
     for (;;) {
         ssize_t n = read(fd, ev, sizeof ev);
@@ -86,7 +98,7 @@ inline bool HandleKeyEvents(int fd) {
                     else g_KeyStream = true; //F8
                 }
             }
-            if (g_TextGrab) {
+            if (queue) {
                 std::lock_guard<std::mutex> lk(g_KeyMutex);
                 if (g_KeyQueue.size() < 256) g_KeyQueue.push_back({ev[i].code, ev[i].value});
             }
@@ -148,7 +160,10 @@ inline void HotkeyThread() {
             g_TextGrab = false;
             wantGrab = false;
         }
-        if (wantGrab != grabbed) { //typing into a menu text box: keep the keys away from the game
+        //Grab only once every key is up: a key held now (the Insert that opened the menu, W while walking) must reach
+        //the game going up as well, or the game would keep it held down
+        if (wantGrab && !grabbed && AnyKeyHeld(fds)) wantGrab = false;
+        if (wantGrab != grabbed) { //the menu has the keyboard (typing, or "Keyboard controls the menu"): keep the keys away from the game
             for (int fd : fds) ioctl(fd, EVIOCGRAB, wantGrab ? 1 : 0);
             grabbed = wantGrab;
             if (!grabbed) { std::lock_guard<std::mutex> lk(g_KeyMutex); g_KeyQueue.clear(); }
@@ -165,7 +180,7 @@ inline void HotkeyThread() {
         poll(p.data(), p.size(), 50); //with no keyboard this just waits 50 ms
         for (size_t i = p.size(); i-- > 0;) { //backwards so erasing keeps the earlier indexes valid
             bool gone = (p[i].revents & (POLLERR | POLLHUP | POLLNVAL)) != 0;
-            if (!gone && (p[i].revents & POLLIN)) gone = !HandleKeyEvents(p[i].fd);
+            if (!gone && (p[i].revents & POLLIN)) gone = !HandleKeyEvents(p[i].fd, grabbed);
             if (gone) {
                 close(p[i].fd);
                 fds.erase(fds.begin() + i);

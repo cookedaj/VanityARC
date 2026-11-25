@@ -107,6 +107,53 @@ int main() {
     MenuFeedKeys();
     { std::lock_guard<std::mutex> lk(g_KeyMutex); CHECK(g_KeyQueue.empty(), "key queue is drained when nobody is typing"); }
 
+    //---- "Keyboard controls the menu": while the menu is open the keyboard is the menu's (Tab, Space, typed slider values, Esc)
+    {
+        ImGuiContext& g = *ImGui::GetCurrentContext();
+        auto tap = [](int code) { std::lock_guard<std::mutex> lk(g_KeyMutex); g_KeyQueue.push_back({code, 1}); g_KeyQueue.push_back({code, 0}); };
+        auto run = [](int n) { for (int i = 0; i < n; i++) { MenuFeedKeys(); frame([] { DrawMenu(); }); } };
+        const bool espWas = config::espEnabled;
+        const double lootWas = config::nameMaxLootDist;
+        config::menuKeyboard = true;
+        g_MenuOpen = true;
+        g_MenuTab = 0; //the ESP page
+        run(3);
+        CHECK(g_TextGrab.load() && (io.ConfigFlags & ImGuiConfigFlags_NavEnableKeyboard), "with the switch on the open menu takes the keyboard");
+
+        ImGuiWindow* page = nullptr;
+        for (ImGuiWindow* win : g.Windows) if (std::strstr(win->Name, "##page")) page = win;
+        const ImGuiID pid = page ? page->ID : 0;
+        const ImGuiID espOn = ImGui::GetIDWithSeed("##sw", nullptr, ImGui::GetIDWithSeed("ESP on", nullptr, pid));
+        const ImGuiID lootRange = ImGui::GetIDWithSeed("##v", nullptr, ImGui::GetIDWithSeed("Loot name range", nullptr, pid));
+        int tabs = 0;
+        while (g.NavId != espOn && tabs++ < 40) { tap(KEY_TAB); run(3); }
+        CHECK(page && g.NavId == espOn && g.NavCursorVisible, "Tab walks from the tabs on the left into the page");
+        CHECK(ImGui::GetForegroundDrawList()->VtxBuffer.Size > 0, "the focused control gets the white frame");
+        tap(KEY_SPACE); run(3);
+        CHECK(config::espEnabled != espWas, "Space flips the focused switch");
+
+        tabs = 0;
+        while (g.NavId != lootRange && tabs++ < 40) { tap(KEY_TAB); run(3); }
+        run(2);
+        CHECK(g.NavId == lootRange && io.WantTextInput, "Tab onto a slider opens it for typing");
+        tap(KEY_4); tap(KEY_2); run(8);
+        tap(KEY_ENTER); run(4);
+        CHECK(config::nameMaxLootDist == 42.0 && !io.WantTextInput, "an exact slider value can be typed");
+
+        g_MenuToggle = false;
+        tap(KEY_ESC); MenuFeedKeys();
+        CHECK(g_MenuToggle.exchange(false), "Esc closes the menu");
+
+        g_MenuOpen = false; //what closing the menu does (MenuPollToggle would also save the settings)
+        MenuFeedKeys();
+        CHECK(!g_TextGrab.load(), "a closed menu lets go of the keyboard");
+        config::menuKeyboard = false;
+        MenuFeedKeys();
+        CHECK(!(io.ConfigFlags & ImGuiConfigFlags_NavEnableKeyboard), "with the switch off the arrows do not move the menu");
+        config::espEnabled = espWas;
+        config::nameMaxLootDist = lootWas;
+    }
+
     //---- ID conflicts: hover every part of the menu and look for ImGui's "conflicting ID" error
     io.DisplaySize = ImVec2(1280, 1700);
     io.ConfigDebugHighlightIdConflicts = true;

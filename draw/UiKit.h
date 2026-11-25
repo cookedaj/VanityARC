@@ -9,6 +9,7 @@
 #include <initializer_list>
 
 #include "imgui.h"
+#include "imgui_internal.h" //DrawNavFrame: where the keyboard focus is
 
 namespace ui {
 
@@ -39,6 +40,7 @@ inline void PushTheme(float opacity) {
     c(ImGuiCol_Button, dark); c(ImGuiCol_ButtonHovered, mid); c(ImGuiCol_ButtonActive, ImVec4(0.4f, 0.4f, 0.4f, 1));
     c(ImGuiCol_Tab, dark); c(ImGuiCol_TabHovered, mid); c(ImGuiCol_TabSelected, mid); c(ImGuiCol_TabSelectedOverline, white);
     c(ImGuiCol_ScrollbarBg, ImVec4(0, 0, 0, 0)); c(ImGuiCol_ScrollbarGrab, mid); c(ImGuiCol_TextSelectedBg, mid);
+    c(ImGuiCol_NavCursor, white);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 0.0f);
@@ -150,6 +152,21 @@ inline bool Tab(const char* label, bool selected, float w) {
     dl->AddText(ImVec2(p.x + 16, p.y + (32 - ImGui::GetFontSize()) / 2), selected ? WHITE : (hov ? LIGHT : GREY), label, LabelEnd(label));
     ImGui::PopID();
     return pressed;
+}
+
+//The keyboard focus (arrows / Tab): a thick white frame with black edges around the focused control, far easier to
+//find than ImGui's own thin line. Draws nothing after a mouse click. Call once per frame after the windows are drawn.
+inline void DrawNavFrame() {
+    const ImGuiContext& g = *GImGui;
+    ImGuiWindow* w = g.NavWindow;
+    if (!w || !g.NavId || !g.NavIdIsAlive || !g.NavCursorVisible) return;
+    ImRect r = ImGui::WindowRectRelToAbs(w, w->NavRectRel[g.NavLayer]);
+    r.ClipWith(w->InnerClipRect); //a control half scrolled out of the page: frame the part that shows
+    if (r.Min.x >= r.Max.x || r.Min.y >= r.Max.y) return;
+    r.Expand(5.0f);
+    ImDrawList* dl = ImGui::GetForegroundDrawList();
+    dl->AddRect(r.Min, r.Max, IM_COL32(0, 0, 0, 255), 0.0f, 0, 8.0f);
+    dl->AddRect(r.Min, r.Max, WHITE, 0.0f, 0, 4.0f);
 }
 
 } // namespace ui

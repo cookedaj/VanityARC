@@ -51,6 +51,7 @@ namespace config {
     inline bool useCameraRoll = true;      //take the camera's roll into account (always 0 in normal play)
     inline bool hideUnknownTeams = false;  //hide players whose team cannot be told (your own team is not known)
     inline bool hotkeysEnabled = true;     //F6 mark teammate, F7 clear marks, F10 quit
+    inline bool menuKeyboard = false;      //"Keyboard controls the menu": while the menu is open its keys go to the menu, not the game
     inline bool streamHide = false;        //F8: draw nothing, so screen recordings and streams show no overlay (no startup banner)
     inline float menuOpacity = 0.94f;      //the Insert menu's background
 

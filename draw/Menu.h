@@ -39,14 +39,19 @@ inline void MenuPollToggle() {
     }
 }
 
-//The key presses the hotkey thread queued while a text box was active, as ImGui input. Call once per frame
+//The key presses the hotkey thread queued while the menu had the keyboard, as ImGui input. Call once per frame
 //before RenderBegin(). The overlay never has keyboard focus, so typing comes from the keyboard device itself.
+//The menu has the keyboard while a text box is active, and with "Keyboard controls the menu" on the whole time it is
+//open: then arrows and Tab move the focus frame, Space presses, Enter types an exact slider value, Esc closes the menu.
 inline void MenuFeedKeys() {
     if (!ImGui::GetCurrentContext()) return;
     ImGuiIO& io = ImGui::GetIO();
     if (g_MenuOpen) io.AddFocusEvent(true); //the overlay window is never "focused" for the desktop; ImGui must not care
+    if (config::menuKeyboard) io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+    else io.ConfigFlags &= ~ImGuiConfigFlags_NavEnableKeyboard;
 
-    const bool want = g_MenuOpen && io.WantTextInput; //a text box is active (decided last frame)
+    const bool typing = io.WantTextInput; //a text box is active (decided last frame)
+    const bool want = g_MenuOpen && (typing || config::menuKeyboard);
     if (want) g_GrabBeatMs = NowMs(); //set before the flag so the watchdog never sees a stale beat
     g_TextGrab = want;
 
@@ -83,6 +88,12 @@ inline void MenuFeedKeys() {
         }
         if (ev.code == KEY_LEFTALT || ev.code == KEY_RIGHTALT) { alt = ev.value != 0; continue; }
         if (ev.code == KEY_CAPSLOCK) { if (ev.value == 1) caps = !caps; continue; }
+        //Esc closes the menu like Insert, unless a text box, an open drop-down or a slider being moved takes it first
+        if (ev.code == KEY_ESC && ev.value == 1 && !typing && !ImGui::IsAnyItemActive() &&
+            !ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel)) {
+            g_MenuToggle = true;
+            continue;
+        }
         ImGuiKey k = ImGuiKey_None;
         switch (ev.code) {
             case KEY_BACKSPACE: k = ImGuiKey_Backspace; break;
@@ -91,6 +102,12 @@ inline void MenuFeedKeys() {
             case KEY_ESC: k = ImGuiKey_Escape; break;
             case KEY_LEFT: k = ImGuiKey_LeftArrow; break;
             case KEY_RIGHT: k = ImGuiKey_RightArrow; break;
+            case KEY_UP: k = ImGuiKey_UpArrow; break;
+            case KEY_DOWN: k = ImGuiKey_DownArrow; break;
+            case KEY_TAB: k = ImGuiKey_Tab; break;
+            case KEY_SPACE: k = ImGuiKey_Space; break;
+            case KEY_PAGEUP: k = ImGuiKey_PageUp; break;
+            case KEY_PAGEDOWN: k = ImGuiKey_PageDown; break;
             case KEY_HOME: k = ImGuiKey_Home; break;
             case KEY_END: k = ImGuiKey_End; break;
             case KEY_A: k = ImGuiKey_A; break; //with Ctrl: select all, copy, paste, cut, undo
@@ -101,9 +118,9 @@ inline void MenuFeedKeys() {
             default: break;
         }
         if (k != ImGuiKey_None && ev.value != 2) send(k, ev.value != 0); //ImGui repeats held keys itself
-        //One character per press, none while Ctrl or Alt is held. The keyboard's own repeat is not used:
-        //it would double letters for a slow typist. Backspace, Enter, the arrows and so on give 0 from KeyToChar.
-        if (ev.value == 1 && !ctrl && !alt) {
+        //One character per press, only into a text box, none while Ctrl or Alt is held. The keyboard's own repeat is not
+        //used: it would double letters for a slow typist. Backspace, Enter, the arrows and so on give 0 from KeyToChar.
+        if (typing && ev.value == 1 && !ctrl && !alt) {
             char c = KeyToChar(ev.code, shift, caps);
             if (c) io.AddInputCharacter((unsigned)c);
         }
@@ -251,6 +268,10 @@ inline void PageSettings() {
     Section("OTHER");
     Switch("Status card", &config::showDebugInfo);
     Switch("Hotkeys (F6, F7, F10)", &config::hotkeysEnabled);
+    Switch("Keyboard controls the menu", &config::menuKeyboard);
+    Note("While the menu is open the game gets no keys. Arrows and Tab move a thick white frame, Space presses or "
+         "switches, Esc or Insert closes the menu. Sliders: Enter, Tab or Ctrl+click lets you type an exact number "
+         "(Enter when done), or Space and then Left / Right.");
     Switch("Stream hide (F8)", &config::streamHide);
     Note("Stream hide draws nothing, so recordings and streams show no overlay. F8 always works, even with Hotkeys off. While it is on the menu cannot be opened: press F8 first.");
     Section("FILES");
@@ -289,13 +310,14 @@ inline void DrawMenu() {
     ImGui::Separator();
 
     const float footer = 30.0f;
-    ImGui::BeginChild("##nav", ImVec2(150, -footer), false);
+    //NavFlattened: the arrows and Tab move straight between the tabs and the page
+    ImGui::BeginChild("##nav", ImVec2(150, -footer), ImGuiChildFlags_NavFlattened);
     for (int i = 0; i < MENU_TAB_COUNT; i++)
         if (ui::Tab(MENU_TABS[i], g_MenuTab == i, 140)) g_MenuTab = i;
     ImGui::EndChild();
 
     ImGui::SameLine();
-    ImGui::BeginChild("##page", ImVec2(0, -footer), false, ImGuiWindowFlags_AlwaysVerticalScrollbar);
+    ImGui::BeginChild("##page", ImVec2(0, -footer), ImGuiChildFlags_NavFlattened, ImGuiWindowFlags_AlwaysVerticalScrollbar);
     switch (g_MenuTab) {
         case 0: PageEsp(); break;
         case 1: PagePlayers(); break;
@@ -308,6 +330,7 @@ inline void DrawMenu() {
     ImGui::TextColored(ImColor(ui::GREY), "F6 mark teammate    F7 clear marks    F8 stream hide    F10 quit overlay");
     ImGui::End();
     ui::PopTheme();
+    ui::DrawNavFrame(); //last: the inventory windows and the player list are drawn before the menu
 }
 
 //Everything the overlay shows on top of the ESP: the player list, inventory windows, the menu. Pass to RenderEnd().
