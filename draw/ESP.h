@@ -434,7 +434,7 @@ inline void DrawRadar(const std::vector<RenderEntity>& entities, FminimalViewInf
     DrawLabelCentered(cx, cy - R - 13, title, 12.0f, IM_COL32(190, 190, 190, 255));
 
     //What you can see: the edges of the view, drawn as two lines
-    if (cameraInfo.FOV > 10 && cameraInfo.FOV < 130) {
+    if (viewUsable(cameraInfo)) {
         double tanH = std::tan(cameraInfo.FOV * 3.14159265358979 / 360.0);
         const Projection pr = MakeProjection(); //the game's own picture shape, not the screen's
         if (!config::fovIsHorizontal) tanH *= (double)pr.width / std::max(1, pr.height);

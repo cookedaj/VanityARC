@@ -70,9 +70,7 @@ bool Tracker::freshCamera(FminimalViewInfo& out) const {
     const ptr cam = cam_.load(std::memory_order_relaxed);
     if (!cam || ProcessId == 0) return false;
     FminimalViewInfo v = ReadMemory<FminimalViewInfo>(cam + off::VIEW_MATRIX);
-    const bool ok = std::isfinite(v.FOV) && std::abs(v.FOV - 70.0) <= 60.0 &&
-                    std::isfinite(v.Location.x) && std::isfinite(v.Location.y) && std::isfinite(v.Location.z) &&
-                    std::isfinite(v.Rotation.x) && std::isfinite(v.Rotation.y) && std::isfinite(v.Rotation.z);
+    const bool ok = viewUsable(v);
     if (ok) out = v;
     return ok;
 }

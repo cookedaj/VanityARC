@@ -70,6 +70,8 @@ private:
     std::vector<Tracked> statics_; //containers and ground items: position read at each scan
     std::vector<Tracked> dyn_;     //players and ARC: re-read every step
     ptr camActor_ = 0;
+    FminimalViewInfo goodVm_{};                          //the last usable view, and when it was read: one bad read reuses it
+    std::chrono::steady_clock::time_point goodVmAt_{};
     ptr lastWorld_ = 0;   //UWorld at the last scan: a different one (or none) means a full scan right now
     ptr meActor_ = 0;     //your own pawn at the last step (for the probes)
     Vector3 lastCamPos_;  //where the camera was at the last step: only players near it get their pose read
