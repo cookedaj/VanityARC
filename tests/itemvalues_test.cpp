@@ -27,6 +27,7 @@ int main() {
     CHECK(itemvalues::valueOf("Broken") == -1, "a non-number value is skipped");
     CHECK(itemvalues::valueOf("Negative") == -1, "a negative value is skipped");
     CHECK(itemvalues::valueOf("No Separator") == -1, "a line without | is skipped");
+    CHECK(itemvalues::count() == 4, "count is the number of usable price lines");
 
     itemvalues::parse("Snap Hook | 1");
     CHECK(itemvalues::valueOf("Snap Hook") == 1, "parse replaces the table");
@@ -34,6 +35,7 @@ int main() {
 
     itemvalues::clear();
     CHECK(itemvalues::valueOf("Snap Hook") == -1, "clear empties the table");
+    CHECK(itemvalues::count() == 0, "no prices loaded: count is 0");
 
     std::printf(fails ? "SOME TESTS FAILED\n" : "ALL TESTS PASSED\n");
     return fails ? 1 : 0;

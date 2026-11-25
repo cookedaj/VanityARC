@@ -237,6 +237,9 @@ int main() {
     bool bandOk = false, smgOk = false;
     for (const ItemRow& r : rows) { bandOk |= r.name == "Bandage" && r.count == 2 && r.category == "backpack"; smgOk |= r.name == "Stitcher" && r.count == 1; }
     CHECK(rows.size() == 2 && bandOk && smgOk, "inventory: items are named, the same item is merged into one row with a count");
+    bool keyOk = false;
+    for (const ItemRow& r : rows) keyOk |= r.name == "Bandage" && r.key == "Bandage_01";
+    CHECK(keyOk, "inventory: a row keeps the internal name as its key (for prices)");
     put<int>(invComp, 0x608, 100000);
     CHECK(labeler::inventoryOf(invPawn).empty(), "inventory: an absurd count is not trusted");
     put<int>(invComp, 0x608, 4); put<u64>(invPawn, 0xCB0, 0);
