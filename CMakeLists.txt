@@ -121,6 +121,7 @@ if(KWINHELPER_TESTS)
     kwinhelper_test(labels_test utils/names.cpp utils/labels.cpp utils/labeler.cpp memory/memory.cpp)
     kwinhelper_test(itemvalues_test utils/itemvalues.cpp)
     kwinhelper_test(amp_test)
+    kwinhelper_test(marks_test)
     kwinhelper_test(fuzz_test utils/names.cpp utils/labels.cpp utils/labeler.cpp memory/memory.cpp)
     kwinhelper_test(menu_test utils/labels.cpp utils/itemvalues.cpp
             ${IMGUI_DIR}/imgui.cpp ${IMGUI_DIR}/imgui_draw.cpp ${IMGUI_DIR}/imgui_tables.cpp ${IMGUI_DIR}/imgui_widgets.cpp
