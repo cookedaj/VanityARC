@@ -203,7 +203,6 @@ GameState::RawInfo GameState::getRawEnt(ptr uworld) {
         if (!isDebugMode) { //allows everything through when debugging
             if (vt == vtabels::PLAYER) ent.type = Object::PLAYER;
             else if (vt == vtabels::ARC) ent.type = Object::ARC;
-            else if (vt == vtabels::PICKUP) { if (probeNames) otherClass = true; else continue; } //v1029: this vtable is GC_StaminaDrain_C (a gameplay effect), not loot
             else if (vt == vtabels::SEARCH) ent.type = Object::SEARCH;
             else if (vt == vtabels::CAMMANAGER) ent.type = Object::NONE;
             else if (probeNames) otherClass = true;

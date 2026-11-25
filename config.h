@@ -197,7 +197,6 @@ namespace vtabels {
     // looting a trash can). The others are inferred from how each row behaved:
     inline constexpr uintptr_t ARC = 0x14e12b1c0;     // count 40-55, moves while you stand still, closed to 3 m when a Shredder killed me
     inline constexpr uintptr_t SEARCH = 0x14e0e5de0;  // count ~650-740, static
-    inline constexpr uintptr_t PICKUP = 0x14dc5a3c0;  // debug path only (probeNames): GC_StaminaDrain_C, not loot. Never drawn; no need to update it
     inline constexpr uintptr_t PLAYER = 0x14e337000;  // count 14, always 1.5-1.9 m from the camera (third person). Alt: 0x14d3b03e0
     inline constexpr uintptr_t CAMMANAGER = 0x14d8af9d0; //v1029, found by the camera scan (VIEW_MATRIX 0xE10 confirmed live)
 }
