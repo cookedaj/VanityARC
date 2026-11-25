@@ -132,24 +132,30 @@ inline void MenuFeedKeys() {
 //A button for something that cannot be undone. The first click arms it: "Cancel" takes its place (same width) and
 //the real action appears to its right. The action only counts 0.6 s after arming, so a double-click never reaches
 //it, and the offer goes away by itself after 6 s. armedAt: a static the caller keeps, below 0 = not armed.
+//The button and Cancel share one ID ("###arm"), so the keyboard focus frame stays on them when one replaces the other.
 inline bool ConfirmButton(const char* label, const char* confirm, double* armedAt) {
     const double now = ImGui::GetTime();
     if (*armedAt >= 0 && now - *armedAt > 6.0) *armedAt = -1;
     ImGui::PushID(label);
     bool yes = false;
     if (*armedAt < 0) {
-        if (ImGui::Button(label)) *armedAt = now;
+        if (ImGui::Button((std::string(label) + "###arm").c_str())) *armedAt = now;
     } else {
         const float w = ImGui::CalcTextSize(label).x + ImGui::GetStyle().FramePadding.x * 2;
-        if (ImGui::Button("Cancel", ImVec2(w, 0))) *armedAt = -1;
+        if (ImGui::Button("Cancel###arm", ImVec2(w, 0))) *armedAt = -1;
         ImGui::SameLine();
-        if (ImGui::Button(confirm) && *armedAt >= 0 && now - *armedAt >= 0.6) { yes = true; *armedAt = -1; }
+        if (ImGui::Button(confirm) && *armedAt >= 0 && now - *armedAt >= 0.6) {
+            yes = true; *armedAt = -1;
+            //the focus frame goes back to the restored button (same ID as Cancel###arm; ImHashStr restarts at "###")
+            if (ImGui::IsItemFocused()) ImGui::SetFocusID(ImGui::GetID("###arm"), ImGui::GetCurrentWindow());
+        }
     }
     ImGui::PopID();
     return yes;
 }
 
-//The readable setup in one go: biggest text, thick lines, full boxes on label cards, nothing see-through. Saved at once.
+//The readable setup in one go: text size 28, lines at least 4 px, full boxes, label cards, overlay and menu fully solid,
+//hidden players at least 200 (Hidden player opacity). Saved at once.
 inline void ApplyHighVisibility() {
     config::labelSize = 28.0f;
     config::boxThickness = std::max(config::boxThickness, 4.0f); //only ever thicker
@@ -166,7 +172,7 @@ inline void HighVisibilityButton() {
     ImGui::PushFont(OverlayFont(), 22.0f);
     if (ImGui::Button("High visibility", ImVec2(320, 46))) { ApplyHighVisibility(); Toast("High visibility on"); }
     ImGui::PopFont();
-    ui::Note("One click: text size 28, lines at least 4 px, full boxes, label cards, nothing see-through.");
+    ui::Note("One click: text size 28, lines at least 4 px, full boxes, label cards, overlay and menu fully solid, hidden players at least 200 (Hidden player opacity).");
 }
 
 //--- the pages
@@ -235,7 +241,7 @@ inline void PagePlayers() {
     static double clearArmedAt = -1;
     if (ConfirmButton("Clear teammate marks", "Yes, clear all marks", &clearArmedAt)) { marks::clear(); marks::save(); Toast("Teammate marks cleared"); }
     ImGui::SameLine();
-    Note("F6 marks the player at your crosshair, F7 clears all.");
+    Note("F6 marks the player at your crosshair, F7 pressed twice clears all.");
     DrawSavedMarks();
     Section("PLAYERS IN VIEW");
     DrawPlayerRows(16);
@@ -378,7 +384,7 @@ inline void PageSettings() {
          "switches, Esc or Insert closes the menu. Sliders: Enter, Tab or Ctrl+click lets you type an exact number "
          "(Enter when done), or Space and then Left / Right.");
     Switch("Stream hide (F8)", &config::streamHide);
-    Note("Stream hide draws nothing, so recordings and streams show no overlay. F8 always works, even with Hotkeys off. While it is on the menu cannot be opened: press F8 first.");
+    Note("Stream hide draws nothing, so recordings and streams show no overlay. F8 works even with Hotkeys off, but not while Shift, Ctrl, Alt or Meta is held (let go of Shift first). While it is on the menu cannot be opened: press F8 first.");
     Section("OVERLAY WINDOW");
     if (g_OverlayWhere) ImGui::TextWrapped("%s", g_OverlayWhere().c_str());
     if (!g_OverlayNote.empty()) ImGui::TextWrapped("%s", g_OverlayNote.c_str()); //the setup problem shown at the start
@@ -440,7 +446,7 @@ inline void DrawMenu() {
     ImGui::EndChild();
 
     ImGui::Separator();
-    ImGui::TextColored(ImColor(ui::GREY), "F6 mark teammate    F7 clear marks    F8 stream hide    F10 quit overlay");
+    ImGui::TextColored(ImColor(ui::GREY), "F6 mark teammate    F7 twice: clear marks    F8 stream hide    F10 twice: quit");
     ImGui::End();
     ui::PopTheme();
     ui::DrawNavFrame(); //last: the inventory windows and the player list are drawn before the menu
