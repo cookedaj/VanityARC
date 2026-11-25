@@ -37,6 +37,11 @@ constexpr int JOINT_BONE[JOINT_COUNT] = {
 enum Joint { PELVIS, SPINE1, SPINE2, SPINE3, NECK1, NECK2, HEAD, SHOULDER_A, ARM_A, FOREARM_A, HAND_A,
              SHOULDER_B, ARM_B, FOREARM_B, HAND_B, HIP_A, KNEE_A, ANKLE_A, TOE_A, HIP_B, KNEE_B, ANKLE_B, TOE_B };
 
+//The only bones the stick figure needs: its joints and every bone above them, as [first, last] ranges. Only these are
+//read from the game (24 of the 97), packed one range after another; decodeRead() puts them back in their places.
+constexpr int READ_RANGES[3][2] = {{0, 11}, {42, 45}, {65, 72}};
+constexpr int READ_BONES = 24;
+
 //Lines of the stick figure, as pairs of joints
 constexpr int LINE_COUNT = 22;
 constexpr int LINES[LINE_COUNT][2] = {
@@ -79,18 +84,30 @@ inline Xform compose(const Xform& local, const Xform& parent) {
     return r;
 }
 
+//One bone record's raw bytes into a transform
+inline Xform decodeOne(const uint8_t* r) {
+    double q[4], t[3], s[3];
+    std::memcpy(q, r, 32);
+    std::memcpy(t, r + 0x20, 24);
+    std::memcpy(s, r + 0x40, 24);
+    Xform x;
+    x.q = {q[0], q[1], q[2], q[3]};
+    x.t = Vector3(t[0], t[1], t[2]);
+    x.s = Vector3(s[0], s[1], s[2]);
+    return x;
+}
+
 //The raw bytes of a bone list (BONES records) into transforms
 inline void decode(const uint8_t* bytes, Xform out[BONES]) {
-    for (int i = 0; i < BONES; i++) {
-        const uint8_t* r = bytes + (size_t)i * RECORD;
-        double q[4], t[3], s[3];
-        std::memcpy(q, r, 32);
-        std::memcpy(t, r + 0x20, 24);
-        std::memcpy(s, r + 0x40, 24);
-        out[i].q = {q[0], q[1], q[2], q[3]};
-        out[i].t = Vector3(t[0], t[1], t[2]);
-        out[i].s = Vector3(s[0], s[1], s[2]);
-    }
+    for (int i = 0; i < BONES; i++) out[i] = decodeOne(bytes + (size_t)i * RECORD);
+}
+
+//The READ_RANGES records, packed one after another (READ_BONES records), into transforms. Every bone not read stays
+//unmoved (identity): chain() accepts it, and the stick figure never uses it.
+inline void decodeRead(const uint8_t* bytes, Xform out[BONES]) {
+    for (int i = 0; i < BONES; i++) out[i] = Xform{};
+    for (const auto& rg : READ_RANGES)
+        for (int b = rg[0]; b <= rg[1]; b++, bytes += RECORD) out[b] = decodeOne(bytes);
 }
 
 //Every bone relative to the mesh instead of relative to its parent. False when a bone is not a believable transform

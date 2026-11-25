@@ -13,7 +13,9 @@
 
 //Set by the drawing thread from the settings, read here: read players' poses only when they will be drawn
 inline std::atomic<bool> g_skeletonOn{true};
-inline std::atomic<int> g_skeletonDist{120}; //m
+inline std::atomic<int> g_skeletonDist{120}; //m (also no further than players are drawn at all)
+inline std::atomic<bool> g_showTeammates{true}; //squad mates are drawn (until the drawing thread says: assumed so)
+inline std::atomic<double> g_viewSpread{4.0};    //the picture's corners (with DrawESP's margin) as a tangent per unit tan(FOV/2); until known: wide
 
 struct gsRet {
     std::vector<RenderEntity> entities{};
@@ -74,7 +76,7 @@ private:
     std::chrono::steady_clock::time_point goodVmAt_{};
     ptr lastWorld_ = 0;   //UWorld at the last scan: a different one (or none) means a full scan right now
     ptr meActor_ = 0;     //your own pawn at the last step (for the probes)
-    Vector3 lastCamPos_;  //where the camera was at the last step: only players near it get their pose read
+    FminimalViewInfo lastView_{}; //the camera at the last step: only players near it and in front of it get their pose read
     std::unordered_map<ptr, double> shieldSeen_; //highest shield seen per player: the bar's full length when the game keeps no maximum
     double shieldCap_ = 0; //highest shield any player held still on two steps in a row (under 1000), for the whole session
     //The game stops animating a player it is not drawing: his bone list then stops changing. Per player: a hash of the
@@ -92,7 +94,7 @@ private:
         bool haveGood = false;
         skeleton::Pose good;                   //mesh space
         std::chrono::steady_clock::time_point goodAt{};
-        std::vector<uint8_t> bones;            //the bone list as last read whole, reused between reads (BONE_PERIOD)
+        std::vector<uint8_t> bones;            //the bones the figure uses (skeleton::READ_RANGES) as last read whole, reused between reads (BONE_PERIOD)
         std::chrono::steady_clock::time_point bonesAt{};
     };
     std::unordered_map<ptr, PoseState> poseSeen_;
