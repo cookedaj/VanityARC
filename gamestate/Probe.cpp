@@ -444,7 +444,7 @@ void meshProbe(ptr pawn, FILE* out) {
     std::fprintf(out, "  bone list count (mesh+0x%lx): %d (the player skeleton has %d)\n", (unsigned long)(off::BONE_ARRAY + 8), boneNum, skeleton::BONES);
     const char* fail = mesh == root ? "the mesh pointer is the root component (capsule) itself"
                      : boneNum != skeleton::BONES ? "the bone list is not the player skeleton"
-                     : meshName.rfind("CharacterMesh", 0) != 0 ? "the name does not start with CharacterMesh"
+                     : !meshName.empty() && meshName.rfind("CharacterMesh", 0) != 0 ? "the name does not start with CharacterMesh"
                      : d >= 300.0 ? "the mesh is far from the pawn" : nullptr;
     if (fail) std::fprintf(out, "  -> SUSPECT: %s, off::MESH is probably wrong\n", fail);
     else std::fprintf(out, "  -> PLAUSIBLE: a CharacterMesh with the player skeleton, next to the pawn\n");
