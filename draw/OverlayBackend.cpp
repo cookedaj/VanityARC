@@ -227,6 +227,7 @@ void RenderEnd(void (*extra)()) {
     const bool hidden = g_overlayHidden.load();
     if (extra && !hidden) extra(); //the menu is not drawn while hidden
     ImGui::Render();
+    if (g_kind == Kind::Layer && !g_layer->mapped()) return; //stream hide took the surface away: nothing to draw on
     int w, h;
     if (g_kind == Kind::Layer) { w = g_layer->width() * g_layer->scale(); h = g_layer->height() * g_layer->scale(); }
     else glfwGetFramebufferSize(g_glfw, &w, &h);
@@ -245,10 +246,18 @@ bool OverlayReady() {
     if (g_kind != Kind::Layer) return true;
     if (!g_down) {
         if (!g_layer->pump()) g_lost = true;
-        if (!g_lost && !g_layer->shouldClose()) return true;
-        std::cerr << "[!] The overlay " << (g_lost ? "lost the connection to the compositor"
-                                                   : "surface was closed by the compositor (monitor unplugged, off or changed)")
-                  << ". Trying to show it again every 2 s." << std::endl;
+        std::string why;
+        if (g_lost) why = "lost the connection to the compositor";
+        else if (g_layer->shouldClose()) why = "surface was closed by the compositor (monitor unplugged, off or changed)";
+        else if (g_overlayHidden.load() == g_layer->mapped()) {
+            //Stream hide takes the surface off the screen, so nothing covers the game and the desktop can show it directly
+            //(smoother, less lag). Showing it again makes a new surface; the GL context with ImGui's shaders and font stays.
+            std::string err;
+            if (g_layer->mapped()) g_layer->unmap();
+            else if (!g_layer->remap(&err)) why = "could not be shown again (" + err + ")";
+        }
+        if (why.empty()) return true;
+        std::cerr << "[!] The overlay " << why << ". Trying to show it again every 2 s." << std::endl;
         ImGui_ImplOpenGL3_Shutdown(); //its GL objects belong to the old context
         g_layer->destroy();
         ImGui::GetIO().ClearInputMouse(); //the pointer went with the surface: no button stays held

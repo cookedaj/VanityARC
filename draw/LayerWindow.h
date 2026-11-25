@@ -30,6 +30,12 @@ public:
     bool pump();                         //handle waiting events; waits (100 ms at most) until the last frame is shown; false when the connection is gone
     void swap();                         //show the frame (does not wait: pump() paces the frames)
     void setInteractive(bool on);        //true: takes the mouse (the menu); false: every click goes to the game
+    //Stream hide: unmap() takes the surface off the screen, so nothing covers the game (the desktop can then show it
+    //directly). The connection and the OpenGL context (shaders, font) stay; the context stays current without a surface.
+    //Does nothing where the driver cannot keep a context without a surface (then hidden frames stay empty, as before).
+    void unmap();
+    bool remap(std::string* error);      //after unmap(): a new surface with the context current on it. False (with a reason) if it fails
+    bool mapped() const;                 //there is a surface to draw on and swap()
 
     bool shouldClose() const;
     bool hasCursor() const;              //the desktop's cursor shows over the menu (false: the menu must draw one)
