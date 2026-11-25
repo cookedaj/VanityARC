@@ -55,6 +55,10 @@ int main() {
     g_MenuTab = 3; //the Settings page (it has the game view part too)
     for (int i = 0; i < 3; i++) frame([] { DrawMenu(); });
     CHECK(true, "menu draws the Settings page");
+    auto yellow = [] { for (const ImDrawVert& v : ImGui::GetBackgroundDrawList()->VtxBuffer) if (v.col == GUIDE_YELLOW) return true; return false; };
+    CHECK(yellow(), "the Settings page draws the yellow game picture frame and centre cross");
+    g_MenuTab = 0; frame([] { DrawMenu(); });
+    CHECK(!yellow(), "other pages do not draw the calibration guide");
 
     //typing: a text box that is made active, then keys arrive through the same queue the keyboard thread fills
     char buf[48] = "";
