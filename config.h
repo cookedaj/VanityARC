@@ -163,6 +163,8 @@ namespace off {
 //   2) set scanForCamera = false, rebuild: the console now lists every vtable nearest-first every 2s
 //      (and the overlay labels objects with theirs). Your own player is the ~0 m row = PLAYER;
 //      stand next to a loot container / ground item / ARC robot to find SEARCH / PICKUP / ARC
+// While object names read, the normal build also learns PLAYER / ARC / SEARCH vtables it does not know here from their
+// actors' names (gamestate/Fast.cpp, learnKinds) and prints "[+] Learned vtable 0x... = PLAYER": copy those in here.
 namespace vtabels {
 
     // v1029 best guesses from the live vtable lists (2026-11-20). SEARCH is confirmed (nearest 2.0 m while

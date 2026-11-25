@@ -253,6 +253,18 @@ void refine(RenderEntity& e) {
     if (startsWith(in.cls, "BP_Pickup")) e.type = Object::PICKUP;
 }
 
+std::optional<Object> kindByName(uintptr_t actor) {
+    if (!names::ready()) return std::nullopt;
+    const std::string cls = names::name(actor);
+    if (cls.empty()) return std::nullopt; //its own name did not read: ask another actor
+    if (!assetName(ReadMemory<uintptr_t>(actor + ARC_TYPE_ASSET), "DA_EnemyType_").empty()) return Object::ARC;
+    if (!assetName(ReadMemory<uintptr_t>(actor + off::MESH), "CharacterMesh").empty()) //a character: a player has a PlayerState, an AI one does not
+        return isObj(ReadMemory<uintptr_t>(actor + PAWN_PLAYERSTATE)) ? Object::PLAYER : Object::NONE;
+    for (const char* p : {"BP_SocketContainer_", "BP_SalvageContainer_", "BP_Pickup"})
+        if (startsWith(cls, p)) return Object::SEARCH; //refine() then tells ground items apart, as for the config.h vtable
+    return Object::NONE;
+}
+
 void fill(RenderEntity& e) {
     double t = nowSec();
     Info& in = infoOf(e.actor, t);
