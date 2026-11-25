@@ -103,12 +103,17 @@ gsRet GameState::tick() {
 uintptr_t GameState::getUworld() {
     //v1029 4-step chain. In the main menu (no spawned PlayerController) any link can read 0: the chain stops there
     //(no more reads from a bad address) and 0 comes back, which the callers handle as "Invalid Uworld".
+    //chain_ keeps every link and chainStop_ the one that read 0, so the "no game world" text and the self-check report can say where.
     ptr p = ReadMemory<ptr>(this->baseAddr + off::UWORLD_RVA);
+    chain_[0] = p;
+    int k = 0;
     for (ptr o : {off::UWORLD_CHAIN_1, off::UWORLD_CHAIN_2, off::UWORLD_CHAIN_3}) {
-        if (!isValidPtr(p)) return 0;
+        if (!isValidPtr(p)) break;
         p = ReadMemory<ptr>(p + o);
+        chain_[++k] = p;
     }
-    return p;
+    chainStop_ = isValidPtr(p) ? -1 : k;
+    return isValidPtr(p) ? p : 0;
 }
 
 ptr GameState::cameraViaController(ptr vtableCam) {

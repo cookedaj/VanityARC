@@ -293,7 +293,7 @@ int main() {
             char l1[200], l2[200];
             size_t players = 0;
             for (const RenderEntity& e : ents) players += e.type == Object::PLAYER;
-            if (!snap->valid) std::snprintf(l1, sizeof l1, "waiting for a raid");
+            if (!snap->valid) std::snprintf(l1, sizeof l1, "%s", snap->fault ? snap->fault : "waiting for a raid"); //says which UWorld link stopped
             else if (!live) std::snprintf(l1, sizeof l1, "waiting for fresh data (%.0f ms old)", ageMs);
             else std::snprintf(l1, sizeof l1, "live  -  %.0f Hz  -  data %.0f ms  -  %zu players", st.updatesPerSec, ageMs, players);
             std::snprintf(l2, sizeof l2, "%.0f fps   step %.2f ms   scan %.1f ms   %zu moving, %zu fixed",

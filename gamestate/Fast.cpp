@@ -72,7 +72,14 @@ std::string say(const char* format, ...) {
 bool GameState::scan(ptr uworld) {
     const auto t0 = clk::now();
     if (!isValidPtr(uworld)) {
-        fault_ = "no game world: menu or loading screen (or the UWORLD offsets are stale)";
+        //The link that read 0 (see getUworld). The menu stops the chain at CHAIN_1 (no PlayerController yet); in a raid a
+        //stop means the offsets in config.h are stale for this game build.
+        static const char* const stop[4] = {
+            "no game world: UWorld chain stops at UWORLD_RVA (reads 0: offsets stale?)",
+            "no game world: UWorld chain stops at UWORLD_CHAIN_1 (menu, or offsets stale)",
+            "no game world: UWorld chain stops at UWORLD_CHAIN_2 (menu, or offsets stale)",
+            "no game world: UWorld chain stops at UWORLD_CHAIN_3 (menu, or offsets stale)"};
+        fault_ = stop[chainStop_ >= 0 ? chainStop_ : 0];
         logThrottled("[-] Invalid Uworld (not in a raid yet?)");
         return false;
     }
@@ -718,14 +725,43 @@ void GameState::selfCheckIfAsked(const FminimalViewInfo& vm) {
     else std::printf("[!] Self-check: could not save %s\n", path.c_str());
 }
 
+//No game world yet (menu, loading screen, or stale offsets): where the UWorld chain stops, link by link, saved to
+//~/.config/kwin-helper/selfcheck.txt about once a second. It needs no raid, so it is the check that works before one.
+void GameState::chainReportIfAsked() {
+    if (chainStop_ < 0) return; //the chain reached the UWorld: the full self-check (selfCheckIfAsked) takes over
+    const auto now = clk::now();
+    if (now - self_.chainAt < std::chrono::seconds(1)) return;
+    self_.chainAt = now;
+    static const char* const linkName[4] = {"UWORLD_RVA", "UWORLD_CHAIN_1", "UWORLD_CHAIN_2", "UWORLD_CHAIN_3"};
+    const ptr linkOff[4] = {off::UWORLD_RVA, off::UWORLD_CHAIN_1, off::UWORLD_CHAIN_2, off::UWORLD_CHAIN_3};
+    std::string rep = "\n=== SELF-CHECK, no game world yet: the UWorld chain, link by link (read only) ===\n";
+    rep += say("game base 0x%lx\n", (unsigned long)baseAddr);
+    for (int k = 0; k < 4; k++) {
+        if (k < chainStop_) rep += say("PASS  %-14s +0x%lx -> 0x%lx\n", linkName[k], (unsigned long)linkOff[k], (unsigned long)chain_[k]);
+        else if (k == chainStop_) rep += say("FAIL  %-14s +0x%lx -> 0x0 (the chain stops here)\n", linkName[k], (unsigned long)linkOff[k]);
+        else rep += say("SKIP  %-14s not read: the chain stopped before it\n", linkName[k]);
+    }
+    rep += chainStop_ == 0
+        ? std::string("The first read is 0: UWORLD_RVA is stale for this game build, or the game base is wrong.\n")
+        : say("The chain stops at %s. In the main menu that is normal. In a raid it means the offsets in config.h are stale for this game build.\n", linkName[chainStop_]);
+    const char* home = std::getenv("HOME");
+    const std::string path = std::string(home ? home : ".") + "/.config/kwin-helper/selfcheck.txt";
+    rep += say("=== Saved to %s, refreshed every second while there is no game world ===\n", path.c_str());
+    if (FILE* f = std::fopen(path.c_str(), "w")) { std::fputs(rep.c_str(), f); std::fclose(f); }
+    else std::printf("[!] Self-check: could not save %s\n", path.c_str());
+}
+
 gsRet GameState::step() {
     if (isDebugMode || probeNames) return tick(); //the diagnostic modes want the unfiltered view
 
     const auto t0 = clk::now();
-    //No world or camera: no self-check report either (it needs them, and a menu or loading screen looks the same as a
-    //stale offset), so while one is asked for the console says why it has not come yet
+    //No world or camera: no full self-check report (it needs them). Without a world the UWorld chain report is written
+    //instead, so a stale offset shows up before a raid too. While one is asked for, the console says so.
     auto failed = [&](const char* why) -> gsRet {
-        if (self_.stage) logThrottled((std::string("[-] Self-check waiting, no report until a world and camera are found: ") + why).c_str());
+        if (self_.stage) {
+            chainReportIfAsked();
+            logThrottled((std::string("[-] Self-check waiting, no full report until a world and camera are found: ") + why).c_str());
+        }
         return {.fault = why};
     };
     //The world takes 4 reads one after another, so it is checked before every scan and about 30 times a second, not on

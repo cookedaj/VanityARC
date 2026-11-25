@@ -427,6 +427,7 @@ int main() {
     gsRet a = ref.tick(), b = fast.step(); //not yet time for a scan: the world check alone notices it
     CHECK(!a.valid && !b.valid && b.entities.empty(), "no world: both paths report nothing");
     CHECK(b.fault != nullptr, "no world: step() says why (shown on screen)");
+    CHECK(b.fault && std::strstr(b.fault, "UWORLD_CHAIN_3"), "no world: the reason names the UWorld link that read 0");
     fixWorld();
     compare("world back: both are back");
 
@@ -506,6 +507,29 @@ int main() {
         CHECK(has("PASS  CONTROLLER") && has("FAIL  PLAYER vtable") && has("0x14d777000"), "self-check: you are found without the PLAYER vtable, and your real vtable is named");
         CHECK(has("PASS  POS_PTR") && has("PASS  HEALTH_MAX") && has("PASS  HEALTH_CACHED") && has("PASS  MESH") && has("PASS  BONE_ARRAY") &&
               has("PASS  RENDER_TIME") && has("PASS  IS_DESTROYED"), "self-check: your position, health, mesh, bones, draw time and the ARC destroyed flag pass");
+        if (keepHome.empty()) unsetenv("HOME"); else setenv("HOME", keepHome.c_str(), 1);
+    }
+
+    //--- KWINHELPER_SELFCHECK with no raid yet: the UWorld chain is written link by link (the check that works before a raid)
+    {
+        const char* oldHome = std::getenv("HOME");
+        const std::string keepHome = oldHome ? oldHome : "";
+        const std::string home = "/tmp/kwinhelper_chain_test"; //never your real ~/.config/kwin-helper
+        std::filesystem::create_directories(home + "/.config/kwin-helper");
+        std::filesystem::remove(home + "/.config/kwin-helper/selfcheck.txt");
+        setenv("HOME", home.c_str(), 1);
+        setenv("KWINHELPER_SELFCHECK", "1", 1);
+        GameState sc(base);
+        unsetenv("KWINHELPER_SELFCHECK");
+        breakWorld();                       //the chain stops at UWORLD_CHAIN_3 (it reads 0)
+        sc.step();
+        std::ifstream f(home + "/.config/kwin-helper/selfcheck.txt");
+        const std::string rep((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+        auto has = [&](const char* s) { return rep.find(s) != std::string::npos; };
+        CHECK(has("PASS  UWORLD_RVA") && has("PASS  UWORLD_CHAIN_2"), "chain report: the links that were read show PASS");
+        CHECK(has("FAIL  UWORLD_CHAIN_3") && has("the chain stops here"), "chain report: the link that read 0 is named FAIL");
+        CHECK(!has("SKIP  UWORLD_RVA"), "chain report: links before the stop are not SKIP");
+        fixWorld();
         if (keepHome.empty()) unsetenv("HOME"); else setenv("HOME", keepHome.c_str(), 1);
     }
 

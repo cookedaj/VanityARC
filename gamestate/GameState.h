@@ -135,12 +135,14 @@ private:
     std::chrono::steady_clock::time_point lastScan_{};
     Timing timing_{};
     const char* fault_ = nullptr; //why the last scan() failed (shown on screen)
+    ptr chain_[4] = {};    //the UWorld chain as getUworld() last read it: chain_[k] is link k (UWORLD_RVA, then CHAIN_1..3)
+    int chainStop_ = -1;   //the link that read 0 (0..3) the last time; -1 when the chain reached the UWorld
     //Vtables config.h does not know (its constants go stale with every game patch): what their actors' names said.
     //A kind is kept until the world changes; NONE is asked again after a while (next).
     struct Learned { Object kind = Object::NONE; int votes = 0; bool decided = false; std::chrono::steady_clock::time_point next{}; };
     std::unordered_map<ptr, Learned> learned_;
     //KWINHELPER_SELFCHECK (Fast.cpp). stage: 0 off or done, 1 looking for you, 2 first look taken (the report comes 1 s later)
-    struct SelfCheck { int stage = 0; int looks = 0; ptr me = 0; float rt = 0; std::chrono::steady_clock::time_point at{}; };
+    struct SelfCheck { int stage = 0; int looks = 0; ptr me = 0; float rt = 0; std::chrono::steady_clock::time_point at{}; std::chrono::steady_clock::time_point chainAt{}; };
     SelfCheck self_;
 
     bool scan(ptr uworld);  //the whole actor list of this world (just read by step()); false when there is no world yet
@@ -150,6 +152,7 @@ private:
     gsRet assemble(const FminimalViewInfo& vm);
     void runLiveProbeIfAsked(const std::vector<RenderEntity>& ents, const FminimalViewInfo& vm); //KWINHELPER_PROBE=<names>, see announceLiveProbe
     void selfCheckIfAsked(const FminimalViewInfo& vm); //KWINHELPER_SELFCHECK=1: PASS / FAIL per game number, once in a raid
+    void chainReportIfAsked(); //KWINHELPER_SELFCHECK=1 and no game world yet: the UWorld chain link by link into selfcheck.txt
 };
 
 #endif //KWINHELPER_GAMESTATE_H
