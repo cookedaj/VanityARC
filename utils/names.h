@@ -43,6 +43,9 @@ std::string fullName(uintptr_t obj);
 void clearCache();
 
 //Exposed for tests
+//Points the decoder at a test's own fake layout instead of the game's RVAs in names.cpp, so a correct patch update
+//there cannot break the tests. The program never calls this.
+void setRvasForTest(uint64_t namesRva, uint64_t textTableRva, uint64_t anchorRva);
 uint64_t clmul64(uint64_t a, uint64_t b);
 uint32_t pickNameSlot(uintptr_t actor);
 

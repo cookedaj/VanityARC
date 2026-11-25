@@ -17,6 +17,7 @@ using u32 = uint32_t;
 using u64 = uint64_t;
 
 //--- RVAs and constants, v1029 (2026-11-17). Change these after a patch. --------------------------------------------
+//(the tests lay out their fake image at their own RVAs through setRvasForTest, so new RVAs here need no test change)
 constexpr u64 NAMES_RVA        = 0x105726C0; //name pool
 constexpr u64 TEXT_TABLE_RVA   = 0x1043A2A4; //64 x u16 text keys
 constexpr u64 ANCHOR_RVA       = 0x104F48B0;
@@ -51,6 +52,7 @@ constexpr u32 PLAYER_NAME_ADD  = 0x79EA3F14u;
 //-------------------------------------------------------------------------------------------------------------------
 
 uintptr_t g_base = 0x140000000ULL;
+u64 g_namesRva = NAMES_RVA, g_textTableRva = TEXT_TABLE_RVA, g_anchorRva = ANCHOR_RVA; //only a test changes these
 
 std::mutex g_mutex;
 bool g_inited = false;
@@ -93,12 +95,12 @@ bool init() {
     if (t0 - g_lastInitTry < 1.0) return false; //not readable a moment ago (game still loading): try again in a second
     g_lastInitTry = t0;
     u16 table[TEXT_TABLE_COUNT];
-    ReadMemoryBuffer(g_base + TEXT_TABLE_RVA, table, sizeof table);
+    ReadMemoryBuffer(g_base + g_textTableRva, table, sizeof table);
     int nonZero = 0;
     for (int i = 0; i < TEXT_TABLE_COUNT; i++) nonZero += table[i] != 0;
     if (nonZero < 8) { g_status = Status::TableZero; return false; } //game not running yet, or the RVA is stale
     std::memcpy(g_textTable, table, sizeof table);
-    u64 anchor = g_base + ANCHOR_RVA;
+    u64 anchor = g_base + g_anchorRva;
     u64 key = anchor * ((anchor ^ ANCHOR_XOR) | 1);
     g_slotXor = key + SLOT_KEY_ADD;
     g_blockKey = key + BLOCK_KEY_ADD;
@@ -144,7 +146,7 @@ void shardHash(u64 addr, u32& b1, u32& b2) {
 
 //Address of the stored text for a name index
 u64 resolveEntry(u32 index) {
-    u64 chunk = g_base + NAMES_RVA + (u64)((index >> 8) & CHUNK_OFFSET_MASK);
+    u64 chunk = g_base + g_namesRva + (u64)((index >> 8) & CHUNK_OFFSET_MASK);
     u32 b1, b2;
     shardHash(chunk + CHUNK_HASH_SEED, b1, b2);
     u64 blk1[2], blk2[2];
@@ -250,6 +252,16 @@ void clearCache() {
     g_cache.clear();
     g_inited = false; //a new process may use a different text key table: read it again on the next lookup
     g_lastInitTry = -1e9;
+}
+
+void setRvasForTest(uint64_t namesRva, uint64_t textTableRva, uint64_t anchorRva) {
+    {
+        std::lock_guard<std::mutex> lk(g_mutex);
+        g_namesRva = namesRva;
+        g_textTableRva = textTableRva;
+        g_anchorRva = anchorRva;
+    }
+    clearCache(); //read the key table again at the new place
 }
 
 uint64_t clmul64(uint64_t a, uint64_t b) { return clmulLo(a, b); }

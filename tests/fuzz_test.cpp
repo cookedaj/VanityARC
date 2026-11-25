@@ -22,9 +22,41 @@ static std::string testDir(const char* name) {
 }
 
 
-typedef uint64_t u64;
+typedef uint64_t u64; typedef uint32_t u32;
 static std::mt19937_64 rng(0xC0FFEE);
 static u64 R(u64 n) { return rng() % n; }
+
+//this test's own fake layout (names::setRvasForTest), not the game's RVAs in names.cpp: a patch update there does not touch it
+static const u64 NAMES_RVA = 0x02000000, TEXT_RVA = 0x01000000, ANCHOR_RVA = 0x01800000;
+
+static u32 rol32(u32 v, int n) { return (v << n) | (v >> (32 - n)); }
+static u64 rol64(u64 v, int n) { return (v << n) | (v >> (64 - n)); }
+
+//Name 0 = "None" at `entry`: the decoder checks it before it trusts the pool, and without it no name is ever decoded.
+//Same encoding as names_test.cpp; the constants are duplicated on purpose from names.cpp.
+static void plantNone(u64 base, const uint16_t* keyTable, u64 entry) {
+    const u32 HP = 0x01000193, SHARD_ADD = 0x6C48F44Au;
+    const u64 FNV_PRIME = 0x100000001B3ULL, FNV_ADD = 0x2790CE36A33B0E0AULL, BLOCK_B = 0xF2121ADC1DBC1135ULL;
+    const u64 anchor = base + ANCHOR_RVA;
+    const u64 blockKey = anchor * ((anchor ^ 0x25FAB87EA2567D68ULL) | 1) + 0xDFD86F31B20DF944ULL;
+    const u64 chunk = base + NAMES_RVA, seed = chunk + 0x60;
+    u32 h = HP * rol32((u32)seed, 25) + SHARD_ADD; h = HP * rol32(h, 26) + (u32)(seed >> 32) + SHARD_ADD;
+    h = HP * (h >> 7) + SHARD_ADD; h = HP * (h >> 6) + SHARD_ADD;
+    const u32 mixed = h ^ (h >> 16), b1 = mixed & 7, b2 = (mixed + 1) & 7;
+    const u64 s1 = 0x1122334455667788ULL;
+    u64 mix = FNV_PRIME * rol64(s1, 40) + FNV_ADD; mix = FNV_PRIME * rol64(mix, 54) + FNV_ADD;
+    const u64 s2 = (entry - s1) ^ mix; //so the two blocks resolve name 0 to `entry`
+    auto putBlock = [&](u32 b, u64 x) { u64 p[2] = {x, names::clmul64(BLOCK_B, x)}; std::memcpy((void*)(chunk + 0x70 + 32 * b), p, 16); }; //{x, B*x} unfolds to x
+    putBlock(b1, s1 ^ blockKey); putBlock(b2, s2 ^ blockKey);
+    const uint16_t header = 4 << 9; //narrow, length 4
+    std::memcpy((void*)entry, &header, 2);
+    u32 key = 4 + 0x2DCA;
+    for (int i = 0; i < 4; i++) {
+        const uint16_t k = keyTable[((i & 1) == 0 ? key : key * 0xFFFFD236u + 0x75EDu) & 0x3F];
+        ((uint8_t*)entry)[2 + i] = (uint8_t)("None"[i] ^ (uint8_t)(k >> 3));
+        if (i & 1) key = key * 0x830A364u + 0xEAE8BFEBu;
+    }
+}
 
 int main(int argc, char** argv) {
     int iters = argc > 1 ? atoi(argv[1]) : 20000;
@@ -32,13 +64,18 @@ int main(int argc, char** argv) {
     size_t size = 0x11000000;
     uint8_t* region = (uint8_t*)mmap(nullptr, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
     u64 base = (u64)region;
+    names::setRvasForTest(NAMES_RVA, TEXT_RVA, ANCHOR_RVA);
     names::setBase(base);
     //key table with random non-zero entries
-    for (int i = 0; i < 64; i++) { uint16_t k = (uint16_t)(rng() | 1); std::memcpy(region + 0x1043A2A4 + i * 2, &k, 2); }
+    uint16_t keyTable[64];
+    for (int i = 0; i < 64; i++) { keyTable[i] = (uint16_t)(rng() | 1); }
+    std::memcpy(region + TEXT_RVA, keyTable, sizeof keyTable);
     //name pool area: random garbage in the blocks and entries
-    for (size_t i = 0x105726C0; i < 0x105726C0 + 0x20000; i += 8) { u64 v = rng(); std::memcpy(region + i, &v, 8); }
+    for (size_t i = NAMES_RVA; i < NAMES_RVA + 0x20000; i += 8) { u64 v = rng(); std::memcpy(region + i, &v, 8); }
 
     const u64 objLo = base + 0x10600000, objHi = base + 0x10F00000;
+    plantNone(base, keyTable, objHi + 0x10000); //above the fuzzed objects, so name 0 stays valid after clearCache
+    if (!names::ready()) { std::puts("FAIL: the name decoder is not ready, so it would not be fuzzed"); return 1; }
     std::vector<u64> objs;
     auto mk = [&]() {
         u64 o = (objLo + R(objHi - objLo - 0x4000)) & ~15ULL;
