@@ -182,6 +182,7 @@ inline void DrawPlayerListWindow(bool menuOpen) {
 //One window per player you clicked: who they are and everything we can read of what they carry
 inline void DrawInspectWindows() {
     if (g_inspect.empty() || !g_ui.ents) return;
+    itemvalues::reloadIfChanged(); //a price added to values.txt shows within 2 s, no restart
     RemapInspectKeys();
     ui::PushTheme(std::min(0.96f, config::menuOpacity + 0.04f));
     std::vector<std::string> close;

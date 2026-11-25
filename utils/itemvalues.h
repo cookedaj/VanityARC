@@ -17,7 +17,10 @@ long valueOf(const std::string& name);
 //How many prices are loaded (0: no values.txt, or nothing usable in it)
 size_t count();
 
-int load();                              //read values.txt (call once at start); returns how many lines were ignored
+int load();                              //read values.txt (at start); returns how many lines were ignored
+//Read values.txt again if it was saved, added or removed since the last read. Checks the file at most every
+//minGapMs (draw thread, every frame is fine). Lets prices typed into the file show without restarting.
+void reloadIfChanged(int minGapMs = 2000);
 void setDir(const std::string& dir);     //tests only; default is ~/.config/kwin-helper
 void setValueForTest(const std::string& name, long value);
 void clear();

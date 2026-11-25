@@ -1,8 +1,10 @@
 #include "itemvalues.h"
 
 #include <cctype>
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <map>
 #include <sstream>
@@ -13,6 +15,12 @@ namespace {
 
 std::map<std::string, long>& table() {
     static std::map<std::string, long> t;
+    return t;
+}
+
+//write time of values.txt when it was last read (min(): it was not there)
+std::filesystem::file_time_type& loadedTime() {
+    static std::filesystem::file_time_type t = std::filesystem::file_time_type::min();
     return t;
 }
 
@@ -77,11 +85,23 @@ int parse(const std::string& text) {
 }
 
 int load() {
-    std::ifstream f(configDir() + "/values.txt");
+    const std::string path = configDir() + "/values.txt";
+    std::error_code ec;
+    loadedTime() = std::filesystem::last_write_time(path, ec); //before reading: a save that lands mid-read changes it again
+    std::ifstream f(path);
     if (!f) { table().clear(); return 0; }
     std::stringstream ss;
     ss << f.rdbuf();
     return parse(ss.str());
+}
+
+void reloadIfChanged(int minGapMs) {
+    static std::chrono::steady_clock::time_point lastCheck{};
+    const auto now = std::chrono::steady_clock::now();
+    if (now - lastCheck < std::chrono::milliseconds(minGapMs)) return;
+    lastCheck = now;
+    std::error_code ec; //a missing file reads as file_time_type::min(): removing values.txt clears the prices
+    if (std::filesystem::last_write_time(configDir() + "/values.txt", ec) != loadedTime()) load();
 }
 
 void setDir(const std::string& dir) { dirOverride() = dir; }
