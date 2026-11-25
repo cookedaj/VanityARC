@@ -44,12 +44,13 @@ Info parseArgs(const std::vector<std::string>& argv) {
         else if (value("-H", "--output-height", v)) in.outH = toSize(v);
         else if (value("-S", "--scaler", v)) in.scaler = v;
         else if (a == "-f" || a == "--fullscreen") in.fullscreen = true;
+        else if (a == "-i" || a == "--integer-scale") in.scaler = "integer"; //old spelling of -S integer
     }
-    //Unset sizes follow the other one (gamescope shows what the game draws unless told to scale it)
-    if (in.nestedW == 0) in.nestedW = in.outW;
-    if (in.nestedH == 0) in.nestedH = in.outH;
-    if (in.outW == 0) in.outW = in.nestedW;
-    if (in.outH == 0) in.outH = in.nestedH;
+    //gamescope's defaults: -W -H are 1280x720, -H alone means a 16:9 width; -w -h follow -W -H, -h alone means 16:9
+    if (!in.outW && !in.outH) { in.outW = 1280; in.outH = 720; }
+    else if (!in.outW) in.outW = in.outH * 16 / 9;
+    if (!in.nestedW && !in.nestedH) { in.nestedW = in.outW; in.nestedH = in.outH; }
+    else if (!in.nestedW) in.nestedW = in.nestedH * 16 / 9;
     return in;
 }
 

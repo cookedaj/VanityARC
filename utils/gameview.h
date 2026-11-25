@@ -37,9 +37,11 @@ inline GameView ComputeGameView(int overlayW, int overlayH, const gamescope::Inf
     } else if (gs.found && gs.renderW() > 0 && gs.renderH() > 0) {
         rw = gs.renderW();
         rh = gs.renderH();
-        if (gs.outW > 0 && gs.outH > 0) { ow = gs.outW; oh = gs.outH; }
+        //gamescope's output is its window: fullscreen that is the screen, and -W -H play no part
+        if (!gs.fullscreen && gs.outW > 0 && gs.outH > 0) { ow = gs.outW; oh = gs.outH; }
         scaler = gs.scaler;
         v.how = "gamescope: game " + std::to_string(rw) + "x" + std::to_string(rh) + ", shown as " + std::to_string(ow) + "x" + std::to_string(oh) + " (" + scaler + ")";
+        if (!gs.fullscreen) v.how += " - gamescope is in a window (no -f): markers only line up if that window covers the whole screen";
     } else if (gs.found) {
         v.how = "gamescope found, but its command line has no sizes (-w -h): using the screen size";
     }
