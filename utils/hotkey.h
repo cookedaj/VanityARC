@@ -1,7 +1,7 @@
 #ifndef KWINHELPER_HOTKEY_H
 #define KWINHELPER_HOTKEY_H
 //Menu hotkey. The overlay never has keyboard focus (and Wayland has no global key hooks), so Insert is
-//read straight from the keyboard devices in /dev/input. Only Insert, F6, F7, F8 and F10 are looked at; nothing else
+//read straight from the keyboard devices in /dev/input. Only Insert, F6, F7, F8, F9 and F10 are looked at; nothing else
 //is stored or logged, EXCEPT while you are typing into a text box in the menu, or while the menu is open with
 //"Keyboard controls the menu" on: then (and only then) the keyboard is grabbed so the game does not see the keys,
 //and the key presses are handed to the menu.
@@ -31,8 +31,9 @@
 //Set by the Insert key or SIGUSR1; the main loop clears it
 inline std::atomic<bool> g_MenuToggle{false};
 inline std::atomic<bool> g_HotkeyStop{false};
-//F6 mark the player at the crosshair as a teammate, F7 clear the marks, F10 quit. Set on a key press, cleared by the main loop.
-inline std::atomic<bool> g_KeyMark{false}, g_KeyClear{false}, g_KeyQuit{false};
+//F6 mark the player at the crosshair as a teammate, F7 clear the marks, F9 say your status, F10 quit. Set on a key press,
+//cleared by the main loop.
+inline std::atomic<bool> g_KeyMark{false}, g_KeyClear{false}, g_KeySay{false}, g_KeyQuit{false};
 //F8 toggles stream-hide (the overlay draws nothing). SIGUSR2 does the same, for testing: pkill -USR2 -x kwin-helper
 inline std::atomic<bool> g_KeyStream{false};
 inline constexpr int MENU_KEY = KEY_INSERT;
@@ -93,11 +94,12 @@ inline bool HandleKeyEvents(int fd, bool queue) {
             if (ev[i].type != EV_KEY) continue;
             const int c = ev[i].code;
             if (ev[i].value == 1 && c == MENU_KEY) g_MenuToggle = true;
-            else if (ev[i].value == 1 && (c == KEY_F6 || c == KEY_F7 || c == KEY_F8 || c == KEY_F10)) {
+            else if (ev[i].value == 1 && (c == KEY_F6 || c == KEY_F7 || c == KEY_F8 || c == KEY_F9 || c == KEY_F10)) {
                 const int mods = HeldModifiers(fd);
                 if (c == KEY_F6) { if (!(mods & 2)) g_KeyMark = true; }
                 else if (!mods) {
                     if (c == KEY_F7) g_KeyClear = true;
+                    else if (c == KEY_F9) g_KeySay = true;
                     else if (c == KEY_F10) g_KeyQuit = true;
                     else g_KeyStream = true; //F8
                 }

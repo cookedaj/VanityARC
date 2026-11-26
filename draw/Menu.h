@@ -231,7 +231,9 @@ inline void PageEsp() {
     Note("An arrow in each player's box (pointing down: facing you) and a line on each radar dot (players and ARC) show which way they face.");
     Section("YOUR HEALTH");
     Switch("Big health and shield readout", &config::showSelfHealth);
-    Note("Your own health and shield in big text at the bottom left, and a red LOW HEALTH card below the crosshair under 35.");
+    SliderD("Low health from", &config::lowHealthFrom, 10, 90, "%.0f");
+    Note("Your own health and shield in big text at the bottom left, and a red LOW HEALTH card below the crosshair while "
+         "your health is under Low health from. Spoken cues also say \"Low health\" once when it drops under it.");
     Section("SKELETON");
     Switch("Skeleton on players", &config::showSkeleton);
     Choice("Head marker", &config::headMarker, {"Ring", "Filled"});
@@ -246,11 +248,15 @@ inline void PageEsp() {
     Section("DISTANCE");
     SliderD("Players range", &config::maxPlayerDist, 50, 800, "%.0f m");
     SliderD("ARC range", &config::maxArcDist, 20, 500, "%.0f m");
+    SliderD("ARC arrow range", &config::arcArrowDist, 10, 150, "%.0f m");
     SliderD("Loot range", &config::maxLootDist, 5, 150, "%.0f m");
+    Note("ARC arrow range: a live ARC this near that you cannot see gets an arrow at the screen edge (never beyond ARC range).");
     Section("CLOSE ENEMY WARNING");
     Switch("Big warning for a close enemy", &config::closeWarning);
     if (config::closeWarning) SliderD("Warning card range", &config::warnDist, 5, 100, "%.0f m");
-    Note("The spoken warning has its own range: Settings tab, Spoken warning range.");
+    Note("The card has a big arrow pointing toward the nearest enemy and says ABOVE or BELOW when he is more than 3 m "
+         "higher or lower. Edge arrows for enemies within this range are bigger. The spoken warning has its own range: "
+         "Settings tab, Spoken warning range.");
 }
 
 //The "Show" drop-down over a block of switches: 0 all on, 1 + k only switch k on, n + 1 anything else (Mixed). Worked out
@@ -467,15 +473,20 @@ inline void PageSettings() {
     Slider("Text size", &config::labelSize, 10.0f, 40.0f, "%.0f px");
     Slider("Menu text size", &config::menuTextSize, 15.0f, 30.0f, "%.0f px");
     Note("Text size is for everything on the game picture. Menu text size is for this menu, the player list and the "
-         "inventory windows; it changes when you let go of the slider.");
+         "inventory windows; it changes when you let go of the slider. Overlay opacity never fades the warnings: the "
+         "close enemy card, your health, LOW HEALTH, NO LIVE GAME DATA and the hotkey problem card stay fully solid.");
     Section("SPOKEN CUES");
     if (Switch("Say hotkey results and near enemies out loud", &config::soundCues) && config::soundCues) cue::say("Spoken cues on");
     if (config::soundCues) {
         SliderD("Spoken warning range", &config::cueRange, 10, 150, "%.0f m");
+        SliderD("Speech speed", &config::speechRate, -50, 50, "%.0f");
         if (cue::missing) ImGui::TextWrapped("No sound: spd-say was not found. Install speech-dispatcher to hear the cues.");
         else if (cue::failed) ImGui::TextWrapped("No sound: spd-say could not reach speech-dispatcher. Run 'spd-say test' in a terminal to see why.");
     }
-    Note("Says the result of F6, F7, F8 and F10, and warns when an enemy player first comes within range (at most one warning every 2 s). Enemy warnings are quiet while stream hide is on. "
+    Note("Says the result of F6, F7, F8, F9 and F10, and warns when an enemy player first comes within range, once more when "
+         "he comes within the Warning card range (\"Enemy close, left, 8 meters\"), with \"above\" or \"below\" more than "
+         "3 m up or down; at most one warning every 2 s. Also says \"Low health\", \"Shield broken\", \"Game data lost\" and "
+         "\"Game data back\". These are quiet while stream hide is on. Speech speed 0 keeps your own speech-dispatcher speed. "
          "The big on-screen card has its own range: ESP tab, Warning card range.");
     Section("SPEED");
     SliderD("Update rate", &config::trackerHz, 30, 240, "%.0f Hz");
@@ -483,7 +494,9 @@ inline void PageSettings() {
     DrawGameViewSettings();
     Section("OTHER");
     Switch("Status card", &config::showDebugInfo);
-    Switch("Hotkeys (F6, F7, F10)", &config::hotkeysEnabled);
+    Switch("Hotkeys (F6, F7, F9, F10)", &config::hotkeysEnabled);
+    Note("F9 says your health and shield, how many enemies are within the Spoken warning range and where the nearest one "
+         "is, and shows it at the top of the screen.");
     Switch("Keyboard controls the menu", &config::menuKeyboard);
     Note("While the menu is open the game gets no keys. Arrows and Tab move a thick white frame, Space presses or "
          "switches, Esc or Insert closes the menu. Sliders: Enter, Tab or Ctrl+click lets you type an exact number "
@@ -535,7 +548,7 @@ inline void DrawMenu() {
     ImGui::Separator();
 
     //the hotkey line under the page (30 px at 15 px text); big menu text on a narrow screen wraps it onto two lines
-    const char* keys = "F6 mark teammate    F7 twice: clear marks    F8 stream hide    F10 twice: quit";
+    const char* keys = "F6 mark teammate    F7 twice: clear marks    F8 stream hide    F9 say status    F10 twice: quit";
     const float footer = ImGui::CalcTextSize(keys, nullptr, false, ImGui::GetContentRegionAvail().x).y + st.ItemSpacing.y * 2 + 1;
     //NavFlattened: the arrows and Tab move straight between the tabs and the page
     ImGui::BeginChild("##nav", ImVec2(ui::S(150), -footer), ImGuiChildFlags_NavFlattened);

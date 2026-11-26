@@ -111,6 +111,7 @@ int main() {
     double quitArmedUntil = 0, clearArmedUntil = 0; //F10 and F7 act only on a second press within 2 s
     int lastKeyboards = -1; //what g_KeyboardCount was last frame
     NearCue nearCue;        //the spoken warning when an enemy comes close
+    SelfCue selfCue;        //"Low health", "Shield broken", "Game data lost" / "Game data back"
     //A message at the top of the screen that is also said out loud (when spoken cues are on)
     auto tell = [](const std::string& text, double seconds = 3.0) { Toast(text, seconds); cue::say(text); };
     bool hadKeyboard = false; //a keyboard was open at some point in this run
@@ -147,7 +148,7 @@ int main() {
         }
         if (!OverlayReady()) { //the overlay surface is gone and is being made again; the tracker keeps running
             g_TextGrab = false; //no text box to type into: the keyboard stays with the game
-            g_KeyMark = false; g_KeyClear = false; //no stale F6/F7 when the surface comes back
+            g_KeyMark = false; g_KeyClear = false; g_KeySay = false; //no stale F6/F7/F9 when the surface comes back
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
             continue;
         }
@@ -199,7 +200,7 @@ int main() {
         //A frame that would look exactly like the last one is skipped: less work for the compositor on top of the game.
         //The menu, a toast, the cards whose numbers move and waiting hotkeys always draw, and one frame follows every change.
         const int keyboards = g_KeyboardCount;
-        const bool busy = OverlayNeedsFrame() || g_MenuOpen || ToastShowing() || g_KeyQuit || g_KeyClear || g_KeyMark ||
+        const bool busy = OverlayNeedsFrame() || g_MenuOpen || ToastShowing() || g_KeyQuit || g_KeyClear || g_KeyMark || g_KeySay ||
                           keyboards != lastKeyboards ||
                           (!config::streamHide && ((lost && snap->valid) || (snap->gameFound && config::showDebugInfo)));
         const FrameKey key = config::streamHide ? FrameKey{.hidden = true} : FrameKey{
@@ -222,7 +223,8 @@ int main() {
         g_ui.localTeam = snap->localPlayerTeam;
         tracker.setInspected(g_MenuOpen ? InspectedActors() : std::vector<ptr>{});
 
-        //Hotkeys: F6 marks the player at the crosshair, F7 clears the marks (press twice); F10 is handled further up
+        //Hotkeys: F6 marks the player at the crosshair, F7 clears the marks (press twice), F9 says your status; F10 is
+        //handled further up
         if (config::hotkeysEnabled) {
             const double now = ImGui::GetTime();
             if (g_KeyClear.exchange(false)) {
@@ -241,8 +243,12 @@ int main() {
                     if (r.kind == MarkResult::Marked || r.kind == MarkResult::Unmarked) marks::save();
                 }
             }
+            //F9: your health and shield, how many enemies are near and where the nearest is, said and shown at the top.
+            //Nothing while stream hide is on (it is a spoken warning too).
+            if (g_KeySay.exchange(false) && !config::streamHide)
+                tell(live ? StatusSentence(snap->selfHealth, snap->selfShield, ents, vm, snap->localPlayerTeam) : "No live game data", 6.0);
         } else {
-            g_KeyQuit = g_KeyClear = g_KeyMark = false;
+            g_KeyQuit = g_KeyClear = g_KeyMark = g_KeySay = false;
         }
         //Insert and the F-keys need a keyboard: say so when one is back (no keyboard at all: the card further down)
         if (keyboards != lastKeyboards) {
@@ -252,10 +258,14 @@ int main() {
             if (keyboards > 0) hadKeyboard = true;
             lastKeyboards = keyboards;
         }
-        //Said out loud when an enemy first comes close. Quiet while stream hide is on (the overlay then gives nothing
-        //away); when cues come back on, whoever is near is said again.
-        if (!config::soundCues || config::streamHide) nearCue = NearCue{};
-        else if (live) cue::say(nearCue.update(ents, vm, snap->localPlayerTeam, ImGui::GetTime()));
+        //Said out loud: an enemy first coming close (and once more when he comes within the Warning card range), low
+        //health, a broken shield, lost and returning game data. Quiet while stream hide is on (the overlay then gives
+        //nothing away); when cues come back on, whoever is near (and low health) is said again.
+        if (!config::soundCues || config::streamHide) { nearCue = NearCue{}; selfCue = SelfCue{}; }
+        else {
+            if (live) cue::say(nearCue.update(ents, vm, snap->localPlayerTeam, ImGui::GetTime()), true); //before anything waiting
+            cue::say(selfCue.update(snap->selfHealth, snap->selfShield, live, lost, ImGui::GetTime()));
+        }
 
         //Drawn in this order, each over the one before: radar, then markers, then the messages at the top
         //Stream hide: the markers and the radar are not even built (the tracker keeps running, so F8 shows them at once)
@@ -280,7 +290,9 @@ int main() {
             DrawLabelCentered((float)config::SCREEN_W * 0.5f, y, OBF("Waiting for ARC Raiders...").c_str(), ws, COLOR::white, true);
             below = y + ws / 2 + 10 + config::labelSize / 2;
         } else if (lost) {
-            //The game runs but nothing has been live for a while: say so and why, big, whatever the debug switch says
+            //The game runs but nothing has been live for a while: say so and why, big, whatever the debug switch says,
+            //fully solid whatever Overlay opacity says
+            const FullStrength solid;
             char why[160];
             if (snap->valid) std::snprintf(why, sizeof why, "the data stopped updating (%.1f s old)", ageMs / 1000.0);
             else std::snprintf(why, sizeof why, "%s", snap->fault ? snap->fault : "waiting for a raid");
@@ -304,6 +316,7 @@ int main() {
         }
         //Insert cannot open the menu: say why and how to fix it, big, for as long as it lasts (from the start, too)
         if (const HotkeyHelp kh = HotkeyProblem(keyboards, g_KeyboardDenied, hadKeyboard); kh.why) {
+            const FullStrength solid; //whatever Overlay opacity says
             const float x = (float)config::SCREEN_W * 0.5f, ls = config::labelSize, big = ls * 1.3f;
             const std::string title = std::string("INSERT AND F-KEYS OFF: ") + kh.why;
             float y = below + (big - ls) / 2;
@@ -331,10 +344,11 @@ int main() {
         ImDrawList* const overMenu = g_MenuOpen ? ImGui::GetForegroundDrawList() : nullptr;
         DrawToast(below, overMenu);
 
-        //The close-enemy warning goes last so no other card covers it; LOW HEALTH moves below it when both show
-        float warnBottom = 0;
-        if (live && config::espEnabled) DrawCloseEnemyWarning(ents, vm, snap->localPlayerTeam, &warnBottom, LowHealthRoom(snap->selfHealth), overMenu);
-        if (live && config::showSelfHealth) DrawSelfHealth(snap->selfHealth, snap->selfShield, warnBottom); //old data: nothing, never an old number
+        //The close-enemy warning goes last so no other card covers it; LOW HEALTH moves below it when both show (above it
+        //when there is no room below)
+        float warnBottom = 0, warnTop = 0;
+        if (live && config::espEnabled) DrawCloseEnemyWarning(ents, vm, snap->localPlayerTeam, &warnBottom, LowHealthRoom(snap->selfHealth), overMenu, &warnTop);
+        if (live && config::showSelfHealth) DrawSelfHealth(snap->selfHealth, snap->selfShield, warnBottom, warnTop); //old data: nothing, never an old number
 
         RenderEnd(DrawUi);
     }

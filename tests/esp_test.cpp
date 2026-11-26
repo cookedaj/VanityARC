@@ -123,6 +123,46 @@ int main() {
         config::closeWarning = false;
         CHECK(warn({ent(Object::PLAYER, -900, 0, 0)}).empty() && g_verts == 0, "and no card with the warning switched off");
         config::closeWarning = true;
+
+        //more than 3 m higher or lower than you: ABOVE / BELOW (the camera is at height 0)
+        CHECK(HeightDir(cam, Vector3(0, 0, 301)) == 1 && HeightDir(cam, Vector3(0, 0, -301)) == -1 && HeightDir(cam, Vector3(0, 0, 299)) == 0 &&
+              HeightDir(cam, Vector3(0, 0, -250)) == 0 && HeightDir(cam, Vector3(0, 0, NAN)) == 0, "height word: only past 3 m up or down");
+        CHECK(warn({ent(Object::PLAYER, -900, 0, 500)}) == "ENEMY 10 m BEHIND, ABOVE", "an enemy 5 m up: ABOVE");
+        CHECK(warn({ent(Object::PLAYER, 0, 1200, -400), ent(Object::PLAYER, 2000, 0, 0)}) == "2 ENEMIES - NEAREST 13 m RIGHT, BELOW",
+              "the nearest of two 4 m down: BELOW");
+        //the big arrow on the card: a white filled triangle (text uses the font atlas, the card is black and its frame red).
+        //Its three corners lean away from its tip, so the tip is opposite their mean from the middle of their box.
+        float x0 = 1e9f, y0 = 1e9f, x1 = -1e9f, y1 = -1e9f, wb = 0, wt = 0; //the arrow's box; the card's bottom and top
+        auto arrowWay = [&](const std::vector<RenderEntity>& l) {
+            float mx = 0, my = 0;
+            int n = 0;
+            x0 = y0 = 1e9f; x1 = y1 = -1e9f;
+            draw([&] {
+                DrawCloseEnemyWarning(l, cam, 3, &wb, 0, nullptr, &wt);
+                const ImVec2 wp = ImGui::GetDrawListSharedData()->TexUvWhitePixel;
+                for (const ImDrawVert& q : ImGui::GetBackgroundDrawList()->VtxBuffer)
+                    if (q.col == COLOR::white && q.uv.x == wp.x && q.uv.y == wp.y) {
+                        x0 = std::min(x0, q.pos.x); x1 = std::max(x1, q.pos.x); y0 = std::min(y0, q.pos.y); y1 = std::max(y1, q.pos.y);
+                        mx += q.pos.x; my += q.pos.y; n++;
+                    }
+            });
+            if (n == 0) return std::string("none");
+            const float dx = (x0 + x1) / 2 - mx / n, dy = (y0 + y1) / 2 - my / n; //from the corners' mean toward the tip
+            std::printf("      card arrow %.0f x %.0f px\n", x1 - x0, y1 - y0);
+            return std::string(std::abs(dx) > std::abs(dy) ? (dx > 0 ? "right" : "left") : (dy > 0 ? "down" : "up"));
+        };
+        CHECK(arrowWay({ent(Object::PLAYER, 900, 0, 0)}) == "up" && arrowWay({ent(Object::PLAYER, -900, 0, 0)}) == "down" &&
+              arrowWay({ent(Object::PLAYER, 0, -900, 0)}) == "left" && arrowWay({ent(Object::PLAYER, 0, 900, 0)}) == "right",
+              "the card's arrow points the way the enemy is: up ahead, down behind, left, right");
+        for (const float size : {15.0f, 40.0f}) { //big, and inside the card at any text size
+            config::labelSize = size;
+            arrowWay({ent(Object::PLAYER, 0, -900, 0)});
+            char msg[120];
+            std::snprintf(msg, sizeof msg, "Text size %.0f: the card's arrow is big (%.0f px) and inside the card (its top and bottom are given out)", size, x1 - x0);
+            CHECK(wt > 0 && wb > wt && x1 - x0 >= 0.6f * size && y0 >= wt + 2 && y1 <= wb - 2, msg);
+        }
+        config::labelSize = 15;
+        CHECK(arrowWay({ent(Object::PLAYER, 0, 0, -900)}) == "none", "no arrow for an enemy straight below you (no way to point)");
     }
 
     //a live ARC close behind you gets its own arrow; not when dead, beyond 50 m, or with ARC edge arrows off; at most 4
@@ -146,6 +186,12 @@ int main() {
         }
         const int n4 = draw([&] { DrawESP(four, cam, 3); }), n10 = draw([&] { DrawESP(ten, cam, 3); });
         CHECK(n4 > arcArrow && n10 == n4, "ten ARC behind you: only the nearest four get an arrow");
+        config::arcArrowDist = 100;
+        const int far100 = draw([&] { DrawESP(arcFar, cam, 3); });
+        config::maxArcDist = 60;
+        const int beyondArcRange = draw([&] { DrawESP(arcFar, cam, 3); });
+        config::maxArcDist = 150; config::arcArrowDist = 50;
+        CHECK(far100 > 0 && beyondArcRange == 0, "ARC arrow range 100 m: the ARC 80 m behind gets an arrow, but never beyond ARC range");
     }
 
     //teammates
@@ -187,6 +233,47 @@ int main() {
     config::centerOffsetX = 0;
     (void)firstX;
     CHECK(std::abs((x1 - x0) - 100) < 1.0f, "Shift X moves the markers by that many pixels");
+
+    //---- edge arrows: inside the picture with Shift X / Y set, bigger for an enemy within the Warning card range, the
+    //distance in the full Text size
+    {
+        config::showOffscreen = true; config::warnDist = 25;
+        const std::vector<RenderEntity> right = {ent(Object::PLAYER, 0, 3000, 0)}, behind40 = {ent(Object::PLAYER, -4000, 0, 0)};
+        bool inside = true;
+        for (const float s : {300.0f, -300.0f}) {
+            config::centerOffsetX = s;
+            draw([&] { DrawESP(right, cam, 3); });
+            inside &= g_verts > 0 && g_minX >= 0 && g_maxX <= config::SCREEN_W;
+            config::centerOffsetX = 0; config::centerOffsetY = s;
+            draw([&] { DrawESP(behind40, cam, 3); });
+            inside &= g_verts > 0 && g_minY >= 0 && g_maxY <= config::SCREEN_H;
+            config::centerOffsetY = 0;
+        }
+        CHECK(inside, "Shift X / Y of 300 px: an edge arrow and its distance stay on the screen");
+        //the arrow's fill is the only thing in the enemy colour: its height is its length when it points down
+        g_findCol = COLOR::enemy();
+        draw([&] { DrawESP(behind40, cam, 3); });
+        const float farLen = g_colMaxY - g_colMinY;
+        draw([&] { DrawESP({ent(Object::PLAYER, -900, 0, 0)}, cam, 3); });
+        const float closeLen = g_colMaxY - g_colMinY;
+        g_findCol = 0;
+        std::printf("      edge arrow %.1f px long at 40 m, %.1f px within the Warning card range\n", farLen, closeLen);
+        CHECK(farLen > 0 && closeLen > 1.4f * farLen, "an enemy within the Warning card range gets a bigger edge arrow");
+        //its distance: the same height as any label in the Text size
+        auto textHeight = [&](auto fn) {
+            float y0 = 1e9f, y1 = -1e9f;
+            draw([&] {
+                fn();
+                const ImVec2 wp = ImGui::GetDrawListSharedData()->TexUvWhitePixel;
+                for (const ImDrawVert& q : ImGui::GetBackgroundDrawList()->VtxBuffer)
+                    if (q.uv.x != wp.x || q.uv.y != wp.y) { y0 = std::min(y0, q.pos.y); y1 = std::max(y1, q.pos.y); }
+            });
+            return y1 - y0;
+        };
+        const float edgeH = textHeight([&] { DrawESP(behind40, cam, 3); });
+        const float fullH = textHeight([&] { DrawLabelCentered(500, 500, "40m", config::labelSize); });
+        CHECK(edgeH > 0 && std::abs(edgeH - fullH) < 0.5f, "the edge arrow's distance is in the full Text size");
+    }
 
     //a crowd of containers on top of each other must not crash and must draw fewer labels than containers
     std::vector<RenderEntity> crowd;
@@ -513,8 +600,23 @@ int main() {
             DrawESP(front, cam, 3);
             for (const ImDrawVert& v : ImGui::GetBackgroundDrawList()->VtxBuffer) worst = std::max(worst, (int)(v.col >> 24));
         });
-        config::overlayOpacity = 1.0f;
         CHECK(worst > 0 && worst <= 129, "overlay opacity 0.5: nothing is more than half opaque");
+        //...except the safety cards: the close-enemy card, your health and LOW HEALTH stay fully solid
+        int card = 0, health = 0, after = 0;
+        draw([&] {
+            const auto& vb = ImGui::GetBackgroundDrawList()->VtxBuffer;
+            int from = 0;
+            auto most = [&] { int m = 0; for (int i = from; i < vb.Size; i++) m = std::max(m, (int)(vb[i].col >> 24)); from = vb.Size; return m; };
+            DrawCloseEnemyWarning({ent(Object::PLAYER, -900, 0, 0)}, cam, 3);
+            card = most();
+            DrawSelfHealth(20, 50);
+            health = most();
+            DrawESP(front, cam, 3);
+            after = most();
+        });
+        config::overlayOpacity = 1.0f;
+        CHECK(card == 255 && health == 255, "overlay opacity 0.5: the close-enemy card, your health and LOW HEALTH stay fully solid");
+        CHECK(after > 0 && after <= 129, "and the markers drawn after them are faded again");
     }
 
     //---- monochrome: only greys
@@ -728,9 +830,10 @@ int main() {
         CHECK(draw([&] { DrawToast(DrawStatusCard("live", "120 fps")); }) > 0, "status card and toast draw");
     }
 
-    //---- the spoken warning when an enemy comes close (camera at 0,0,0 looking along +x; your team is 3)
+    //---- the spoken warning when an enemy comes close (camera at 0,0,0 looking along +x; your team is 3). Warning card
+    //range 10 m here: nobody below is that close, so only the first warnings are said
     {
-        config::cueRange = 40;
+        config::cueRange = 40; config::warnDist = 10;
         const FminimalViewInfo c = camera();
         std::vector<RenderEntity> v = {ent(Object::PLAYER, 3000, 0, 0, 5), ent(Object::PLAYER, -2000, 0, 0, 5), ent(Object::PLAYER, 0, -1500, 0, 5),
                                        ent(Object::PLAYER, 0, 2500, 0, 5), ent(Object::PLAYER, 0, 1000, 0, 3), ent(Object::PLAYER, 500, 0, 0, 5)};
@@ -749,6 +852,95 @@ int main() {
         CHECK(nc.update(v, c, 3, 15.0) == "Enemy ahead, 30 meters", "cue: said again after leaving and coming back");
     }
 
+    //---- the spoken warning once more when a said enemy comes within the Warning card range, with height and count
+    {
+        config::cueRange = 40; config::warnDist = 10;
+        const FminimalViewInfo c = camera();
+        std::vector<RenderEntity> v = {ent(Object::PLAYER, 3000, 0, 0, 5)};
+        v[0].actor = 0x200;
+        NearCue nc;
+        CHECK(nc.update(v, c, 3, 0.0) == "Enemy ahead, 30 meters", "close: first the normal warning");
+        v[0].pos = Vector3(0, -800, 0);
+        CHECK(nc.update(v, c, 3, 1.0).empty(), "close: also waits for the 2 s between warnings");
+        CHECK(nc.update(v, c, 3, 2.5) == "Enemy close, left, 8 meters", "close: within the card range he is said once more");
+        CHECK(nc.update(v, c, 3, 5.0).empty(), "close: once per time he comes that close");
+        v[0].pos = Vector3(0, -1300, 0); nc.update(v, c, 3, 6.0); v[0].pos = Vector3(0, -800, 0);
+        CHECK(nc.update(v, c, 3, 8.0).empty(), "close: stepping out less than 5 m past the card range and back says nothing");
+        v[0].pos = Vector3(0, -2000, 0); nc.update(v, c, 3, 9.0); v[0].pos = Vector3(0, -800, 0);
+        CHECK(nc.update(v, c, 3, 11.0) == "Enemy close, left, 8 meters", "close: said again after he went 5 m past the card range");
+        //two enemies coming close together: one sentence with the count and the nearest, not one each
+        v = {ent(Object::PLAYER, 3000, 0, 0, 5), ent(Object::PLAYER, -3500, 0, 0, 5)};
+        v[0].actor = 0x300; v[1].actor = 0x301;
+        NearCue two;
+        two.update(v, c, 3, 0.0); two.update(v, c, 3, 2.5);
+        v[0].pos = Vector3(0, 600, 0); v[1].pos = Vector3(-900, 0, 0);
+        CHECK(two.update(v, c, 3, 5.0) == "2 enemies close, nearest right, 6 meters", "close: several at once, the count and the nearest");
+        CHECK(two.update(v, c, 3, 7.5).empty(), "close: and not once more for the second one");
+        //someone first seen inside the card range: said as close at once; more than 3 m up or down: above / below
+        std::vector<RenderEntity> w = {ent(Object::PLAYER, 0, 700, 450, 5)};
+        w[0].actor = 0x400;
+        NearCue fresh;
+        CHECK(fresh.update(w, c, 3, 0.0) == "Enemy close, right, 8 meters, above", "close: first seen that close, said as close, with above");
+        w[0].pos = Vector3(-2500, 0, -800); w[0].actor = 0x401;
+        CHECK(fresh.update(w, c, 3, 2.5) == "Enemy behind, 26 meters, below", "a far enemy 8 m lower: below");
+        //a card range bigger than the spoken range never says someone beyond the spoken range
+        config::cueRange = 10; config::warnDist = 25;
+        w[0].pos = Vector3(2000, 0, 0); w[0].actor = 0x402;
+        NearCue wide;
+        CHECK(wide.update(w, c, 3, 0.0).empty(), "close: never beyond the Spoken warning range");
+        config::cueRange = 40; config::warnDist = 25;
+    }
+
+    //---- what F9 says
+    {
+        config::cueRange = 40;
+        const FminimalViewInfo c = camera();
+        std::vector<RenderEntity> v = {ent(Object::PLAYER, 0, -1200, 500, 5), ent(Object::PLAYER, -3000, 0, 0, 5), ent(Object::PLAYER, 300, 0, 0, 3),
+                                       ent(Object::PLAYER, 200, 0, 0, 5)};
+        v[3].isDead = true;
+        CHECK(StatusSentence(80.4, 40, v, c, 3) == "Health 80, shield 40. 2 enemies within 40 meters. Nearest left, 13 meters, above.",
+              "F9: health, shield, the enemies within range and the nearest (teammate and dead player left out)");
+        CHECK(StatusSentence(-1, -1, {}, c, 3) == "Health unknown. No enemies within 40 meters.", "F9: nothing read, nobody near");
+        const std::vector<RenderEntity> far = {ent(Object::PLAYER, 8500, 0, 0, 5)}, one = {ent(Object::PLAYER, 0, 2000, 0, 5)};
+        CHECK(StatusSentence(55, -1, far, c, 3) == "Health 55. No enemies within 40 meters. Nearest ahead, 85 meters.",
+              "F9: nobody within range, but where the nearest is");
+        CHECK(StatusSentence(55, 0, one, c, 3) == "Health 55, shield 0. 1 enemy within 40 meters. Nearest right, 20 meters.", "F9: one enemy");
+        config::hideUnknownTeams = true;
+        CHECK(StatusSentence(55, -1, one, c, -1) == "Health 55. No enemies within 40 meters.", "F9: with Hide players with unknown team, as on screen");
+        config::hideUnknownTeams = false;
+    }
+
+    //---- spoken news about yourself: low health, a broken shield, lost and returning game data
+    {
+        config::lowHealthFrom = 35;
+        SelfCue s;
+        CHECK(s.update(80, 50, true, false, 0).empty(), "self: nothing to say at first");
+        CHECK(s.update(30, 50, true, false, 1) == "Low health", "self: Low health when it drops under Low health from");
+        CHECK(s.update(25, 50, true, false, 2).empty() && s.update(38, 50, true, false, 3).empty() && s.update(30, 50, true, false, 4).empty(),
+              "self: once, also when it wobbles a little above the line and back");
+        CHECK(s.update(41, 50, true, false, 5).empty() && s.update(30, 50, true, false, 6) == "Low health", "self: again after it was 5 above the line");
+        CHECK(s.update(30, 0, true, false, 7) == "Shield broken" && s.update(30, 0, true, false, 8).empty(), "self: Shield broken once when it reaches 0");
+        s.update(80, 30, true, false, 9);
+        CHECK(s.update(20, 0, true, false, 10) == "Shield broken. Low health", "self: both in one frame, in one sentence");
+        s.update(80, 30, true, false, 11); s.update(-1, -1, false, false, 12);
+        CHECK(s.update(80, 0, true, false, 13).empty(), "self: a 0 shield after a gap in the data is not news");
+        CHECK(s.update(0, 30, true, false, 14).empty(), "self: down (0) is not Low health");
+        config::lowHealthFrom = 50;
+        SelfCue t;
+        CHECK(t.update(45, -1, true, false, 0) == "Low health", "self: follows Low health from");
+        config::lowHealthFrom = 35;
+        //game data: lost only after it was live, said once; back after 2 s live in one go
+        SelfCue g;
+        CHECK(g.update(-1, -1, false, true, 0).empty(), "data: nothing before it was ever live (the lobby at the start)");
+        g.update(80, 50, true, false, 1);
+        CHECK(g.update(-1, -1, false, true, 3) == "Game data lost", "data: Game data lost");
+        CHECK(g.update(-1, -1, false, true, 4).empty(), "data: once");
+        CHECK(g.update(80, 50, true, false, 5).empty() && g.update(80, 50, true, false, 6.5).empty(), "data: not back after 1.5 s live");
+        g.update(-1, -1, false, false, 6.6); //a short stall
+        CHECK(g.update(80, 50, true, false, 7).empty() && g.update(80, 50, true, false, 9.1) == "Game data back", "data: back after 2 s live in one go");
+        CHECK(g.update(80, 50, true, false, 10).empty(), "data: back once");
+    }
+
     //---- your own health: nothing when not read, the readout when read, the LOW HEALTH card under 35 (not at 0: down)
     {
         const int unread = draw([&] { DrawSelfHealth(-1, 50); });
@@ -758,8 +950,65 @@ int main() {
         const int down = draw([&] { DrawSelfHealth(0, 50); });
         CHECK(unread == 0 && nan == 0, "own health not read: nothing is drawn");
         CHECK(fine > 0 && low > fine && down < low, "own health: readout, plus the LOW HEALTH card under 35 only");
+        {   //Low health from (ESP tab) moves the line, for the card and for the room under the close-enemy card alike
+            const int at40 = draw([&] { DrawSelfHealth(40, 50); });
+            config::lowHealthFrom = 50;
+            const int at40with50 = draw([&] { DrawSelfHealth(40, 50); });
+            const float room = LowHealthRoom(40);
+            config::lowHealthFrom = 35;
+            CHECK(at40with50 > at40 && room > 0 && LowHealthRoom(40) == 0 && LowHealthRoom(34.4) > 0 && LowHealthRoom(34.6) == 0,
+                  "Low health from 50: LOW HEALTH shows at 40 (and the card leaves room for it); at 35 only under 35");
+        }
         draw([&] { DrawSelfHealth(30, 50); });
         CHECK(g_finite, "own health: every vertex is a finite number");
+        {   //1280x800, Text size 28, a tall player list, health 20, an enemy close behind: no room under the card for LOW
+            //HEALTH, so it goes above the card instead of over it, and the crosshair between them stays free
+            const auto keepLs = config::labelSize;
+            const int keepW = config::SCREEN_W, keepH = config::SCREEN_H;
+            config::labelSize = 28; config::SCREEN_W = 1280; config::SCREEN_H = 800;
+            ImGui::GetIO().DisplaySize = ImVec2(1280, 800);
+            g_listRect = {240, 520, 1040, 786};
+            const std::vector<RenderEntity> behind9 = {ent(Object::PLAYER, -900, 0, 0)};
+            float wb = 0, wt = 0;
+            LabelRect lowBox{1e9f, 1e9f, -1e9f, -1e9f};
+            draw([&] {
+                DrawCloseEnemyWarning(behind9, cam, 3, &wb, LowHealthRoom(20), nullptr, &wt);
+                const int n0 = ImGui::GetBackgroundDrawList()->VtxBuffer.Size;
+                DrawSelfHealth(20, 50, wb, wt);
+                const auto& vb = ImGui::GetBackgroundDrawList()->VtxBuffer;
+                for (int i = n0; i < vb.Size; i++)
+                    if (vb[i].pos.x > 520) { //LOW HEALTH, not the HP readout at the left
+                        lowBox.x0 = std::min(lowBox.x0, vb[i].pos.x); lowBox.x1 = std::max(lowBox.x1, vb[i].pos.x);
+                        lowBox.y0 = std::min(lowBox.y0, vb[i].pos.y); lowBox.y1 = std::max(lowBox.y1, vb[i].pos.y);
+                    }
+            });
+            const float crossY = (float)View(cam, MakeProjection()).cy;
+            std::printf("      card %.0f-%.0f, LOW HEALTH %.0f-%.0f, crosshair at %.0f\n", wt, wb, lowBox.y0, lowBox.y1, crossY);
+            CHECK(wt > 0 && lowBox.y1 > lowBox.y0 && lowBox.y1 < wt && lowBox.y0 >= 0, "no room under the card: LOW HEALTH goes above it, not over it");
+            CHECK(lowBox.y1 < crossY - 12 && wt > crossY + 12, "and the crosshair between them stays free");
+            g_listRect = {};
+            config::labelSize = keepLs; config::SCREEN_W = keepW; config::SCREEN_H = keepH;
+            ImGui::GetIO().DisplaySize = ImVec2((float)keepW, (float)keepH);
+        }
+        {   //an enemy ahead walking down the screen 1 cm a frame, his pose bobbing as he walks: the card goes from below
+            //him to above him once, and never jumps back and forth (his standing box is used, and the side is kept)
+            float last = 0, lo = 1e9f, hi = -1e9f;
+            int jumps = 0;
+            for (int step = 0; step <= 260; step++) {
+                const double z = -120 - step;
+                RenderEntity e = ent(Object::PLAYER, 600, 0, z);
+                e.pose = standingPose(600, 0, z);
+                auto bobbed = std::make_shared<skeleton::Pose>(*e.pose);
+                for (Vector3& j : bobbed->j) j.z += 6 * std::sin(step * 0.9);
+                e.pose = bobbed;
+                float wb = 0;
+                draw([&] { DrawCloseEnemyWarning({e}, cam, 3, &wb, LowHealthRoom(20)); });
+                if (step > 0 && std::abs(wb - last) > 20) jumps++;
+                last = wb; lo = std::min(lo, wb); hi = std::max(hi, wb);
+            }
+            std::printf("      card lower edge from %.0f to %.0f px, %d jumps\n", lo, hi, jumps);
+            CHECK(hi - lo > 100 && jumps <= 2, "the close-enemy card changes sides once as he walks down the screen, never back and forth");
+        }
         //an enemy 9 m ahead: his card and LOW HEALTH both show under the crosshair, LOW HEALTH below his card
         float wb = 0, lowTop = 1e9f;
         const std::vector<RenderEntity> close = {ent(Object::PLAYER, 900, 0, 0)};

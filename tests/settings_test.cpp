@@ -64,6 +64,7 @@ int main() {
     config::colorLootKinds = true; config::highlightValuable = true; config::valuableFrom = 25000;
     config::headMarker = 0; config::skeletonColor = 2; config::boxStyle = 3;
     config::menuTextSize = 27; config::labelSize = 38;
+    config::lowHealthFrom = 50; config::arcArrowDist = 120; config::speechRate = -20;
     settings::save(dir);
     config::maxArcDist = 50; config::boxColor = 0; config::monochrome = false; config::labelCards = false; config::overlayOpacity = 1.0f; config::trackerHz = 240;
     config::showItemValues = false;
@@ -72,7 +73,9 @@ int main() {
     config::colorLootKinds = false; config::highlightValuable = false; config::valuableFrom = 10000;
     config::headMarker = 1; config::skeletonColor = 0; config::boxStyle = 0;
     config::menuTextSize = 15; config::labelSize = 15;
+    config::lowHealthFrom = 35; config::arcArrowDist = 50; config::speechRate = 0;
     CHECK(settings::load(dir) == 0, "a file the overlay saved has no ignored lines");
+    CHECK(config::lowHealthFrom == 50 && config::arcArrowDist == 120 && config::speechRate == -20, "Low health from, ARC arrow range and Speech speed are saved");
     CHECK(config::menuTextSize == 27.0f && config::labelSize == 38.0f, "Menu text size and a Text size above the old 28 are saved");
     CHECK(config::headMarker == 0 && config::skeletonColor == 2 && config::boxStyle == 3, "head marker, skeleton colour and the Skeleton only box style are saved");
     CHECK(config::maxArcDist == 222 && config::boxColor == 4 && config::monochrome && config::labelCards && std::abs(config::overlayOpacity - 0.7f) < 1e-6 && config::trackerHz == 90,
@@ -95,6 +98,14 @@ int main() {
           !config::highlightValuable && config::valuableFrom == 10000, "Reset: every kind and group on, no kind colours, no valuable highlight");
     CHECK(config::headMarker == 1 && config::skeletonColor == 0 && config::boxStyle == 0, "Reset: a filled head marker, the skeleton in the box colour, corner boxes");
     CHECK(config::menuTextSize == 15.0f && config::labelSize == 15.0f, "Reset: menu text and text size back to 15 px");
+    CHECK(config::lowHealthFrom == 35 && config::arcArrowDist == 50 && config::speechRate == 0,
+          "Reset: LOW HEALTH under 35, ARC arrows within 50 m, your own speech speed");
+
+    //out of range in the file: pulled inside (Speech speed -50..50, Low health from 10..90, ARC arrow range 10..150)
+    writeFile(dir, "speechRate 400\nlowHealthFrom 0\narcArrowDist 9999\n");
+    settings::load(dir);
+    CHECK(config::speechRate == 50 && config::lowHealthFrom == 10 && config::arcArrowDist == 150, "Speech speed, Low health from and ARC arrow range stay in their ranges");
+    config::speechRate = 0; config::lowHealthFrom = 35; config::arcArrowDist = 50;
 
     //only some settings back to their defaults (Reset calibration): the others keep their values
     config::fovScale = 1.5f; config::centerOffsetX = -40; config::fovIsHorizontal = true; config::boxThickness = 7;

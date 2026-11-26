@@ -58,8 +58,18 @@ inline float MenuTextSize() {
     return inUse;
 }
 
+//While a FullStrength is alive Fade() changes nothing: the safety cards (close enemy, your health and LOW HEALTH, NO LIVE
+//GAME DATA, the hotkey problem) always draw fully solid, however low Overlay opacity is set
+inline bool g_fullStrength = false;
+struct FullStrength {
+    bool was = g_fullStrength;
+    FullStrength() { g_fullStrength = true; }
+    ~FullStrength() { g_fullStrength = was; }
+};
+
 //Everything the overlay draws goes through Fade(): the "Overlay opacity" setting (the menu itself is not affected)
 inline ImU32 Fade(ImU32 c) {
+    if (g_fullStrength) return c;
     const float a = std::min(1.0f, std::max(0.0f, config::overlayOpacity));
     if (a >= 0.999f) return c;
     const unsigned alpha = (unsigned)(((c >> IM_COL32_A_SHIFT) & 0xFFu) * a + 0.5f);
@@ -175,9 +185,9 @@ inline void DrawCornerBox(float x, float y, float w, float h, ImU32 color, float
     for (const auto& c : pts) dl->AddPolyline(c, 3, Fade(color), ImDrawFlags_None, t);
 }
 
-//Arrow with its tip at (x, y) pointing along the unit vector (dx, dy)
-inline void DrawArrow(float x, float y, float dx, float dy, float size, ImU32 color) {
-    ImDrawList* dl = ImGui::GetBackgroundDrawList();
+//Arrow with its tip at (x, y) pointing along the unit vector (dx, dy). dl: where to draw (null: the background list)
+inline void DrawArrow(float x, float y, float dx, float dy, float size, ImU32 color, ImDrawList* dl = nullptr) {
+    if (!dl) dl = ImGui::GetBackgroundDrawList();
     const ImVec2 tip(x, y), base(x - dx * size, y - dy * size);
     const ImVec2 a(base.x - dy * size * 0.55f, base.y + dx * size * 0.55f), b(base.x + dy * size * 0.55f, base.y - dx * size * 0.55f);
     dl->AddTriangleFilled(tip, a, b, Fade(color));

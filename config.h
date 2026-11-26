@@ -54,7 +54,8 @@ namespace config {
     inline bool showBars = true;           //health and shield bars beside a player's box
     inline double barStyle = 0;            //0 health and shield side by side, 1 health only, 2 one bar for both
     inline bool barNumbers = false;        //HP and SH numbers next to those bars
-    inline bool showSelfHealth = true;     //your own health and shield in big text at the bottom left, and a LOW HEALTH card below 35
+    inline bool showSelfHealth = true;     //your own health and shield in big text at the bottom left, and a LOW HEALTH card below lowHealthFrom
+    inline double lowHealthFrom = 35;      //ESP tab, YOUR HEALTH, "Low health from": under this the LOW HEALTH card shows and "Low health" is said (10 to 90)
     inline bool showFacing = true;         //an arrow in each player's box and a line on each radar dot: the way they face
     inline bool showSkeleton = true;       //a stick figure on players (the box stays; players without a readable pose get the box only)
     inline double skeletonMaxDist = 120;   //m, further players only get the box: the pose is read for nearer ones only
@@ -68,20 +69,22 @@ namespace config {
     inline bool showOffscreen = true;      //arrows at the screen edge for enemy players you cannot see on screen
     inline bool closeWarning = true;       //a big "ENEMY 9 m BEHIND" card under the middle of the screen
     inline double warnDist = 25;           //m, enemies closer than this trigger that card
-    inline bool showArcOffscreen = true;   //orange kite-shaped arrows at the screen edge for live ARC within 50 m you cannot see
+    inline bool showArcOffscreen = true;   //orange kite-shaped arrows at the screen edge for live ARC within arcArrowDist you cannot see
+    inline double arcArrowDist = 50;       //m, ESP tab, DISTANCE, "ARC arrow range": how near a live ARC gets an edge arrow (10 to 150; never beyond ARC range)
     inline bool showTeammates = false;     //draw your squad mates too (green); off = hidden like before
     inline bool espEnabled = true;         //master switch for boxes, labels and arrows (the radar has its own switch)
     inline bool labelCards = false;        //labels on a dark card instead of outlined text
     inline bool monochrome = false;        //draw everything in white and grey (shapes tell the kinds apart)
     inline bool useCameraRoll = true;      //take the camera's roll into account (always 0 in normal play)
     inline bool hideUnknownTeams = false;  //hide players whose team cannot be told (your own team is not known)
-    inline bool hotkeysEnabled = true;     //F6 mark teammate, F7 clear marks, F10 quit
+    inline bool hotkeysEnabled = true;     //F6 mark teammate, F7 clear marks, F9 say status, F10 quit
     inline bool menuKeyboard = false;      //"Keyboard controls the menu": while the menu is open its keys go to the menu, not the game
     inline bool streamHide = false;        //F8: draw nothing, so screen recordings and streams show no overlay (no startup banner)
     inline float menuOpacity = 0.94f;      //the Insert menu's background
     inline float menuTextSize = 15.0f;     //px, text of the menu, the player list and the inventory windows; Insert menu: Settings tab, LOOK, "Menu text size"
     inline bool soundCues = true;          //say F6/F7/F8/F10 results and near enemies out loud (needs spd-say, utils/cue.h)
     inline double cueRange = 40;           //m, an enemy player first coming this close is said (at most one every 2 s)
+    inline double speechRate = 0;          //Settings tab, SPOKEN CUES, "Speech speed": spd-say -r, -50 slower to +50 faster; 0 keeps your own speech-dispatcher speed
 
     //Stretched resolution / gamescope (Insert menu: Settings tab, GAME VIEW). Auto reads gamescope's command line.
     inline bool gameViewAuto = true;

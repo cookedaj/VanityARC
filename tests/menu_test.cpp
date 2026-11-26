@@ -366,6 +366,8 @@ int main() {
                 std::snprintf(msg, sizeof msg, "ESP tab (menu text %.0f px): the mouse reaches Box style and every skeleton option below the first screen", text);
                 CHECK(hovered.count(choice("Box style")) && hovered.count(sw("Skeleton on players")) && hovered.count(choice("Head marker")) &&
                       hovered.count(choice("Skeleton colour")) && hovered.count(sw("Dim players behind cover")) && hovered.count(sw("Big warning for a close enemy")), msg);
+                std::snprintf(msg, sizeof msg, "ESP tab (menu text %.0f px): the mouse reaches Low health from and ARC arrow range", text);
+                CHECK(hovered.count(slider("Low health from")) && hovered.count(slider("ARC arrow range")), msg);
             }
             if (tab == 1) {
                 std::snprintf(msg, sizeof msg, "Loot tab (menu text %.0f px): the mouse reaches Ground items, Guns and the container switches at its end", text);
@@ -376,6 +378,8 @@ int main() {
                 std::snprintf(msg, sizeof msg, "Settings tab (menu text %.0f px): the mouse reaches Menu text size, the calibration step buttons and Quit", text);
                 CHECK(hovered.count(slider("Menu text size")) && hovered.count(in("Zoom steps", "+0.01")) && hovered.count(in("Shift X steps", "-10")) &&
                       hovered.count(in("Shift Y steps", "+10")) && hovered.count(in("Reset calibration", "###arm")) && hovered.count(ImGui::GetIDWithSeed("Quit overlay", nullptr, pageId)), msg);
+                std::snprintf(msg, sizeof msg, "Settings tab (menu text %.0f px): the mouse reaches Speech speed and the Hotkeys (F6, F7, F9, F10) switch", text);
+                CHECK(hovered.count(slider("Speech speed")) && hovered.count(sw("Hotkeys (F6, F7, F9, F10)")), msg);
             }
         }
         ImGuiWindow* mw = ImGui::FindWindowByName("kwin-helper");

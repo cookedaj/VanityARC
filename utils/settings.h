@@ -52,6 +52,7 @@ inline std::vector<Entry>& table() {
         B("showSkeleton", &config::showSkeleton); B("dimHidden", &config::dimHidden); D("hiddenAlpha", &config::hiddenAlpha, 40, 255); B("showBars", &config::showBars); D("barStyle", &config::barStyle, 0, 2); B("barNumbers", &config::barNumbers); B("showFacing", &config::showFacing); D("skeletonMaxDist", &config::skeletonMaxDist, 20, 300);
         D("headMarker", &config::headMarker, 0, 1); D("skeletonColor", &config::skeletonColor, 0, 2);
         B("showOffscreen", &config::showOffscreen); B("showArcOffscreen", &config::showArcOffscreen);
+        D("arcArrowDist", &config::arcArrowDist, 10, 150); D("lowHealthFrom", &config::lowHealthFrom, 10, 90);
         B("showTeammates", &config::showTeammates);
         B("closeWarning", &config::closeWarning); D("warnDist", &config::warnDist, 5, 100);
         B("hideUnknownTeams", &config::hideUnknownTeams); B("monochrome", &config::monochrome);
@@ -66,7 +67,7 @@ inline std::vector<Entry>& table() {
         D("listMode", &config::listMode, 0, 2); D("listRows", &config::listRows, 3, 16);
         B("showItemValues", &config::showItemValues);
         B("showDebugInfo", &config::showDebugInfo); B("hotkeysEnabled", &config::hotkeysEnabled);
-        B("soundCues", &config::soundCues); D("cueRange", &config::cueRange, 10, 150);
+        B("soundCues", &config::soundCues); D("cueRange", &config::cueRange, 10, 150); D("speechRate", &config::speechRate, -50, 50);
         B("menuKeyboard", &config::menuKeyboard);
         //streamHide is not saved: every launch starts visible, so a stray F8 can never look like a broken overlay
         B("fovIsHorizontal", &config::fovIsHorizontal); B("useCameraRoll", &config::useCameraRoll);

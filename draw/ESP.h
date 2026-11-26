@@ -169,48 +169,122 @@ inline void DrawToast(float y, ImDrawList* dl = nullptr) {
     DrawLabelCentered((float)config::SCREEN_W * 0.5f, y, g_toast.c_str(), config::labelSize, COLOR::white, true, dl);
 }
 
-//Which way a point is from the camera, flat (the camera's yaw only, so looking up or down changes nothing): 0 ahead,
-//1 behind, 2 left, 3 right, each a quarter of the circle; -1 when it cannot be told. The card and the voice both use it.
-inline int FlatDir(const FminimalViewInfo& cam, const Vector3& pos) {
+//Where a point is from the camera, flat (the camera's yaw only, so looking up or down changes nothing): f ahead and r to
+//the right, in cm (negative: behind, to the left)
+inline void FlatOffset(const FminimalViewInfo& cam, const Vector3& pos, double& f, double& r) {
     const double yaw = cam.Rotation.y * 3.14159265358979 / 180.0;
     const double dx = pos.x - cam.Location.x, dy = pos.y - cam.Location.y;
-    const double f = dx * std::cos(yaw) + dy * std::sin(yaw), r = dy * std::cos(yaw) - dx * std::sin(yaw);
+    f = dx * std::cos(yaw) + dy * std::sin(yaw);
+    r = dy * std::cos(yaw) - dx * std::sin(yaw);
+}
+
+//Which way a point is from the camera, flat: 0 ahead, 1 behind, 2 left, 3 right, each a quarter of the circle; -1 when it
+//cannot be told. The card and the voice both use it.
+inline int FlatDir(const FminimalViewInfo& cam, const Vector3& pos) {
+    double f, r;
+    FlatOffset(cam, pos, f, r);
     return !std::isfinite(f + r) ? -1 : f >= std::abs(r) ? 0 : -f >= std::abs(r) ? 1 : r > 0 ? 3 : 2;
 }
 
-//--- the spoken warning when an enemy player first comes within config::cueRange ("Enemy behind, 30 meters").
-//At most one every 2 s, the nearest first; one who has to wait is said at the next free moment if he is still that
-//close. He is said again only after going more than 5 m past the range, so walking along its edge does not repeat it.
+//1 when a point is more than HEIGHT_WORD_M higher than the camera, -1 when that much lower, else 0 (also when it cannot
+//be told). The card's ABOVE / BELOW and the voice's "above" / "below" use it.
+constexpr double HEIGHT_WORD_M = 3.0;
+inline int HeightDir(const FminimalViewInfo& cam, const Vector3& pos) {
+    const double dz = (pos.z - cam.Location.z) / 100.0;
+    return !std::isfinite(dz) ? 0 : dz > HEIGHT_WORD_M ? 1 : dz < -HEIGHT_WORD_M ? -1 : 0;
+}
+
+//A live enemy player as the warnings count them: not a teammate, and nobody while your own team is unknown with "Hide
+//players with unknown team" on (as on screen: no team to compare with)
+inline bool IsWarnedEnemy(const RenderEntity& e, int localTeam) {
+    return e.type == Object::PLAYER && !e.isDead && !IsTeammate(e, localTeam) && !(config::hideUnknownTeams && localTeam < 0);
+}
+
+//How the voice says where someone is: "left, 8 meters", and "above" / "below" more than 3 m up or down
+inline std::string SpokenWhere(const FminimalViewInfo& cam, const Vector3& pos, double meters) {
+    static const char* const words[] = {"ahead", "behind", "left", "right"};
+    const int d = FlatDir(cam, pos), h = HeightDir(cam, pos);
+    std::string s = std::string(d < 0 ? "near" : words[d]) + ", " + std::to_string((long)std::lround(meters)) + " meters";
+    if (h) s += h > 0 ? ", above" : ", below";
+    return s;
+}
+
+//--- the spoken warning when an enemy player first comes within config::cueRange ("Enemy behind, 30 meters"), and once
+//more when one already said comes within the Warning card range (config::warnDist): "Enemy close, left, 8 meters", or
+//with several that close "3 enemies close, nearest left, 8 meters" (the nearest, as the card says it). At most one
+//every 2 s, close ones first, then the nearest; one who has to wait is said at the next free moment if he is still that
+//close. He is said again only after going more than 5 m past the range (each range on its own), so walking along its
+//edge does not repeat it.
 struct NearCue {
-    std::set<ptr> said; //enemies already said and still within the range (+ 5 m)
-    double last = -1e9; //when the last warning was given (seconds)
+    std::set<ptr> said;  //enemies already said and still within the range (+ 5 m)
+    std::set<ptr> close; //of those, the ones already said as close and still within the Warning card range (+ 5 m)
+    double last = -1e9;  //when the last warning was given (seconds)
 
     //Returns what to say this frame, "" for nothing. now: seconds.
     std::string update(const std::vector<RenderEntity>& ents, const FminimalViewInfo& cam, int localTeam, double now) {
-        std::set<ptr> keep;
-        const RenderEntity* best = nullptr;
-        double bestD = 1e18;
+        constexpr double SLACK = 5;
+        std::set<ptr> keep, keepClose;
+        std::vector<ptr> closeNews;                                     //within the card range and not said as close yet
+        const RenderEntity *best = nullptr, *nearest = nullptr;          //the news to say; the nearest within the card range
+        double bestD = 1e18, nearestD = 1e18;
+        bool bestClose = false;
+        int count = 0;                                                   //enemies within the card range
         for (const RenderEntity& e : ents) {
-            if (e.type != Object::PLAYER || e.isDead || IsTeammate(e, localTeam)) continue;
-            if (config::hideUnknownTeams && localTeam < 0) continue; //as on screen: no team to compare with
+            if (!IsWarnedEnemy(e, localTeam)) continue;
             const double d = e.pos.Dist(cam.Location) / 100.0;
             if (!std::isfinite(d)) continue;
-            if (said.count(e.actor) && d <= config::cueRange + 5) keep.insert(e.actor);
-            else if (d <= config::cueRange && d < bestD) { best = &e; bestD = d; }
+            const bool inCard = d <= config::warnDist;
+            if (inCard) {
+                count++;
+                if (d < nearestD) { nearest = &e; nearestD = d; }
+            }
+            const bool wasSaid = said.count(e.actor) && d <= config::cueRange + SLACK;
+            const bool wasClose = wasSaid && close.count(e.actor) && d <= config::warnDist + SLACK;
+            if (wasSaid) keep.insert(e.actor);
+            if (wasClose) keepClose.insert(e.actor);
+            //news: never beyond the spoken range unless he was said already; close is news until said as close
+            if (!(wasSaid || d <= config::cueRange) || (inCard ? wasClose : wasSaid)) continue;
+            if (inCard) closeNews.push_back(e.actor);
+            if (inCard > bestClose || (inCard == bestClose && d < bestD)) { best = &e; bestD = d; bestClose = inCard; }
         }
         std::string text;
         if (best && now - last >= 2.0) {
-            keep.insert(best->actor);
             last = now;
-            static const char* const words[] = {"ahead", "behind", "left", "right"};
-            const int d = FlatDir(cam, best->pos);
-            const char* dir = d < 0 ? "near" : words[d];
-            text = std::string("Enemy ") + dir + ", " + std::to_string((long)std::lround(bestD)) + " meters";
+            keep.insert(best->actor);
+            if (bestClose) { //one sentence for everyone that close now: none of them is said as close again
+                for (ptr a : closeNews) { keep.insert(a); keepClose.insert(a); }
+                text = count > 1 ? std::to_string(count) + " enemies close, nearest " + SpokenWhere(cam, nearest->pos, nearestD)
+                                 : "Enemy close, " + SpokenWhere(cam, best->pos, bestD);
+            } else {
+                text = "Enemy " + SpokenWhere(cam, best->pos, bestD);
+            }
         }
         said.swap(keep);
+        close.swap(keepClose);
         return text;
     }
 };
+
+//What F9 says: your health and shield, how many enemies are within the Spoken warning range, and where the nearest enemy
+//is: "Health 80, shield 40. 2 enemies within 40 meters. Nearest left, 12 meters, above." hp, shield < 0: not read.
+inline std::string StatusSentence(double hp, double shield, const std::vector<RenderEntity>& ents, const FminimalViewInfo& cam, int localTeam) {
+    std::string s = hp >= 0 ? "Health " + std::to_string(std::lround(hp)) : std::string("Health unknown");
+    if (shield >= 0) s += ", shield " + std::to_string(std::lround(shield));
+    const RenderEntity* nearest = nullptr;
+    double nearestD = 1e18;
+    int n = 0;
+    for (const RenderEntity& e : ents) {
+        if (!IsWarnedEnemy(e, localTeam)) continue;
+        const double d = e.pos.Dist(cam.Location) / 100.0;
+        if (!std::isfinite(d)) continue;
+        n += d <= config::cueRange;
+        if (d < nearestD) { nearest = &e; nearestD = d; }
+    }
+    s += n == 0 ? ". No enemies" : n == 1 ? ". 1 enemy" : ". " + std::to_string(n) + " enemies";
+    s += " within " + std::to_string(std::lround(config::cueRange)) + " meters.";
+    if (nearest) s += " Nearest " + SpokenWhere(cam, nearest->pos, nearestD) + ".";
+    return s;
+}
 
 //Where the player list at the bottom was drawn (set by DrawPlayerListWindow, one frame old; all zero when it is not shown)
 inline LabelRect g_listRect;
@@ -222,12 +296,17 @@ inline float WarnFloor() {
     return g_listRect.x1 > g_listRect.x0 ? std::min(H, g_listRect.y0 - 6) : H;
 }
 
-//The room LOW HEALTH takes under the close-enemy card (its 10 px gap and its card), 0 when it does not show (as in
-//DrawSelfHealth: health read and 1 to 34)
-inline float LowHealthRoom(double hp) {
-    if (!config::showSelfHealth || !(hp >= 0)) return 0;
+//Is your health low: read, at least 1 (at 0 you are down: the game shows that itself) and under "Low health from" (ESP
+//tab, YOUR HEALTH), as the shown number is rounded
+inline bool IsLowHealth(double hp) {
+    if (!(hp >= 0)) return false; //also NaN
     const long h = std::lround(hp);
-    return h >= 1 && h < 35 ? LabelSize("LOW HEALTH", config::labelSize * 2.4f).y + 12 + 10 : 0;
+    return h >= 1 && h < config::lowHealthFrom;
+}
+
+//The room LOW HEALTH takes under the close-enemy card (its 10 px gap and its card), 0 when it does not show
+inline float LowHealthRoom(double hp) {
+    return config::showSelfHealth && IsLowHealth(hp) ? LabelSize("LOW HEALTH", config::labelSize * 2.4f).y + 12 + 10 : 0;
 }
 
 //Where the big HP/SH readout's card is (4 px past the text's sides, 2 px past top and bottom). DrawESP keeps labels and
@@ -238,13 +317,19 @@ inline LabelRect SelfHealthRect(const char* text = "HP 100   SH 100") {
     return {36, y - ts.y / 2 - 2, 44 + ts.x, y + ts.y / 2 + 2};
 }
 
+//How far LOW HEALTH's bottom stays above the close-enemy card's top when it has to go above the card: the crosshair
+//(18 px or more above that card) stays free between them
+constexpr float LOW_HEALTH_ABOVE = 40;
+
 //Your own health and shield in big white text on a dark card, at the bottom left just above the game's health bar,
-//and a big red LOW HEALTH card below the crosshair under 35. hp < 0: not read, so nothing (never a guessed number).
-//shield < 0: not read or no shield offset, so health only. below: the bottom of the close-enemy card (0: none);
-//LOW HEALTH then goes right under it instead of on top of it (the card leaves LowHealthRoom for it). Never under the
-//player list or off the screen.
-inline void DrawSelfHealth(double hp, double shield, float below = 0) {
+//and a big red LOW HEALTH card below the crosshair under Low health from. hp < 0: not read, so nothing (never a guessed
+//number). shield < 0: not read or no shield offset, so health only. below / above: the bottom and top of the
+//close-enemy card (0: none); LOW HEALTH then goes right under it instead of on top of it (the card leaves
+//LowHealthRoom for it), or above it when the screen has no room left under it (a short screen, big text and a tall
+//player list). Never under the player list or off the screen. Overlay opacity never fades these.
+inline void DrawSelfHealth(double hp, double shield, float below = 0, float above = 0) {
     if (!(hp >= 0)) return; //also NaN
+    const FullStrength solid;
     const int h = (int)std::lround(hp);
     char buf[48];
     if (shield >= 0) std::snprintf(buf, sizeof buf, "HP %d   SH %.0f", h, shield);
@@ -252,15 +337,49 @@ inline void DrawSelfHealth(double hp, double shield, float below = 0) {
     const float ls = config::labelSize, big = ls * 1.8f;
     const LabelRect r = SelfHealthRect(buf);
     DrawLabelCentered((r.x0 + r.x1) / 2, (r.y0 + r.y1) / 2, buf, big, COLOR::white, true);
-    if (h < 1 || h >= 35) return; //at 0 you are down: the game shows that itself
+    if (!IsLowHealth(hp)) return;
     const char* warn = "LOW HEALTH";
     const float huge = ls * 2.4f, x = (float)config::SCREEN_W * 0.5f;
     const ImVec2 ts = LabelSize(warn, huge);
-    const float y = std::min(below > 0 ? below + 10 + ts.y / 2 + 6 : (float)config::SCREEN_H * 0.62f, WarnFloor() - ts.y / 2 - 6);
+    const float half = ts.y / 2 + 6;
+    float y = below > 0 ? below + 10 + half : (float)config::SCREEN_H * 0.62f;
+    if (below > 0 && above > 0 && y + half > WarnFloor()) y = std::max(half, above - LOW_HEALTH_ABOVE - half); //no room under the card
+    else y = std::min(y, WarnFloor() - half);
     if (!COLOR::mono()) //white on solid red; monochrome: white on the dark card
-        DrawRectFilled(x - ts.x / 2 - 14, y - ts.y / 2 - 6, x + ts.x / 2 + 14, y + ts.y / 2 + 6, COLOR::red);
+        DrawRectFilled(x - ts.x / 2 - 14, y - half, x + ts.x / 2 + 14, y + half, COLOR::red);
     DrawLabelCentered(x, y, warn, huge, COLOR::white, COLOR::mono());
 }
+
+//--- spoken news about yourself and the game data, each said once: "Low health" when your health drops under Low health
+//from (said again only after it was LOW_HEALTH_REARM or more above it), "Shield broken" when your shield goes from
+//something to 0, "Game data lost" when live data stops for a while after it was live (lost: main.cpp's, 1.5 s without
+//live data while the game runs) and "Game data back" once it has been live again for DATA_BACK_S, so a short stall or a
+//moment of data in between says nothing more.
+constexpr double LOW_HEALTH_REARM = 5, DATA_BACK_S = 2.0;
+struct SelfCue {
+    bool low = false;        //"Low health" was said and your health has not come back up since
+    double shield = -1;      //your shield last frame (-1: not known, so a 0 now is not news)
+    bool hadLive = false;    //live data was seen since the start
+    bool lostSaid = false;   //"Game data lost" was said and "Game data back" not yet
+    double liveSince = -1;   //when the data became live (seconds, -1: not live)
+
+    //hp, shield: your own (-1: not read). live: the data is current. now: seconds. Returns what to say, "" for nothing.
+    std::string update(double hp, double sh, bool live, bool lost, double now) {
+        std::string text;
+        auto add = [&](const char* s) { text += text.empty() ? s : std::string(". ") + s; };
+        if (lost && hadLive && !lostSaid) { lostSaid = true; add("Game data lost"); }
+        if (!live) liveSince = -1;
+        else if (liveSince < 0) liveSince = now;
+        if (live) hadLive = true;
+        if (lostSaid && live && now - liveSince >= DATA_BACK_S) { lostSaid = false; add("Game data back"); }
+        if (!live) { shield = -1; return text; } //numbers from old data are not news
+        if (shield >= 0.5 && sh >= 0 && sh < 0.5) add("Shield broken");
+        shield = sh;
+        if (!low && IsLowHealth(hp)) { low = true; add("Low health"); }
+        else if (low && hp >= 0 && std::lround(hp) >= config::lowHealthFrom + LOW_HEALTH_REARM) low = false;
+        return text;
+    }
+};
 
 //--- labels: collected while drawing, then the ones that would overlap are moved or dropped (see Declutter.h)
 struct PendingLabel {
@@ -534,9 +653,12 @@ inline void DrawFacingLine(float x, float y, float dx, float dy, float r0, float
 
 //Arrows at the screen edge for players outside your squad who are not on screen (to the side, or behind you). The arrows
 //keep other labels away from them; their distance labels only appear where there is room. Nearby live ARC get the same
-//arrows, kite-shaped and in the ARC colour. cap: the most arrows drawn (the nearest ones). An arrow whose square touches
-//one in avoid is left out. Returns each drawn arrow's square and its distance label's place.
-struct EdgeArrow { const RenderEntity* ent; double dist; ImU32 color; bool arc = false; }; //color: enemy, or teammate for a hand mark
+//arrows, kite-shaped and in the ARC colour. An enemy within the Warning card range gets an arrow CLOSE_ARROW_GROW times
+//bigger. Arrows and their distances stay inside the game's picture, also with Shift X / Y set. cap: the most arrows drawn
+//(the nearest ones). An arrow whose square touches one in avoid is left out. Returns each drawn arrow's square and its
+//distance label's place.
+struct EdgeArrow { const RenderEntity* ent; double dist; ImU32 color; bool arc = false; bool close = false; }; //color: enemy, or teammate for a hand mark
+constexpr float CLOSE_ARROW_GROW = 1.6f;
 inline std::vector<LabelRect> DrawEdgeArrows(const View& v, std::vector<EdgeArrow>& edge, size_t cap = 8,
                                              const std::vector<LabelRect>* avoid = nullptr) {
     std::vector<LabelRect> used;
@@ -545,11 +667,12 @@ inline std::vector<LabelRect> DrawEdgeArrows(const View& v, std::vector<EdgeArro
     if (edge.size() > cap) edge.resize(cap);
     const float hx = std::max(20.0f, (float)v.rw / 2 - 46), hy = std::max(20.0f, (float)v.rh / 2 - 46); //edges of the game's picture
     const float k = std::max(1.0f, config::labelSize / 15.0f); //grows with the text size, never below the 15 px default
-    const float as = 15.0f * k, half = 14.0f * k;              //arrow length, half its reserved square
     char buf[32];
     const LabelRect hpCard = config::showSelfHealth ? SelfHealthRect() : LabelRect{};
-    const float m = std::max(20.0f, half + 2); //clear of the arrow's square at any text size
     for (const auto& e : edge) {
+        const float grow = e.close ? CLOSE_ARROW_GROW : 1.0f;
+        const float as = 15.0f * k * grow, half = 14.0f * k * grow; //arrow length, half its reserved square
+        const float m = std::max(20.0f, half + 2);                  //clear of the arrow's square at any text size
         double x, y, z;
         v.toCamera(e.ent->pos, x, y, z);
         double ux, uy;
@@ -559,8 +682,11 @@ inline std::vector<LabelRect> DrawEdgeArrows(const View& v, std::vector<EdgeArro
         if (len < 1e-6) { ux = 0; uy = 1; len = 1; }
         ux /= len; uy /= len;
         const float t = std::min(hx / (float)std::max(std::abs(ux), 1e-6), hy / (float)std::max(std::abs(uy), 1e-6));
-        const float px = (float)v.cx + (float)ux * t;
-        float py = (float)v.cy + (float)uy * t;
+        //The ring is round the shifted middle (Shift X / Y), the picture is not: its square kept fully inside the picture
+        const float x0 = (float)v.rx + half + 2, x1 = std::max(x0, (float)(v.rx + v.rw) - half - 2);
+        const float y0 = (float)v.ry + half + 2, y1 = std::max(y0, (float)(v.ry + v.rh) - half - 2);
+        const float px = std::clamp((float)v.cx + (float)ux * t, x0, x1);
+        float py = std::clamp((float)v.cy + (float)uy * t, y0, y1);
         for (const LabelRect& L : {g_listRect, hpCard}) //not under the player list or the HP readout: just above it
             if (L.x1 > L.x0 && px > L.x0 - m && px < L.x1 + m && py > L.y0 - m && py < L.y1 + m) py = L.y0 - m;
         const LabelRect sq{px - half, py - half, px + half, py + half};
@@ -570,13 +696,15 @@ inline std::vector<LabelRect> DrawEdgeArrows(const View& v, std::vector<EdgeArro
         if (avoid && std::any_of(avoid->begin(), avoid->end(), [&](const LabelRect& r) { return RectsOverlap(sq, r) || RectsOverlap(tsq, r); })) continue;
         std::snprintf(buf, sizeof buf, "%.0fm", e.dist);
         //Far enough back to clear the arrow's own reserved square (half + LabelAt's 2 px x pad / 1 px y pad), or a
-        //wide or tall label would always be dropped; never closer than two arrow lengths (the old 30 px at k = 1)
-        const float ls = config::labelSize * 0.9f;
+        //wide or tall label would always be dropped; never closer than two arrow lengths (the old 30 px at k = 1). The
+        //distance is in the full Text size.
+        const float ls = config::labelSize;
         const ImVec2 ts = LabelSize(buf, ls);
         const float ax = std::max(std::abs((float)ux), 1e-3f), ay = std::max(std::abs((float)uy), 1e-3f);
         const float back = std::max(2.0f * as, tail + 1.0f + std::min((half + 2.0f + ts.x / 2) / ax, (half + 1.0f + ts.y / 2) / ay));
         const float lx = px - (float)ux * back, ly = py - (float)uy * back;
-        (e.arc ? DrawKiteArrow : DrawArrow)(px, py, (float)ux, (float)uy, as, e.color);
+        if (e.arc) DrawKiteArrow(px, py, (float)ux, (float)uy, as, e.color);
+        else DrawArrow(px, py, (float)ux, (float)uy, as, e.color);
         QueueReserve(sq);
         if (e.arc) QueueReserve(tsq);
         QueueLabel(lx, ly, buf, ls, e.arc ? 1 : 0, e.dist); //ARC: same rank as its marker labels
@@ -717,7 +845,7 @@ inline void DrawESP(const std::vector<RenderEntity>& entities, FminimalViewInfo 
             if (config::dimHidden && !ent.isVisible) color = COLOR::withAlpha(color, (int)config::hiddenAlpha); //not drawn by the game right now: behind cover
             float bx, y0, w, h; //bx: the box's middle
             if (!PlayerScreenBox(v, ent, bx, y0, w, h)) {
-                if (!squad && config::showOffscreen) edge.push_back({&ent, dist, mate ? COLOR::mate() : COLOR::enemy()});
+                if (!squad && config::showOffscreen) edge.push_back({&ent, dist, mate ? COLOR::mate() : COLOR::enemy(), false, !mate && dist <= config::warnDist});
                 continue;
             }
             const float x0 = bx - w / 2;
@@ -786,9 +914,9 @@ inline void DrawESP(const std::vector<RenderEntity>& entities, FminimalViewInfo 
             if (config::showPlayerGuns) QueueLabel(bx, below + lineH, ent.sub, ls2, 0, dist, true, lineStep);
         } else {
             if (!front || !onScreen(sp.x, sp.y)) {
-                //a live ARC within 50 m that is off screen or behind you: an arrow at the screen edge
+                //a live ARC within ARC arrow range (and ARC range) that is off screen or behind you: an arrow at the screen edge
                 if (ent.type == Object::ARC && !ent.isDead && config::showArc && config::showArcOffscreen &&
-                    (!ent.isTurret || config::showTurrets) && dist <= std::min(config::maxArcDist, 50.0))
+                    (!ent.isTurret || config::showTurrets) && dist <= std::min(config::maxArcDist, config::arcArrowDist))
                     arcEdge.push_back({&ent, dist, COLOR::arc(false), true});
                 continue;
             }
@@ -854,48 +982,73 @@ inline void DrawESP(const std::vector<RenderEntity>& entities, FminimalViewInfo 
     FlushLabels();
 }
 
+//Where the close-enemy card went last frame: 0 its own place, 1 below the nearest enemy, 2 above him. It keeps that side
+//while the side still fits within WARN_SLACK_PX (pushed back onto the screen that far), and stays moved until he is
+//WARN_STICK_PX clear of its own place, so small steps never make it jump back and forth. 0 again whenever no card shows.
+inline int g_warnSide = 0;
+constexpr float WARN_SLACK_PX = 10, WARN_STICK_PX = 24;
+
 //A big card under the middle of the screen for the nearest enemy closer than warnDist: "ENEMY 9 m BEHIND", or
-//"3 ENEMIES - NEAREST 9 m LEFT". White text on a dark card framed in the enemy colour. Returns the text drawn;
-//bottom (if given) gets the card's lower edge, left alone when nothing is drawn. extraBelow: the room LOW HEALTH needs
-//under the card (LowHealthRoom), kept free above the player list and the screen's bottom. dl: where to draw (null: the
-//background list; main.cpp passes the foreground list while the menu is open, so the menu never hides the card).
+//"3 ENEMIES - NEAREST 9 m LEFT", with ", ABOVE" / ", BELOW" when he is more than 3 m higher or lower, and a big white
+//arrow on its left pointing the way he is (up: ahead, down: behind). White text on a dark card framed in the enemy
+//colour, never faded by Overlay opacity. Returns the text drawn; bottom and top (if given) get the card's lower and upper
+//edges, left alone when nothing is drawn. extraBelow: the room LOW HEALTH needs under the card (LowHealthRoom), kept free
+//above the player list and the screen's bottom. dl: where to draw (null: the background list; main.cpp passes the
+//foreground list while the menu is open, so the menu never hides the card).
 inline std::string DrawCloseEnemyWarning(const std::vector<RenderEntity>& entities, FminimalViewInfo vm, int localPlayerTeam,
-                                         float* bottom = nullptr, float extraBelow = 0, ImDrawList* dl = nullptr) {
+                                         float* bottom = nullptr, float extraBelow = 0, ImDrawList* dl = nullptr,
+                                         float* top = nullptr) {
+    const int side = g_warnSide;
+    g_warnSide = 0;
     if (!config::closeWarning) return {};
-    if (config::hideUnknownTeams && localPlayerTeam < 0) return {}; //no team to compare with: everyone is hidden
     const View v(vm, MakeProjection());
     if (!v.ok) return {};
     const RenderEntity* nearest = nullptr;
     double best = 0;
     int count = 0;
     for (const auto& ent : entities) {
-        if (ent.type != Object::PLAYER || ent.isDead || IsTeammate(ent, localPlayerTeam)) continue;
+        if (!IsWarnedEnemy(ent, localPlayerTeam)) continue;
         const double dist = ent.pos.Dist(vm.Location) / 100.0;
         if (!(dist <= config::warnDist)) continue; //NaN too
         count++;
         if (!nearest || dist < best) { best = dist; nearest = &ent; }
     }
     if (!nearest) return {};
+    const FullStrength solid;
     static const char* const words[] = {"AHEAD", "BEHIND", "LEFT", "RIGHT"};
-    const int d = FlatDir(vm, nearest->pos); //the same way as the spoken warning says
+    const int d = FlatDir(vm, nearest->pos), up = HeightDir(vm, nearest->pos); //the same way as the spoken warning says
     const char* where = d < 0 ? "NEAR" : words[d];
-    char buf[96];
-    if (count == 1) std::snprintf(buf, sizeof buf, "ENEMY %.0f m %s", best, where);
-    else std::snprintf(buf, sizeof buf, "%d ENEMIES - NEAREST %.0f m %s", count, best, where);
+    const char* height = up > 0 ? ", ABOVE" : up < 0 ? ", BELOW" : "";
+    char buf[112];
+    if (count == 1) std::snprintf(buf, sizeof buf, "ENEMY %.0f m %s%s", best, where, height);
+    else std::snprintf(buf, sizeof buf, "%d ENEMIES - NEAREST %.0f m %s%s", count, best, where, height);
+    double f, r;
+    FlatOffset(vm, nearest->pos, f, r);
+    const double flat = std::hypot(f, r);
+    const bool arrow = flat > 1e-6 && std::isfinite(flat); //not when he is straight above or below you
     const float big = config::labelSize * 2.0f, cx = (float)v.cx;
-    const float size = FitSize(big, LabelSize(buf, big).x, (float)config::SCREEN_W - 28); //the card and its frame fit across the screen
+    //the card, arrow and frame fit across the screen (the arrow's column is about 1.2 x the text size)
+    const float size = FitSize(big, LabelSize(buf, big).x + (arrow ? 1.2f * big + 8 : 0), (float)config::SCREEN_W - 28);
     float cy = (float)v.cy + 140.0f;
     const ImVec2 ts = LabelSize(buf, size);
-    const float hx = ts.x / 2 + 10, hy = ts.y / 2 + 6;
+    const float hy = ts.y / 2 + 6;
+    //The arrow: 0.8 x the text's height long, as long as it fits the card's height whichever way it points (it reaches
+    //0.75 x its length from its middle); its column is 1.5 x that long, 8 px from the text
+    const float L = arrow ? std::min(0.8f * ts.y, (hy - 3) / 0.75f) : 0, aw = arrow ? 1.5f * L + 8 : 0;
+    const float hx = (ts.x + aw) / 2 + 10;
     //The card and LOW HEALTH under it end above the player list (or the screen's bottom): moved up if needed, but its
     //top stays 18 px or more below the crosshair
     const float F = WarnFloor();
     cy = std::min(cy, std::max(F - extraBelow - hy - 2, (float)v.cy + hy + 20));
     //Never over the nearest enemy when DrawESP shows him: below his box, bars and labels, above them when there is no
     //room below (LOW HEALTH follows the card, and is kept off him too, but never by moving the card up to the
-    //crosshair). When he fills the screen top to bottom the card stays put.
+    //crosshair). When he fills the screen top to bottom the card stays put. His box is the standing one (90 cm up and
+    //down from him), not his animated pose, so the card does not shake with every step he takes.
     float bx, by, bw, bh;
-    if (config::showPlayers && best <= config::maxPlayerDist && PlayerScreenBox(v, *nearest, bx, by, bw, bh)) {
+    RenderEntity standing = *nearest;
+    standing.pose = nullptr;
+    int newSide = 0;
+    if (config::showPlayers && best <= config::maxPlayerDist && PlayerScreenBox(v, standing, bx, by, bw, bh)) {
         const float ls = config::labelSize, ls2 = ls * 0.9f, pad = config::labelCards ? 2.0f : 0.0f;
         const float m = std::max(3.0f, std::min(10.0f, std::max(1.0f, config::boxThickness)) / 2 + 1); //as in DrawESP
         const float nameH = ls + 2 * pad + 2, linesH = 2 * (ls2 + 2 * pad + 2); //name above; distance and guns below (or above)
@@ -913,19 +1066,32 @@ inline std::string DrawCloseEnemyWarning(const std::vector<RenderEntity>& entiti
         const float lowHalf = extraBelow > 0 ? LabelSize("LOW HEALTH", config::labelSize * 2.4f).x / 2 + 14 : 0;
         const float lx = (float)config::SCREEN_W * 0.5f;
         const LabelRect pair{std::min(cx - hx, lx - lowHalf) - 2, cy - hy - 2, std::max(cx + hx, lx + lowHalf) + 2, cy + hy + 2 + extraBelow};
-        if (RectsOverlap(him, pair)) {
+        const float stick = side ? WARN_STICK_PX : 0; //moved last frame: it stays moved until he is this far clear
+        auto grown = [&](const LabelRect& a) { return LabelRect{a.x0 - stick, a.y0 - stick, a.x1 + stick, a.y1 + stick}; };
+        if (RectsOverlap(him, grown(pair))) {
             const bool onCard = RectsOverlap(him, {cx - hx - 2, cy - hy - 2, cx + hx + 2, cy + hy + 2});
-            const float up = him.y0 - gap - 2 * hy - 2 - extraBelow; //the card's top when it goes above him
-            if (him.y1 + gap + 2 * hy + 2 + extraBelow <= F) cy = him.y1 + gap + hy + 2;
+            const float lowest = F - extraBelow - hy - 2; //the card's lowest middle: LOW HEALTH under it, above the floor
+            const float under = him.y1 + gap + hy + 2;    //its middle right under him
             //above him: for the card itself as always; for LOW HEALTH alone only while the card's top stays 20 px or
             //more below the crosshair (as the card's lowest place keeps it above)
-            else if (up >= 0 && (onCard || up >= (float)v.cy + 20)) cy = him.y0 - gap - extraBelow - hy - 2;
+            const float highest = onCard ? hy : std::max(hy, (float)v.cy + 20 + hy);
+            const float over = him.y0 - gap - extraBelow - hy - 2;
+            if (side == 1 && under <= lowest + WARN_SLACK_PX) { newSide = 1; cy = std::min(under, lowest); }
+            else if (side == 2 && over >= highest - WARN_SLACK_PX) { newSide = 2; cy = std::max(over, highest); }
+            else if (under <= lowest) { newSide = 1; cy = under; }
+            else if (over >= highest) { newSide = 2; cy = over; }
         }
     }
+    g_warnSide = newSide;
     DrawRectFilled(cx - hx, cy - hy, cx + hx, cy + hy, IM_COL32(0, 0, 0, 220), dl);
     DrawRectOutline(cx - hx, cy - hy, cx + hx, cy + hy, COLOR::enemy(), 3.0f, dl);
-    DrawLabelCentered(cx, cy, buf, size, COLOR::white, false, dl);
+    if (arrow) { //its middle in the middle of its column; screen up is ahead of you, right is your right
+        const float ux = (float)(r / flat), uy = (float)(-f / flat), ax = cx - hx + 10 + 0.75f * L;
+        DrawArrow(ax + ux * L / 2, cy + uy * L / 2, ux, uy, L, COLOR::white, dl);
+    }
+    DrawLabelCentered(cx + aw / 2, cy, buf, size, COLOR::white, false, dl);
     if (bottom) *bottom = cy + hy + 2; //+ half the 3 px frame
+    if (top) *top = cy - hy - 2;
     return buf;
 }
 
