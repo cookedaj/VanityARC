@@ -1069,7 +1069,7 @@ inline std::string DrawCloseEnemyWarning(const std::vector<RenderEntity>& entiti
         const float stick = side ? WARN_STICK_PX : 0; //moved last frame: it stays moved until he is this far clear
         auto grown = [&](const LabelRect& a) { return LabelRect{a.x0 - stick, a.y0 - stick, a.x1 + stick, a.y1 + stick}; };
         if (RectsOverlap(him, grown(pair))) {
-            const bool onCard = RectsOverlap(him, {cx - hx - 2, cy - hy - 2, cx + hx + 2, cy + hy + 2});
+            const bool onCard = RectsOverlap(him, grown({cx - hx - 2, cy - hy - 2, cx + hx + 2, cy + hy + 2}));
             const float lowest = F - extraBelow - hy - 2; //the card's lowest middle: LOW HEALTH under it, above the floor
             const float under = him.y1 + gap + hy + 2;    //its middle right under him
             //above him: for the card itself as always; for LOW HEALTH alone only while the card's top stays 20 px or

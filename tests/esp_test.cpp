@@ -1009,6 +1009,27 @@ int main() {
             std::printf("      card lower edge from %.0f to %.0f px, %d jumps\n", lo, hi, jumps);
             CHECK(hi - lo > 100 && jumps <= 2, "the close-enemy card changes sides once as he walks down the screen, never back and forth");
         }
+        {   //an enemy stepping left and right by 5 cm (about 9 px) right at the edge where the card starts to move off him:
+            //once moved, the card stays moved
+            auto bottomAt = [&](double y, bool fresh) {
+                if (fresh) g_warnSide = 0;
+                float wb = 0;
+                draw([&] { DrawCloseEnemyWarning({ent(Object::PLAYER, 600, y, -60)}, cam, 3, &wb); });
+                return wb;
+            };
+            const float home = bottomAt(-900, true); //far to the side: the card at its own place
+            double edge = -900;
+            while (edge < 0 && std::abs(bottomAt(edge, true) - home) < 1) edge += 1;
+            int jumps = 0;
+            float last = bottomAt(edge - 5, true);
+            for (int step = 1; step <= 200; step++) {
+                const float b = bottomAt(edge + 5 * std::sin(step * 0.3), false);
+                jumps += std::abs(b - last) > 20;
+                last = b;
+            }
+            std::printf("      the card starts to move %.0f cm to his side, %d jumps while he steps 5 cm each way there\n", -edge, jumps);
+            CHECK(edge < 0 && jumps <= 1, "an enemy stepping left and right at the card's edge: the card moves off him once and stays");
+        }
         //an enemy 9 m ahead: his card and LOW HEALTH both show under the crosshair, LOW HEALTH below his card
         float wb = 0, lowTop = 1e9f;
         const std::vector<RenderEntity> close = {ent(Object::PLAYER, 900, 0, 0)};
@@ -1081,6 +1102,7 @@ int main() {
             g_listRect = {550, 790, 1370, 1066};
             std::vector<RenderEntity> right = {ent(Object::PLAYER, 900, 400, -390)};
             right[0].label = "Someone"; right[0].sub = "Ferro  Anvil";
+            g_warnSide = 0; //a new scene: the card was not moved for someone else a frame ago
             draw([&] { DrawCloseEnemyWarning(right, cam, 3, nullptr, LowHealthRoom(20)); });
             CHECK(g_verts > 0 && g_minY >= (float)View(cam, MakeProjection()).cy + 18,
                   "LOW HEALTH alone never lifts the close-enemy card onto the crosshair");
