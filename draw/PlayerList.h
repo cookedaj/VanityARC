@@ -80,10 +80,12 @@ inline std::vector<ptr> InspectedActors() {
 
 //One row per player: name, distance, health, shield, team, guns. Click a name for the inventory, the TEAM button marks a
 //teammate. Clickable only while the menu is open: DrawPlayerListWindow adds NoInputs otherwise.
+inline constexpr float LIST_ROW_W = 780; //a row's width at 15 px text
 inline void DrawPlayerRows(int maxRows) {
     const auto players = PlayersByDistance();
     if (players.empty()) { ui::Note(g_ui.live ? "No players in view." : "No live data from the game."); return; }
-    const float xDist = 190, xHp = 245, xSh = 295, xSeen = 360, xTeam = 415, xGun = 495, rowW = 780;
+    using ui::S; //column positions for 15 px text, grown with the menu text size
+    const float xDist = S(190), xHp = S(245), xSh = S(295), xSeen = S(360), xTeam = S(415), xGun = S(495), rowW = S(LIST_ROW_W);
     ImGui::TextColored(ImColor(ui::GREY), "NAME");
     ImGui::SameLine(xDist); ImGui::TextColored(ImColor(ui::GREY), "DIST");
     ImGui::SameLine(xHp); ImGui::TextColored(ImColor(ui::GREY), "HP");
@@ -107,14 +109,14 @@ inline void DrawPlayerRows(int maxRows) {
         ImGui::PushStyleColor(ImGuiCol_Header, IM_COL32_BLACK_TRANS);
         ImGui::PushStyleColor(ImGuiCol_HeaderHovered, IM_COL32_BLACK_TRANS);
         ImGui::PushStyleColor(ImGuiCol_HeaderActive, IM_COL32_BLACK_TRANS);
-        if (ImGui::Selectable("##row", IsInspected(key), 0, ImVec2(rowW, 20))) ToggleInspect(key);
+        if (ImGui::Selectable("##row", IsInspected(key), 0, ImVec2(rowW, S(20)))) ToggleInspect(key);
         ImGui::PopStyleColor(3);
         const bool rowHov = ImGui::IsItemHovered();
         if (rowHov || IsInspected(key))
-            ImGui::GetWindowDrawList()->AddRect(ImVec2(ImGui::GetWindowPos().x + 2, ImGui::GetItemRectMin().y), ImGui::GetItemRectMax(),
-                                                IsInspected(key) ? ui::WHITE : ui::GREY, 0.0f, 0, 2.0f);
+            ImGui::GetWindowDrawList()->AddRect(ImVec2(ImGui::GetWindowPos().x + S(2), ImGui::GetItemRectMin().y), ImGui::GetItemRectMax(),
+                                                IsInspected(key) ? ui::WHITE : ui::GREY, 0.0f, 0, S(2));
         if (rowHov) ImGui::SetTooltip("Click for the inventory");
-        ImGui::SameLine(6);
+        ImGui::SameLine(S(6));
         ImGui::PushStyleColor(ImGuiCol_Text, ImColor(col).Value);
         ImGui::TextUnformatted(name.c_str());
         char b[32];
@@ -166,7 +168,10 @@ inline void DrawPlayerListWindow(bool menuOpen) {
     const int mode = (int)config::listMode;
     if (mode == 0 || (mode == 2 && !menuOpen) || !g_ui.ents) return;
     if (PlayersByDistance().empty()) return;
-    ui::PushTheme(std::min(0.9f, config::menuOpacity));
+    //the menu text size, but never so big that a row (and the window's padding) is wider than the screen: the list is
+    //centred, so both ends would be cut off. ponytail: big text is capped on a narrow screen; rows on two lines would keep it.
+    const float fit = ui::BASE_TEXT * ((float)config::SCREEN_W - 40) / (LIST_ROW_W + 28);
+    ui::PushTheme(std::min(0.9f, config::menuOpacity), std::min(MenuTextSize(), std::max(ui::BASE_TEXT, fit)));
     ImGui::SetNextWindowPos(ImVec2((float)config::SCREEN_W * 0.5f, (float)config::SCREEN_H - 14), ImGuiCond_Always, ImVec2(0.5f, 1.0f));
     ImGuiWindowFlags f = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
                          ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing |
@@ -184,7 +189,8 @@ inline void DrawInspectWindows() {
     if (g_inspect.empty() || !g_ui.ents) return;
     if (config::showItemValues) itemvalues::reloadIfChanged(); //a price added to values.txt shows within 2 s, no restart
     RemapInspectKeys();
-    ui::PushTheme(std::min(0.96f, config::menuOpacity + 0.04f));
+    ui::PushTheme(std::min(0.96f, config::menuOpacity + 0.04f), MenuTextSize());
+    using ui::S;
     std::vector<std::string> close;
     int n = 0;
     for (const std::string& key : g_inspect) {
@@ -192,10 +198,10 @@ inline void DrawInspectWindows() {
         for (const RenderEntity& x : *g_ui.ents) if (x.type == Object::PLAYER && PlayerKey(x) == key) { e = &x; break; }
         const std::string who = e && !e->label.empty() ? e->label : (e && !e->account.empty() ? e->account.substr(0, 8) : "Player");
         const std::string title = who + "  -  inventory###inv" + key;
-        ImGui::SetNextWindowSize(ImVec2(360, 420), ImGuiCond_FirstUseEver);
-        //beside the menu (820 wide at x 120), not on its player list; kept on the screen
-        ImGui::SetNextWindowPos(ImVec2(std::max(0.0f, std::min(960.0f + 36.0f * n, (float)config::SCREEN_W - 380.0f)),
-                                       std::max(0.0f, std::min(110.0f + 36.0f * n, (float)config::SCREEN_H - 430.0f))), ImGuiCond_FirstUseEver);
+        //360 x 420 at 15 px text, beside the menu (820 wide at x 120 at 15 px text), not on its player list; kept on the screen
+        ImGui::SetNextWindowSize(ImVec2(std::min(S(360), (float)config::SCREEN_W), std::min(S(420), (float)config::SCREEN_H)), ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowPos(ImVec2(std::max(0.0f, std::min(120.0f + S(840) + 36.0f * n, (float)config::SCREEN_W - S(380))),
+                                       std::max(0.0f, std::min(110.0f + 36.0f * n, (float)config::SCREEN_H - S(430)))), ImGuiCond_FirstUseEver);
         n++;
         bool open = true;
         if (ImGui::Begin(title.c_str(), &open, ImGuiWindowFlags_NoCollapse)) {

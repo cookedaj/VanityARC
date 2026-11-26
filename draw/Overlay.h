@@ -50,6 +50,14 @@ inline void LoadOverlayFonts() {
 
 inline ImFont* OverlayFont() { return g_overlayFont ? g_overlayFont : ImGui::GetFont(); }
 
+//The text size of the menu, the player list and the inventory windows ("Menu text size"). While a control is held
+//(that slider being dragged) the size in use stays put: the menu would otherwise grow and move under the mouse.
+inline float MenuTextSize() {
+    static float inUse = config::menuTextSize;
+    if (!ImGui::IsAnyItemActive()) inUse = config::menuTextSize;
+    return inUse;
+}
+
 //Everything the overlay draws goes through Fade(): the "Overlay opacity" setting (the menu itself is not affected)
 inline ImU32 Fade(ImU32 c) {
     const float a = std::min(1.0f, std::max(0.0f, config::overlayOpacity));

@@ -858,6 +858,32 @@ int main() {
         CHECK(under > 0 && onCard() == 0, "an edge arrow and its distance move off the HP readout");
     }
 
+    //---- the largest Text size (40): the big HP/SH readout, LOW HEALTH, the status card and a toast all stay on a 1280x720
+    //and on a 1920x1080 screen
+    {
+        const float keepLs = config::labelSize;
+        const int keepW = config::SCREEN_W, keepH = config::SCREEN_H;
+        config::labelSize = 40; config::showSelfHealth = true;
+        Toast("Teammate marked: Rattlerfan", 5.0);
+        for (const ImVec2 scr : {ImVec2(1280, 720), ImVec2(1920, 1080)}) {
+            config::SCREEN_W = (int)scr.x; config::SCREEN_H = (int)scr.y;
+            ImGui::GetIO().DisplaySize = scr;
+            auto onScreen = [&] { return g_verts > 0 && g_finite && g_minX >= 0 && g_minY >= 0 && g_maxX <= scr.x && g_maxY <= scr.y; };
+            const LabelRect r = SelfHealthRect();
+            draw([&] { DrawSelfHealth(20, 100); });
+            const bool health = onScreen() && r.x0 >= 0 && r.y0 >= 0 && r.x1 <= scr.x && r.y1 <= scr.y;
+            draw([&] { DrawToast(DrawStatusCard("live  -  120 Hz  -  data 4 ms  -  12 players", "60 fps   step 0.50 ms   scan 1.2 ms   120 moving, 3000 fixed")); });
+            char msg[160];
+            std::snprintf(msg, sizeof msg, "Text size 40 on %.0fx%.0f: the HP/SH readout and LOW HEALTH are drawn fully on the screen", scr.x, scr.y);
+            CHECK(health, msg);
+            std::snprintf(msg, sizeof msg, "Text size 40 on %.0fx%.0f: the status card and a toast are drawn fully on the screen", scr.x, scr.y);
+            CHECK(onScreen(), msg);
+        }
+        config::SCREEN_W = keepW; config::SCREEN_H = keepH;
+        ImGui::GetIO().DisplaySize = ImVec2((float)keepW, (float)keepH);
+        config::labelSize = keepLs;
+    }
+
     //---- the radar panel
     {
         std::vector<RenderEntity> radarEnts = {ent(Object::PLAYER, 3000, 200, 0), ent(Object::ARC, -2500, 1000, 0)};

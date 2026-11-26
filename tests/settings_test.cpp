@@ -53,7 +53,7 @@ int main() {
     CHECK(config::listRows == 3, "list rows below the minimum");
     CHECK(config::showPlayers == false, "a normal line still works");
     CHECK(config::boxThickness == 1.5f && config::trackerHz == 120, "text that is not a number leaves the default alone");
-    CHECK(config::labelSize == 28.0f, "absurdly large number: the largest allowed value");
+    CHECK(config::labelSize == 40.0f, "absurdly large number: the largest allowed value (Text size 40)");
     CHECK(config::menuOpacity == 0.94f, "infinity is ignored");
 
     //save and load again: the same values come back
@@ -63,6 +63,7 @@ int main() {
     config::showLootGuns = false; config::showLootValuables = false; config::showContainerTrash = false;
     config::colorLootKinds = true; config::highlightValuable = true; config::valuableFrom = 25000;
     config::headMarker = 0; config::skeletonColor = 2; config::boxStyle = 3;
+    config::menuTextSize = 27; config::labelSize = 38;
     settings::save(dir);
     config::maxArcDist = 50; config::boxColor = 0; config::monochrome = false; config::labelCards = false; config::overlayOpacity = 1.0f; config::trackerHz = 240;
     config::showItemValues = false;
@@ -70,7 +71,9 @@ int main() {
     config::showLootGuns = true; config::showLootValuables = true; config::showContainerTrash = true;
     config::colorLootKinds = false; config::highlightValuable = false; config::valuableFrom = 10000;
     config::headMarker = 1; config::skeletonColor = 0; config::boxStyle = 0;
+    config::menuTextSize = 15; config::labelSize = 15;
     CHECK(settings::load(dir) == 0, "a file the overlay saved has no ignored lines");
+    CHECK(config::menuTextSize == 27.0f && config::labelSize == 38.0f, "Menu text size and a Text size above the old 28 are saved");
     CHECK(config::headMarker == 0 && config::skeletonColor == 2 && config::boxStyle == 3, "head marker, skeleton colour and the Skeleton only box style are saved");
     CHECK(config::maxArcDist == 222 && config::boxColor == 4 && config::monochrome && config::labelCards && std::abs(config::overlayOpacity - 0.7f) < 1e-6 && config::trackerHz == 90,
           "saved values come back after loading");
@@ -91,6 +94,23 @@ int main() {
     CHECK(config::showLootGuns && config::showLootValuables && config::showContainerTrash && !config::colorLootKinds &&
           !config::highlightValuable && config::valuableFrom == 10000, "Reset: every kind and group on, no kind colours, no valuable highlight");
     CHECK(config::headMarker == 1 && config::skeletonColor == 0 && config::boxStyle == 0, "Reset: a filled head marker, the skeleton in the box colour, corner boxes");
+    CHECK(config::menuTextSize == 15.0f && config::labelSize == 15.0f, "Reset: menu text and text size back to 15 px");
+
+    //only some settings back to their defaults (Reset calibration): the others keep their values
+    config::fovScale = 1.5f; config::centerOffsetX = -40; config::fovIsHorizontal = true; config::boxThickness = 7;
+    settings::reset({&config::fovScale, &config::centerOffsetX, &config::fovIsHorizontal});
+    CHECK(config::fovScale == 1.0f && config::centerOffsetX == 0.0f && !config::fovIsHorizontal && config::boxThickness == 7.0f,
+          "settings::reset puts only the named settings back to their defaults");
+    config::boxThickness = 1.5f;
+
+    //a menu text size outside its range in the file is pulled inside (never below the 15 px default)
+    writeFile(dir, "menuTextSize 4\n");
+    settings::load(dir);
+    CHECK(config::menuTextSize == 15.0f, "menu text size 4 in the file: 15 px");
+    writeFile(dir, "menuTextSize 99\n");
+    settings::load(dir);
+    CHECK(config::menuTextSize == 30.0f, "menu text size 99 in the file: 30 px");
+    config::menuTextSize = 15;
 
     //a value that left its range by a bug is brought back
     config::fovScale = 9.0f; config::listMode = -4;

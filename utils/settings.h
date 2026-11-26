@@ -12,6 +12,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <initializer_list>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -60,6 +61,7 @@ inline std::vector<Entry>& table() {
         D("boxStyle", &config::boxStyle, 0, 3); D("boxColor", &config::boxColor, 0, 5);
         F("boxThickness", &config::boxThickness, 1, 10);
         F("overlayOpacity", &config::overlayOpacity, 0.2, 1); F("menuOpacity", &config::menuOpacity, 0.5, 1);
+        F("menuTextSize", &config::menuTextSize, 15, 30);
         D("trackerHz", &config::trackerHz, 30, 240);
         D("listMode", &config::listMode, 0, 2); D("listRows", &config::listRows, 3, 16);
         B("showItemValues", &config::showItemValues);
@@ -72,7 +74,7 @@ inline std::vector<Entry>& table() {
         F("centerOffsetX", &config::centerOffsetX, -300, 300); F("centerOffsetY", &config::centerOffsetY, -300, 300);
         B("gameViewAuto", &config::gameViewAuto); D("gameRenderW", &config::gameRenderW, 320, 8192);
         D("gameRenderH", &config::gameRenderH, 240, 8192); B("gameStretch", &config::gameStretch);
-        F("labelSize", &config::labelSize, 10, 28);
+        F("labelSize", &config::labelSize, 10, 40);
         F("radarCenterX", &config::radarCenterX, 0, 8192); F("radarCenterY", &config::radarCenterY, 0, 8192);
         F("radarRadius", &config::radarRadius, 50, 300); F("scale", &config::scale, 10, 2000);
         return v;
@@ -106,6 +108,13 @@ inline std::vector<double>& defaults() {
 inline void resetAll() {
     const std::vector<double>& d = defaults();
     for (size_t i = 0; i < table().size(); i++) setValue(table()[i], d[i]);
+}
+
+//Only these settings back to their defaults (for example the calibration ones). which: the config variables.
+inline void reset(std::initializer_list<const void*> which) {
+    const std::vector<double>& d = defaults();
+    for (size_t i = 0; i < table().size(); i++)
+        if (std::find(which.begin(), which.end(), table()[i].p) != which.end()) setValue(table()[i], d[i]);
 }
 
 //Brings every value back inside its range (a menu slider cannot leave it, but a bug or a text edit could)

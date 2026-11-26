@@ -30,6 +30,7 @@ int main() {
     io.BackendFlags |= ImGuiBackendFlags_RendererHasTextures;
     io.IniFilename = nullptr;
     ImGui::GetStyle().WindowBorderSize = 0;
+    settings::defaults(); //remember the config.h values before anything below changes them
 
     //things to list in the Rename tabs
     labels::setDir(testDir("menucfg"));
@@ -199,25 +200,65 @@ int main() {
     config::gameViewAuto = false; config::gameRenderW = 8000; config::gameRenderH = 1080; //left off, so the Settings scan below covers the buttons
     {
         auto gv = [] {
-            ImGui::SetNextWindowPos(ImVec2(0, 0)); ImGui::SetNextWindowSize(ImVec2(700, 400));
+            ImGui::SetNextWindowPos(ImVec2(0, 0)); ImGui::SetNextWindowSize(ImVec2(700, 1000));
             ImGui::Begin("gv"); DrawGameViewSettings(); ImGui::End();
         };
         for (int i = 0; i < 3; i++) frame(gv);
         ImGuiWindow* gw = ImGui::FindWindowByName("gv");
-        const ImGuiID plusId = ImGui::GetIDWithSeed("+100", nullptr, ImGui::GetIDWithSeed("Game width", nullptr, gw->ID));
-        bool over = false;
-        for (float y = 0; y < 400 && !over; y += 4)
-            for (float x = 0; x < 700 && !over; x += 8) {
-                io.AddMousePosEvent(x, y); frame(gv); frame(gv);
-                over = G->HoveredId == plusId;
+        //a button in an ID scope ("Game width", "+100"): move the mouse onto it; then click it n times
+        auto hoverOn = [&](const char* scope, const char* label) {
+            const ImGuiID id = ImGui::GetIDWithSeed(label, nullptr, ImGui::GetIDWithSeed(scope, nullptr, gw->ID));
+            for (float y = 0; y < 1000; y += 4)
+                for (float x = 0; x < 700; x += 8) {
+                    io.AddMousePosEvent(x, y); frame(gv); frame(gv);
+                    if (G->HoveredId == id) return true;
+                }
+            return false;
+        };
+        auto click = [&](int n) {
+            for (int i = 0; i < n; i++) {
+                io.AddMouseButtonEvent(ImGuiMouseButton_Left, true); frame(gv);
+                io.AddMouseButtonEvent(ImGuiMouseButton_Left, false); frame(gv); frame(gv);
             }
-        CHECK(over, "the mouse can hover the Game width +100 button");
-        for (int i = 0; i < 2; i++) {
-            io.AddMouseButtonEvent(ImGuiMouseButton_Left, true); frame(gv);
-            io.AddMouseButtonEvent(ImGuiMouseButton_Left, false); frame(gv); frame(gv);
-        }
+        };
+        CHECK(hoverOn("Game width", "+100"), "the mouse can hover the Game width +100 button");
+        click(2);
         CHECK(config::gameRenderW == 8192, "+100 twice from 8000 stops at 8192");
         CHECK(config::gameRenderH == 1080, "the width buttons leave the height alone");
+        //the calibration's fine step buttons under the Zoom and Shift sliders
+        config::fovScale = 1.0f; config::centerOffsetX = 0; config::centerOffsetY = 0;
+        CHECK(hoverOn("Zoom steps", "+0.01"), "the mouse can hover the Zoom +0.01 button");
+        click(3);
+        CHECK(std::abs(config::fovScale - 1.03f) < 1e-4f, "Zoom +0.01 three times: 1.000 becomes 1.030");
+        config::fovScale = 1.98f;
+        CHECK(hoverOn("Zoom steps", "+0.05"), "the mouse can hover the Zoom +0.05 button");
+        click(1);
+        CHECK(config::fovScale == 2.0f, "Zoom +0.05 from 1.98 stops at 2.00, the slider's end");
+        CHECK(hoverOn("Shift X steps", "-10"), "the mouse can hover the Shift X -10 button");
+        click(2);
+        CHECK(config::centerOffsetX == -20.0f && config::centerOffsetY == 0.0f, "Shift X -10 twice: -20 px, Shift Y left alone");
+        CHECK(hoverOn("Shift Y steps", "+1"), "the mouse can hover the Shift Y +1 button");
+        click(1);
+        CHECK(config::centerOffsetY == 1.0f, "Shift Y +1: 1 px");
+        //"Reset calibration" asks first ("Yes, reset calibration"), then puts all five back to the config.h values
+        config::fovIsHorizontal = true; config::useCameraRoll = false; config::boxThickness = 6;
+        CHECK(hoverOn("Reset calibration", "###arm"), "the mouse can hover Reset calibration");
+        click(1);
+        CHECK(config::fovScale == 2.0f && config::fovIsHorizontal, "Reset calibration does nothing on the first click (it asks first)");
+        for (int i = 0; i < 40; i++) frame(gv); //the real action only counts 0.6 s after arming (and is offered for 6 s)
+        const ImGuiID yesId = ImGui::GetIDWithSeed("Yes, reset calibration", nullptr, ImGui::GetIDWithSeed("Reset calibration", nullptr, gw->ID));
+        bool yes = false;
+        for (float x = 0, y = io.MousePos.y; x < 700 && !yes; x += 8) { io.AddMousePosEvent(x, y); frame(gv); frame(gv); yes = G->HoveredId == yesId; }
+        CHECK(yes, "Reset calibration then offers \"Yes, reset calibration\" beside it");
+        click(1);
+        const std::set<const void*> cal = {&config::fovIsHorizontal, &config::fovScale, &config::centerOffsetX, &config::centerOffsetY, &config::useCameraRoll};
+        int n = 0;
+        bool same = true;
+        for (size_t i = 0; i < settings::table().size(); i++)
+            if (cal.count(settings::table()[i].p)) { n++; same &= settings::value(settings::table()[i]) == settings::defaults()[i]; }
+        CHECK(n == 5 && same, "Reset calibration puts FOV side, Zoom, Shift X / Y and camera roll back to their defaults");
+        CHECK(config::boxThickness == 6, "Reset calibration leaves every other setting alone");
+        config::boxThickness = 1.5f;
         io.AddMousePosEvent(-1000, -1000); frame(gv); frame(gv);
     }
 
@@ -261,56 +302,82 @@ int main() {
         g_MenuOpen = false;
     }
 
-    //at: scroll the page that far first (1: to its end, 0: not at all), and hover only the page (what lies below the first screen)
+    //Every page from its top to its end: the page is scrolled down in steps that overlap, and at each step every point
+    //of it is hovered (at the top the tabs and the header too). ImGui only notices a clash between widgets on screen
+    //together, so this covers everything below the first screen as well. hovered: every ID the mouse reached on the page.
     std::set<ImGuiID> hovered;
     ImGuiID pageId = 0;
-    auto scan = [&](const char* what, float at) {
-        const bool bottom = at > 0;
+    auto scan = [&](const char* what) {
         g_MenuOpen = true;
+        const float k = config::menuTextSize / ui::BASE_TEXT; //bigger text, bigger widgets: the grid can be as much coarser
         frame([] { DrawMenu(); }); frame([] { DrawMenu(); });
         ImGuiWindow* mw = ImGui::FindWindowByName("kwin-helper");
         ImGuiWindow* page = nullptr;
         for (ImGuiWindow* win : G->Windows) if (std::strstr(win->Name, "##page")) page = win;
         pageId = page ? page->ID : 0;
-        float x0 = mw->Pos.x + 4;
-        if (bottom && page) {
-            ImGui::SetScrollY(page, page->ScrollMax.y * at);
-            frame([] { DrawMenu(); }); frame([] { DrawMenu(); });
-            x0 = page->Pos.x + 2;
-        }
-        int hits = 0;
+        int hits = 0, steps = 0;
         hovered.clear();
-        for (float y = mw->Pos.y + 2; y < mw->Pos.y + mw->Size.y; y += 5)
-            for (float x = x0; x < mw->Pos.x + mw->Size.x; x += 9) {
-                io.AddMousePosEvent(x, y);
-                frame([] { DrawMenu(); }); frame([] { DrawMenu(); });
-                if (G->DebugDrawIdConflictsId != 0) hits++;
-                hovered.insert(G->HoveredId);
-            }
+        for (float at = 0; page;) {
+            steps++;
+            ImGui::SetScrollY(page, at);
+            frame([] { DrawMenu(); }); frame([] { DrawMenu(); });
+            const ImGuiWindow* area = at > 0 ? page : mw; //scrolled: only the page moved
+            for (float y = area->Pos.y + 2; y < area->Pos.y + area->Size.y; y += 5 * k)
+                for (float x = area->Pos.x + 4; x < area->Pos.x + area->Size.x; x += 9 * k) {
+                    io.AddMousePosEvent(x, y);
+                    frame([] { DrawMenu(); }); frame([] { DrawMenu(); });
+                    if (G->DebugDrawIdConflictsId != 0) hits++;
+                    hovered.insert(G->HoveredId);
+                }
+            if (at >= page->ScrollMax.y) break;
+            at = std::min(page->ScrollMax.y, at + std::max(50.0f, page->InnerRect.GetHeight() * 0.8f));
+        }
         io.AddMousePosEvent(-1000, -1000);
         if (page) ImGui::SetScrollY(page, 0); //the pages share one scroll position
         frame([] { DrawMenu(); }); frame([] { DrawMenu(); });
-        char msg[112]; std::snprintf(msg, sizeof msg, "no conflicting IDs when hovering the menu (%s%s)", what, at >= 1 ? ", scrolled to the end" : bottom ? ", scrolled part way" : "");
-        CHECK(hits == 0, msg);
+        char msg[160];
+        std::snprintf(msg, sizeof msg, "no conflicting IDs when hovering the menu (%s, menu text %.0f px, %d page steps to its end)", what, config::menuTextSize, steps);
+        CHECK(page && hits == 0, msg);
     };
     auto sw = [&](const char* label) { return ImGui::GetIDWithSeed("##sw", nullptr, ImGui::GetIDWithSeed(label, nullptr, pageId)); };
     auto choice = [&](const char* label) { return ImGui::GetIDWithSeed("##c", nullptr, ImGui::GetIDWithSeed(label, nullptr, pageId)); };
-    for (int tab = 0; tab < MENU_TAB_COUNT; tab++) {
-        g_MenuTab = tab;
-        scan(MENU_TABS[tab], 0);
-        if (tab == 1) CHECK(hovered.count(sw("Ground items")) && hovered.count(sw("Guns")), "Loot tab: the mouse reaches Ground items and Guns");
+    auto slider = [&](const char* label) { return ImGui::GetIDWithSeed("##v", nullptr, ImGui::GetIDWithSeed(label, nullptr, pageId)); };
+    auto in = [&](const char* scope, const char* label) { return ImGui::GetIDWithSeed(label, nullptr, ImGui::GetIDWithSeed(scope, nullptr, pageId)); };
+    //at 15 px menu text (the default), then at 30 px on a 1280x720 screen: the menu stays on that screen
+    for (float text : {15.0f, 30.0f}) {
+        const bool big = text > 15;
+        config::menuTextSize = text;
+        if (big) { config::SCREEN_W = 1280; config::SCREEN_H = 720; io.DisplaySize = ImVec2(1280, 720); }
+        char msg[160];
+        for (int tab = 0; tab < MENU_TAB_COUNT; tab++) {
+            g_MenuTab = tab;
+            scan(MENU_TABS[tab]);
+            if (tab == 0) {
+                std::snprintf(msg, sizeof msg, "ESP tab (menu text %.0f px): the mouse reaches Box style and every skeleton option below the first screen", text);
+                CHECK(hovered.count(choice("Box style")) && hovered.count(sw("Skeleton on players")) && hovered.count(choice("Head marker")) &&
+                      hovered.count(choice("Skeleton colour")) && hovered.count(sw("Dim players behind cover")) && hovered.count(sw("Big warning for a close enemy")), msg);
+            }
+            if (tab == 1) {
+                std::snprintf(msg, sizeof msg, "Loot tab (menu text %.0f px): the mouse reaches Ground items, Guns and the container switches at its end", text);
+                CHECK(hovered.count(sw("Ground items")) && hovered.count(sw("Guns")) && hovered.count(sw("Containers")) &&
+                      hovered.count(sw("Other##box")) && hovered.count(sw("Medical##box")), msg);
+            }
+            if (tab == 4) {
+                std::snprintf(msg, sizeof msg, "Settings tab (menu text %.0f px): the mouse reaches Menu text size, the calibration step buttons and Quit", text);
+                CHECK(hovered.count(slider("Menu text size")) && hovered.count(in("Zoom steps", "+0.01")) && hovered.count(in("Shift X steps", "-10")) &&
+                      hovered.count(in("Shift Y steps", "+10")) && hovered.count(in("Reset calibration", "###arm")) && hovered.count(ImGui::GetIDWithSeed("Quit overlay", nullptr, pageId)), msg);
+            }
+        }
+        ImGuiWindow* mw = ImGui::FindWindowByName("kwin-helper");
+        std::snprintf(msg, sizeof msg, "menu text %.0f px: the whole menu is on the %dx%d screen (%.0f x %.0f)", text, config::SCREEN_W, config::SCREEN_H, mw->Size.x, mw->Size.y);
+        CHECK(mw->Pos.x >= 0 && mw->Pos.y >= 0 && mw->Pos.x + mw->Size.x <= config::SCREEN_W && mw->Pos.y + mw->Size.y <= config::SCREEN_H, msg);
+        if (big) {
+            CHECK(mw->Size.x == 1280 && mw->Size.y == 720, "menu text 30 px on 1280x720: the menu grows to the whole screen and no further");
+            CHECK(ui::g_scale == 1.0f, "the menu text size is only used inside the menu's windows");
+        }
     }
-    g_MenuTab = 1;
-    scan("Loot", 1);
-    CHECK(hovered.count(sw("Containers")) && hovered.count(sw("Other##box")) && hovered.count(sw("Medical##box")),
-          "Loot tab scrolled to the end: the mouse reaches the container switches");
-    //the ESP tab's BOXES and SKELETON parts lie below its first screen
-    g_MenuTab = 0;
-    std::set<ImGuiID> espSeen;
-    for (float at : {0.5f, 0.75f, 1.0f}) { scan("ESP", at); espSeen.insert(hovered.begin(), hovered.end()); }
-    CHECK(espSeen.count(choice("Box style")) && espSeen.count(sw("Skeleton on players")) && espSeen.count(choice("Head marker")) &&
-          espSeen.count(choice("Skeleton colour")) && espSeen.count(sw("Dim players behind cover")),
-          "ESP tab scrolled down: the mouse reaches Box style and every skeleton option");
+    config::menuTextSize = 15; config::SCREEN_W = 2560; config::SCREEN_H = 1440; io.DisplaySize = ImVec2(1280, 1700);
+    frame([] { DrawMenu(); }); frame([] { DrawMenu(); });
 
     //the player list and an inventory window next to the menu draw without clashing IDs either
     g_MenuTab = 2;
@@ -359,18 +426,19 @@ int main() {
 
     //the High visibility preset: every value it sets is inside its saved range, and it is written to settings.txt
     {
-        settings::defaults(); //remember the config.h values before anything changes them
         std::error_code ec;
         std::filesystem::remove(settings::path(), ec); //$HOME is the test folder (set above)
         ApplyHighVisibility();
-        CHECK(config::labelSize == 28.0f && config::boxThickness >= 4.0f && config::labelCards && config::boxStyle == 1 &&
+        CHECK(config::labelSize == 28.0f && config::menuTextSize == 24.0f && config::boxThickness >= 4.0f && config::labelCards && config::boxStyle == 1 &&
               config::overlayOpacity == 1.0f && config::menuOpacity == 1.0f && config::hiddenAlpha >= 200, "High visibility sets the readable values");
         settings::clampAll();
-        CHECK(config::labelSize == 28.0f && config::boxThickness >= 4.0f && config::hiddenAlpha >= 200, "High visibility values are inside their safe ranges");
+        CHECK(config::labelSize == 28.0f && config::menuTextSize == 24.0f && config::boxThickness >= 4.0f && config::hiddenAlpha >= 200,
+              "High visibility values are inside their safe ranges");
         CHECK(std::filesystem::exists(settings::path()), "High visibility is saved at once");
-        config::boxThickness = 8.0f; config::hiddenAlpha = 255;
+        config::boxThickness = 8.0f; config::hiddenAlpha = 255; config::labelSize = 36.0f; config::menuTextSize = 30.0f;
         ApplyHighVisibility();
         CHECK(config::boxThickness == 8.0f && config::hiddenAlpha == 255, "High visibility never makes thicker lines thinner or solid hidden players fainter");
+        CHECK(config::labelSize == 36.0f && config::menuTextSize == 30.0f, "High visibility never makes a bigger Text size or Menu text size smaller");
         config::showItemValues = true;
         ApplyHighVisibility();
         ResetToHighVisibility();

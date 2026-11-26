@@ -4,6 +4,7 @@
 #ifndef KWINHELPER_UIKIT_H
 #define KWINHELPER_UIKIT_H
 
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
 #include <initializer_list>
@@ -17,7 +18,27 @@ inline constexpr ImU32 WHITE = IM_COL32(255, 255, 255, 255);
 inline constexpr ImU32 LIGHT = IM_COL32(205, 205, 205, 255);
 inline constexpr ImU32 GREY = IM_COL32(135, 135, 135, 255);
 inline constexpr ImU32 DIM = IM_COL32(78, 78, 78, 255);
+//Every size here is for 15 px text (BASE_TEXT). The "Menu text size" setting makes the menu, the player list and the
+//inventory windows bigger: PushTheme sets g_scale (text size / 15) and S() multiplies a size by it.
+inline constexpr float BASE_TEXT = 15.0f;
 inline constexpr float LABEL_W = 210.0f, CONTROL_W = 250.0f;
+inline float g_scale = 1.0f;
+inline float S(float px) { return px * g_scale; }
+
+//The width of the control after a row's label: CONTROL_W, narrower only when the page is too narrow for it (big menu
+//text on a small screen), leaving room for what follows it (a slider's value)
+inline float ControlW(float room) {
+    return std::min(S(CONTROL_W), std::max(S(60), ImGui::GetContentRegionAvail().x - room));
+}
+
+//The next item (w wide) to the right of the last one if it still fits, else at the start of the next line, at x
+//(window coordinates). Rows of buttons wrap instead of running off the page with big menu text.
+inline void SameLineIfFits(float w, float x) {
+    ImGui::SameLine();
+    if (ImGui::GetContentRegionAvail().x >= w) return;
+    ImGui::NewLine();
+    ImGui::SetCursorPosX(x);
+}
 
 //The visible part of a label ("Name##id" shows "Name")
 inline const char* LabelEnd(const char* label) {
@@ -28,10 +49,13 @@ inline const char* LabelEnd(const char* label) {
 //The black and white look. Call PushTheme() before drawing a window, PopTheme() after. menuOpacity: the background.
 //Buttons, drop-downs, slider tracks and boxes are mid grey with a light outline, so they stand out from the black;
 //lighter under the mouse and while pressed. White text stays at least 4.5:1 on every one of them.
+//textSize: the window's text in px; padding, spacing and the scrollbar grow with it.
 inline int g_themeColors = 0;
-inline void PushTheme(float opacity) {
+inline void PushTheme(float opacity, float textSize = BASE_TEXT) {
     auto c = [&](ImGuiCol i, ImVec4 v) { ImGui::PushStyleColor(i, v); g_themeColors++; };
     g_themeColors = 0;
+    g_scale = textSize / BASE_TEXT;
+    ImGui::PushFont(nullptr, textSize);
     const ImVec4 black(0, 0, 0, opacity), white(1, 1, 1, 1), grey(0.53f, 0.53f, 0.53f, 1),
                  fill(0.28f, 0.28f, 0.28f, 1), hover(0.38f, 0.38f, 0.38f, 1), press(0.45f, 0.45f, 0.45f, 1);
     c(ImGuiCol_WindowBg, black); c(ImGuiCol_ChildBg, ImVec4(0, 0, 0, 0)); c(ImGuiCol_PopupBg, ImVec4(0.04f, 0.04f, 0.04f, 0.98f));
@@ -56,23 +80,27 @@ inline void PushTheme(float opacity) {
     ImGui::PushStyleVar(ImGuiStyleVar_GrabRounding, 0.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_ScrollbarRounding, 0.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_TabRounding, 0.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8, 5));
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(10, 7));
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(14, 12));
-    ImGui::PushStyleVar(ImGuiStyleVar_GrabMinSize, 16.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(S(8), S(5)));
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(S(10), S(7)));
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemInnerSpacing, ImVec2(S(4), S(4)));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(S(14), S(12)));
+    ImGui::PushStyleVar(ImGuiStyleVar_GrabMinSize, S(16));
+    ImGui::PushStyleVar(ImGuiStyleVar_ScrollbarSize, S(14));
 }
 inline void PopTheme() {
-    ImGui::PopStyleVar(13);
+    ImGui::PopStyleVar(15);
     ImGui::PopStyleColor(g_themeColors);
+    ImGui::PopFont();
+    g_scale = 1.0f;
 }
 
 //A small grey heading with a thin line
 inline void Section(const char* text) {
-    ImGui::Dummy(ImVec2(0, 4));
+    ImGui::Dummy(ImVec2(0, S(4)));
     ImGui::TextColored(ImColor(GREY), "%s", text);
     ImVec2 p = ImGui::GetCursorScreenPos();
-    ImGui::GetWindowDrawList()->AddLine(ImVec2(p.x, p.y - 2), ImVec2(p.x + ImGui::GetContentRegionAvail().x, p.y - 2), DIM);
-    ImGui::Dummy(ImVec2(0, 3));
+    ImGui::GetWindowDrawList()->AddLine(ImVec2(p.x, p.y - S(2)), ImVec2(p.x + ImGui::GetContentRegionAvail().x, p.y - S(2)), DIM, S(1));
+    ImGui::Dummy(ImVec2(0, S(3)));
 }
 
 inline void Note(const char* text) {
@@ -86,18 +114,18 @@ inline void Note(const char* text) {
 //A switch: an outlined box with a filled half. The whole row can be clicked.
 inline bool Switch(const char* label, bool* v) {
     ImGui::PushID(label);
-    const float h = 16.0f, w = 32.0f, row = h + 6.0f;
+    const float h = S(16), w = S(32), row = h + S(6), e = S(2); //e: the gap between the outline and the filled half
     const ImVec2 p = ImGui::GetCursorScreenPos();
     //EnableNav: ImGui leaves invisible buttons out of Tab and the arrows unless asked
-    const bool pressed = ImGui::InvisibleButton("##sw", ImVec2(std::max(60.0f, ImGui::GetContentRegionAvail().x), row), ImGuiButtonFlags_EnableNav);
+    const bool pressed = ImGui::InvisibleButton("##sw", ImVec2(std::max(S(60), ImGui::GetContentRegionAvail().x), row), ImGuiButtonFlags_EnableNav);
     if (pressed) *v = !*v;
     const bool hov = ImGui::IsItemHovered();
     ImDrawList* dl = ImGui::GetWindowDrawList();
-    const ImVec2 a(p.x, p.y + 3), b(p.x + w, p.y + 3 + h);
-    dl->AddRect(a, b, *v ? WHITE : GREY, 0.0f, 0, 1.0f);
-    if (*v) dl->AddRectFilled(ImVec2(a.x + w / 2 + 1, a.y + 2), ImVec2(b.x - 2, b.y - 2), WHITE);
-    else dl->AddRectFilled(ImVec2(a.x + 2, a.y + 2), ImVec2(a.x + w / 2 - 1, b.y - 2), GREY);
-    dl->AddText(ImVec2(p.x + w + 10, p.y + 3 + (h - ImGui::GetFontSize()) / 2), (*v || hov) ? WHITE : LIGHT, label, LabelEnd(label));
+    const ImVec2 a(p.x, p.y + S(3)), b(p.x + w, p.y + S(3) + h);
+    dl->AddRect(a, b, *v ? WHITE : GREY, 0.0f, 0, S(1));
+    if (*v) dl->AddRectFilled(ImVec2(a.x + w / 2 + S(1), a.y + e), ImVec2(b.x - e, b.y - e), WHITE);
+    else dl->AddRectFilled(ImVec2(a.x + e, a.y + e), ImVec2(a.x + w / 2 - S(1), b.y - e), GREY);
+    dl->AddText(ImVec2(p.x + w + S(10), a.y + (h - ImGui::GetFontSize()) / 2), (*v || hov) ? WHITE : LIGHT, label, LabelEnd(label));
     ImGui::PopID();
     return pressed;
 }
@@ -106,14 +134,14 @@ inline bool SliderRow(const char* label, ImGuiDataType type, void* v, const void
     ImGui::PushID(label);
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted(label, LabelEnd(label));
-    ImGui::SameLine(LABEL_W);
-    ImGui::SetNextItemWidth(CONTROL_W);
+    ImGui::SameLine(S(LABEL_W));
+    ImGui::SetNextItemWidth(ControlW(S(70)));
     //The track has no text on it (the handle would cover the number); the value is shown to the right
     const bool changed = ImGui::SliderScalar("##v", type, v, lo, hi, "", ImGuiSliderFlags_AlwaysClamp);
     char text[48];
     if (type == ImGuiDataType_Float) std::snprintf(text, sizeof text, fmt, (double)*(float*)v);
     else std::snprintf(text, sizeof text, fmt, *(double*)v);
-    ImGui::SameLine(0, 12);
+    ImGui::SameLine(0, S(12));
     ImGui::TextUnformatted(text);
     ImGui::PopID();
     return changed;
@@ -130,8 +158,8 @@ inline bool Choice(const char* label, double* v, const char* const* items, int n
     ImGui::PushID(label);
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted(label, LabelEnd(label));
-    ImGui::SameLine(LABEL_W);
-    ImGui::SetNextItemWidth(CONTROL_W);
+    ImGui::SameLine(S(LABEL_W));
+    ImGui::SetNextItemWidth(ControlW(0));
     int idx = (int)*v;
     idx = idx < 0 ? 0 : idx >= n ? n - 1 : idx;
     bool changed = false;
@@ -151,13 +179,14 @@ inline bool Choice(const char* label, double* v, std::initializer_list<const cha
 inline bool Tab(const char* label, bool selected, float w) {
     ImGui::PushID(label);
     const ImVec2 p = ImGui::GetCursorScreenPos();
-    const bool pressed = ImGui::InvisibleButton("##t", ImVec2(w, 32), ImGuiButtonFlags_EnableNav);
+    const float h = S(32);
+    const bool pressed = ImGui::InvisibleButton("##t", ImVec2(w, h), ImGuiButtonFlags_EnableNav);
     const bool hov = ImGui::IsItemHovered();
     ImDrawList* dl = ImGui::GetWindowDrawList();
-    if (selected) dl->AddRectFilled(p, ImVec2(p.x + w, p.y + 32), IM_COL32(72, 72, 72, 255));
-    else if (hov) dl->AddRectFilled(p, ImVec2(p.x + w, p.y + 32), IM_COL32(44, 44, 44, 255));
-    if (selected) dl->AddRectFilled(p, ImVec2(p.x + 3, p.y + 32), WHITE);
-    dl->AddText(ImVec2(p.x + 16, p.y + (32 - ImGui::GetFontSize()) / 2), selected ? WHITE : (hov ? LIGHT : GREY), label, LabelEnd(label));
+    if (selected) dl->AddRectFilled(p, ImVec2(p.x + w, p.y + h), IM_COL32(72, 72, 72, 255));
+    else if (hov) dl->AddRectFilled(p, ImVec2(p.x + w, p.y + h), IM_COL32(44, 44, 44, 255));
+    if (selected) dl->AddRectFilled(p, ImVec2(p.x + S(3), p.y + h), WHITE);
+    dl->AddText(ImVec2(p.x + S(16), p.y + (h - ImGui::GetFontSize()) / 2), selected ? WHITE : (hov ? LIGHT : GREY), label, LabelEnd(label));
     ImGui::PopID();
     return pressed;
 }

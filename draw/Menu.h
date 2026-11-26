@@ -29,6 +29,7 @@ inline std::atomic<bool> g_MenuQuit{false}; //the menu's Quit button; the main l
 inline int g_MenuTab = 0; //which page is shown
 inline const char* const MENU_TABS[] = {"ESP", "Loot", "Players", "Radar", "Settings"};
 inline constexpr int MENU_TAB_COUNT = 5;
+inline constexpr float MENU_W = 820, MENU_H = 640; //the menu's size at 15 px menu text
 
 //Call once per frame before RenderBegin(). Flips the menu on Insert. The overlay is click-through
 //normally; while the menu is open it takes the mouse so the menu can be clicked.
@@ -142,9 +143,9 @@ inline bool ConfirmButton(const char* label, const char* confirm, double* armedA
     if (*armedAt < 0) {
         if (ImGui::Button((std::string(label) + "###arm").c_str())) *armedAt = now;
     } else {
-        const float w = ImGui::CalcTextSize(label).x + ImGui::GetStyle().FramePadding.x * 2;
+        const float w = ImGui::CalcTextSize(label).x + ImGui::GetStyle().FramePadding.x * 2, x0 = ImGui::GetCursorPosX();
         if (ImGui::Button("Cancel###arm", ImVec2(w, 0))) *armedAt = -1;
-        ImGui::SameLine();
+        ui::SameLineIfFits(ImGui::CalcTextSize(confirm).x + ImGui::GetStyle().FramePadding.x * 2, x0);
         if (ImGui::Button(confirm) && *armedAt >= 0 && now - *armedAt >= 0.6) {
             yes = true; *armedAt = -1;
             //the focus frame goes back to the restored button (same ID as Cancel###arm; ImHashStr restarts at "###")
@@ -155,10 +156,12 @@ inline bool ConfirmButton(const char* label, const char* confirm, double* armedA
     return yes;
 }
 
-//The readable setup in one go: text size 28, box and skeleton lines at least 4 px (the skeleton is never thinner than the box), full boxes, label cards, overlay and menu fully solid,
-//hidden players at least 200 (Hidden player opacity). Saved at once.
+//The readable setup in one go: text size at least 28, menu text size at least 24, box and skeleton lines at least 4 px
+//(the skeleton is never thinner than the box), full boxes, label cards, overlay and menu fully solid, hidden players at
+//least 200 (Hidden player opacity). Sizes only ever grow: bigger values the user picked stay. Saved at once.
 inline void ApplyHighVisibility() {
-    config::labelSize = 28.0f;
+    config::labelSize = std::max(config::labelSize, 28.0f);
+    config::menuTextSize = std::max(config::menuTextSize, 24.0f);
     config::boxThickness = std::max(config::boxThickness, 4.0f); //only ever thicker
     config::labelCards = true;
     config::boxStyle = 1; //full rectangle
@@ -178,10 +181,10 @@ inline void ResetToHighVisibility() {
 
 //A large button with large text that applies ApplyHighVisibility()
 inline void HighVisibilityButton() {
-    ImGui::PushFont(OverlayFont(), 22.0f);
-    if (ImGui::Button("High visibility", ImVec2(320, 46))) { ApplyHighVisibility(); Toast("High visibility on"); }
+    ImGui::PushFont(OverlayFont(), ui::S(22));
+    if (ImGui::Button("High visibility", ImVec2(ui::S(320), ui::S(46)))) { ApplyHighVisibility(); Toast("High visibility on"); }
     ImGui::PopFont();
-    ui::Note("One click: text size 28, box and skeleton lines at least 4 px, full boxes, label cards, overlay and menu fully solid, hidden players at least 200 (Hidden player opacity).");
+    ui::Note("One click: text size at least 28, menu text size at least 24, box and skeleton lines at least 4 px, full boxes, label cards, overlay and menu fully solid, hidden players at least 200 (Hidden player opacity).");
 }
 
 //--- the pages
@@ -346,21 +349,45 @@ inline constexpr int GAME_SIZES[][2] = {{1024, 768}, {1280, 960}, {1440, 1080}, 
                                         {1280, 1024}, {1680, 1050}, {1728, 1080}, {1920, 1080}};
 inline constexpr int GAME_SIZE_CUSTOM = 9;
 
-//One number with big step buttons: "Game width  1440    -100 -10 -1 +1 +10 +100", kept within lo..hi
-inline void StepRow(const char* label, double* v, double lo, double hi) {
-    static const int steps[] = {-100, -10, -1, 1, 10, 100};
-    ImGui::PushID(label);
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8, 10)); //tall buttons, and the text stays level with them
-    ImGui::AlignTextToFramePadding();
-    ImGui::Text("%s  %.0f", label, *v);
-    for (int i = 0; i < 6; i++) {
-        ImGui::SameLine(i == 0 ? ui::LABEL_W : 0.0f);
-        char t[8];
-        std::snprintf(t, sizeof t, "%+d", steps[i]);
-        if (ImGui::Button(t, ImVec2(56, 0))) *v = std::clamp(*v + steps[i], lo, hi);
+//Big step buttons from the cursor on ("-100 -10 -1 +1 +10 +100"): each adds its step to *v, kept within lo..hi. fmt
+//writes a step on its button ("%+.0f"). They wrap onto a second line when the page is too narrow. id: their ID scope.
+inline constexpr float STEP_PAD_Y = 10; //tall buttons, easy to hit
+template <typename T> inline void StepButtons(const char* id, T* v, double lo, double hi, std::initializer_list<double> steps, const char* fmt) {
+    ImGui::PushID(id);
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(ui::S(8), ui::S(STEP_PAD_Y)));
+    const float x0 = ImGui::GetCursorPosX();
+    bool first = true;
+    for (double s : steps) {
+        char t[16];
+        std::snprintf(t, sizeof t, fmt, s);
+        const float w = std::max(ui::S(56), ImGui::CalcTextSize(t).x + ImGui::GetStyle().FramePadding.x * 2);
+        if (!first) ui::SameLineIfFits(w, x0);
+        first = false;
+        if (ImGui::Button(t, ImVec2(w, 0))) *v = (T)std::clamp((double)*v + s, lo, hi);
     }
     ImGui::PopStyleVar();
     ImGui::PopID();
+}
+
+//One number with big step buttons: "Game width  1440    -100 -10 -1 +1 +10 +100", kept within lo..hi
+inline void StepRow(const char* label, double* v, double lo, double hi) {
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(ui::S(8), ui::S(STEP_PAD_Y))); //the text stays level with the buttons
+    ImGui::AlignTextToFramePadding();
+    ImGui::Text("%s  %.0f", label, *v);
+    ImGui::PopStyleVar();
+    ImGui::SameLine(ui::S(ui::LABEL_W));
+    StepButtons(label, v, lo, hi, {-100, -10, -1, 1, 10, 100}, "%+.0f");
+}
+
+//Fine step buttons under a calibration slider, lined up with its track
+inline void FineSteps(const char* id, float* v, double lo, double hi, std::initializer_list<double> steps, const char* fmt) {
+    ImGui::SetCursorPosX(ui::S(ui::LABEL_W));
+    StepButtons(id, v, lo, hi, steps, fmt);
+}
+
+//"Reset calibration": FOV side, Zoom, Shift X / Y and camera roll back to their config.h values
+inline void ResetCalibration() {
+    settings::reset({&config::fovIsHorizontal, &config::fovScale, &config::centerOffsetX, &config::centerOffsetY, &config::useCameraRoll});
 }
 
 inline constexpr ImU32 GUIDE_YELLOW = IM_COL32(255, 230, 0, 255);
@@ -418,15 +445,14 @@ inline void DrawGameViewSettings() {
     Note("If markers slide away from targets near the screen edge, flip the FOV side first, then adjust Zoom.");
     Switch("FOV is horizontal", &config::fovIsHorizontal);
     Slider("Zoom", &config::fovScale, 0.5f, 2.0f, "%.3f");
+    FineSteps("Zoom steps", &config::fovScale, 0.5, 2.0, {-0.05, -0.01, 0.01, 0.05}, "%+.2f");
     Slider("Shift X", &config::centerOffsetX, -300.0f, 300.0f, "%.0f px");
+    FineSteps("Shift X steps", &config::centerOffsetX, -300, 300, {-10, -1, 1, 10}, "%+.0f");
     Slider("Shift Y", &config::centerOffsetY, -300.0f, 300.0f, "%.0f px");
+    FineSteps("Shift Y steps", &config::centerOffsetY, -300, 300, {-10, -1, 1, 10}, "%+.0f");
     Switch("Use camera roll", &config::useCameraRoll);
-    if (ImGui::Button("Reset calibration")) {
-        config::fovIsHorizontal = false;
-        config::fovScale = 1.0f;
-        config::centerOffsetX = config::centerOffsetY = 0.0f;
-        config::useCameraRoll = true;
-    }
+    static double calArmedAt = -1;
+    if (ConfirmButton("Reset calibration", "Yes, reset calibration", &calArmedAt)) { ResetCalibration(); Toast("Calibration reset"); }
     //only while some of this part is scrolled into view on the page
     const float left = ImGui::GetWindowPos().x;
     if (ImGui::IsRectVisible(ImVec2(left, top), ImVec2(left + ImGui::GetWindowWidth(), ImGui::GetCursorScreenPos().y))) DrawCalibrationGuide();
@@ -438,7 +464,10 @@ inline void PageSettings() {
     HighVisibilityButton();
     Slider("Overlay opacity", &config::overlayOpacity, 0.2f, 1.0f, "%.2f");
     Slider("Menu opacity", &config::menuOpacity, 0.5f, 1.0f, "%.2f");
-    Slider("Text size", &config::labelSize, 10.0f, 28.0f, "%.0f px");
+    Slider("Text size", &config::labelSize, 10.0f, 40.0f, "%.0f px");
+    Slider("Menu text size", &config::menuTextSize, 15.0f, 30.0f, "%.0f px");
+    Note("Text size is for everything on the game picture. Menu text size is for this menu, the player list and the "
+         "inventory windows; it changes when you let go of the slider.");
     Section("SPOKEN CUES");
     if (Switch("Say hotkey results and near enemies out loud", &config::soundCues) && config::soundCues) cue::say("Spoken cues on");
     if (config::soundCues) {
@@ -482,9 +511,10 @@ inline void DrawMenu() {
     if (!g_MenuOpen) return;
     g_MenuTab = std::min(MENU_TAB_COUNT - 1, std::max(0, g_MenuTab));
 
-    ui::PushTheme(std::min(1.0f, std::max(0.5f, config::menuOpacity)));
+    ui::PushTheme(std::min(1.0f, std::max(0.5f, config::menuOpacity)), MenuTextSize());
     ImGui::SetNextWindowPos(ImVec2(120, 110), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(820, 640), ImGuiCond_Always);
+    //820 x 640 at 15 px text, growing with the menu text size, but never bigger than the screen (the page scrolls)
+    ImGui::SetNextWindowSize(ImVec2(std::min(ui::S(MENU_W), (float)config::SCREEN_W), std::min(ui::S(MENU_H), (float)config::SCREEN_H)), ImGuiCond_Always);
     //NoBringToFrontOnFocus: a click on the menu must not hide the inventory windows behind it
     ImGui::Begin("kwin-helper", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoScrollbar |
                                          ImGuiWindowFlags_NoBringToFrontOnFocus);
@@ -495,7 +525,7 @@ inline void DrawMenu() {
         if (c.x != p.x || c.y != p.y) ImGui::SetWindowPos(c);
     }
 
-    ImGui::PushFont(OverlayFont(), 20.0f);
+    ImGui::PushFont(OverlayFont(), ui::S(20));
     ImGui::TextUnformatted("Overlay");
     ImGui::PopFont();
     const char* closeLabel = "Close menu (Insert)"; //a mouse way out too: Insert and SIGUSR1 need the hotkey thread
@@ -504,14 +534,19 @@ inline void DrawMenu() {
     if (ImGui::Button(closeLabel)) g_MenuToggle = true; //MenuPollToggle closes and saves exactly as Insert does
     ImGui::Separator();
 
-    const float footer = 30.0f;
+    //the hotkey line under the page (30 px at 15 px text); big menu text on a narrow screen wraps it onto two lines
+    const char* keys = "F6 mark teammate    F7 twice: clear marks    F8 stream hide    F10 twice: quit";
+    const float footer = ImGui::CalcTextSize(keys, nullptr, false, ImGui::GetContentRegionAvail().x).y + st.ItemSpacing.y * 2 + 1;
     //NavFlattened: the arrows and Tab move straight between the tabs and the page
-    ImGui::BeginChild("##nav", ImVec2(150, -footer), ImGuiChildFlags_NavFlattened);
+    ImGui::BeginChild("##nav", ImVec2(ui::S(150), -footer), ImGuiChildFlags_NavFlattened);
     for (int i = 0; i < MENU_TAB_COUNT; i++)
-        if (ui::Tab(MENU_TABS[i], g_MenuTab == i, 140)) g_MenuTab = i;
+        if (ui::Tab(MENU_TABS[i], g_MenuTab == i, ui::S(140))) g_MenuTab = i;
     ImGui::EndChild();
 
     ImGui::SameLine();
+    static int shownTab = -1; //another tab opens at its top: the pages share one scroll position
+    if (g_MenuTab != shownTab) ImGui::SetNextWindowScroll(ImVec2(0, 0));
+    shownTab = g_MenuTab;
     ImGui::BeginChild("##page", ImVec2(0, -footer), ImGuiChildFlags_NavFlattened, ImGuiWindowFlags_AlwaysVerticalScrollbar);
     switch (g_MenuTab) {
         case 0: PageEsp(); break;
@@ -523,7 +558,9 @@ inline void DrawMenu() {
     ImGui::EndChild();
 
     ImGui::Separator();
-    ImGui::TextColored(ImColor(ui::GREY), "F6 mark teammate    F7 twice: clear marks    F8 stream hide    F10 twice: quit");
+    ImGui::PushStyleColor(ImGuiCol_Text, ImColor(ui::GREY).Value);
+    ImGui::TextWrapped("%s", keys);
+    ImGui::PopStyleColor();
     ImGui::End();
     ui::PopTheme();
     ui::DrawNavFrame(); //last: the inventory windows and the player list are drawn before the menu

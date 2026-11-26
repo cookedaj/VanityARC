@@ -41,7 +41,7 @@ namespace config {
     inline bool showContainerNames = true;
     inline bool showItemNames = true;
     inline double nameMaxLootDist = 25 /*<-Dist in m. Loot names further away stay hidden so the screen is not cluttered*/;
-    inline float labelSize = 15.0f;        //text size in px
+    inline float labelSize = 15.0f;        //text size in px (10 to 40); Insert menu: Settings tab, LOOK, "Text size"
     inline bool showDebugInfo = false;     //"Status card": stats at the top middle of the screen (fps, update rate, counts), only while the game is found; Insert menu: Settings > Other > Status card
 
     //How things look (Insert menu: spread over the ESP, Players and Settings tabs)
@@ -79,6 +79,7 @@ namespace config {
     inline bool menuKeyboard = false;      //"Keyboard controls the menu": while the menu is open its keys go to the menu, not the game
     inline bool streamHide = false;        //F8: draw nothing, so screen recordings and streams show no overlay (no startup banner)
     inline float menuOpacity = 0.94f;      //the Insert menu's background
+    inline float menuTextSize = 15.0f;     //px, text of the menu, the player list and the inventory windows; Insert menu: Settings tab, LOOK, "Menu text size"
     inline bool soundCues = true;          //say F6/F7/F8/F10 results and near enemies out loud (needs spd-say, utils/cue.h)
     inline double cueRange = 40;           //m, an enemy player first coming this close is said (at most one every 2 s)
 
