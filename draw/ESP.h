@@ -721,8 +721,8 @@ inline std::string DrawCloseEnemyWarning(const std::vector<RenderEntity>& entiti
     const float F = WarnFloor();
     cy = std::min(cy, std::max(F - extraBelow - hy - 2, (float)v.cy + hy + 20));
     //Never over the nearest enemy when DrawESP shows him: below his box, bars and labels, above them when there is no
-    //room below (LOW HEALTH follows the card, and is kept off him too). When he fills the screen top to bottom
-    //the card stays put.
+    //room below (LOW HEALTH follows the card, and is kept off him too, but never by moving the card up to the
+    //crosshair). When he fills the screen top to bottom the card stays put.
     float bx, by, bw, bh;
     if (config::showPlayers && best <= config::maxPlayerDist && PlayerScreenBox(v, *nearest, bx, by, bw, bh)) {
         const float ls = config::labelSize, ls2 = ls * 0.9f, pad = config::labelCards ? 2.0f : 0.0f;
@@ -737,12 +737,18 @@ inline std::string DrawCloseEnemyWarning(const std::vector<RenderEntity>& entiti
         const LabelRect him{bx - half, std::min(by - m, numMid - nh) - nameH - linesH, bx + half,
                             std::max(by + bh + m, numMid + nh) + linesH};
         const float gap = 8;
-        //The card and LOW HEALTH under it (extraBelow), as wide as the wider of the two (DrawSelfHealth's red card)
+        //The card, and LOW HEALTH under it (extraBelow) where DrawSelfHealth draws it: the screen's middle. One box round
+        //both: he stays clear of the pair, and the card does not keep moving in and out of the gap between them
         const float lowHalf = extraBelow > 0 ? LabelSize("LOW HEALTH", config::labelSize * 2.4f).x / 2 + 14 : 0;
-        const float sx = std::max(hx, lowHalf);
-        if (RectsOverlap(him, {cx - sx - 2, cy - hy - 2, cx + sx + 2, cy + hy + 2 + extraBelow})) {
+        const float lx = (float)config::SCREEN_W * 0.5f;
+        const LabelRect pair{std::min(cx - hx, lx - lowHalf) - 2, cy - hy - 2, std::max(cx + hx, lx + lowHalf) + 2, cy + hy + 2 + extraBelow};
+        if (RectsOverlap(him, pair)) {
+            const bool onCard = RectsOverlap(him, {cx - hx - 2, cy - hy - 2, cx + hx + 2, cy + hy + 2});
+            const float up = him.y0 - gap - 2 * hy - 2 - extraBelow; //the card's top when it goes above him
             if (him.y1 + gap + 2 * hy + 2 + extraBelow <= F) cy = him.y1 + gap + hy + 2;
-            else if (him.y0 - gap - 2 * hy - 2 - extraBelow >= 0) cy = him.y0 - gap - extraBelow - hy - 2;
+            //above him: for the card itself as always; for LOW HEALTH alone only while the card's top stays 20 px or
+            //more below the crosshair (as the card's lowest place keeps it above)
+            else if (up >= 0 && (onCard || up >= (float)v.cy + 20)) cy = him.y0 - gap - extraBelow - hy - 2;
         }
     }
     DrawRectFilled(cx - hx, cy - hy, cx + hx, cy + hy, IM_COL32(0, 0, 0, 220), dl);

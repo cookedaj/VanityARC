@@ -519,6 +519,20 @@ int main() {
             bool clear = lb > 0 && warnBox.x1 > warnBox.x0 && !his.empty();
             for (const ImVec2& p : his) clear = clear && !(p.x > warnBox.x0 && p.x < warnBox.x1 && p.y > warnBox.y0 && p.y < warnBox.y1);
             CHECK(clear, "LOW HEALTH under the close-enemy card keeps off the enemy's box and labels");
+            //...but never by moving the card up to the crosshair: 1920x1080, a tall player list, an enemy 11 m ahead and
+            //below, right of LOW HEALTH. The card stays where it was (nothing of his was under it)
+            const int keepW = config::SCREEN_W, keepH = config::SCREEN_H;
+            config::SCREEN_W = 1920; config::SCREEN_H = 1080;
+            ImGui::GetIO().DisplaySize = ImVec2(1920, 1080);
+            g_listRect = {550, 790, 1370, 1066};
+            std::vector<RenderEntity> right = {ent(Object::PLAYER, 900, 400, -390)};
+            right[0].label = "Someone"; right[0].sub = "Ferro  Anvil";
+            draw([&] { DrawCloseEnemyWarning(right, cam, 3, nullptr, LowHealthRoom(20)); });
+            CHECK(g_verts > 0 && g_minY >= (float)View(cam, MakeProjection()).cy + 18,
+                  "LOW HEALTH alone never lifts the close-enemy card onto the crosshair");
+            g_listRect = {};
+            config::SCREEN_W = keepW; config::SCREEN_H = keepH;
+            ImGui::GetIO().DisplaySize = ImVec2((float)keepW, (float)keepH);
             config::labelSize = keepLs; config::labelCards = keepCards; config::boxThickness = keepTh; config::boxStyle = keepStyle;
         }
         //an enemy to your left and a little behind: his edge arrow lands at the readout's height on the left edge
