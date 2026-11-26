@@ -103,12 +103,22 @@ inline void DrawTextImGui(float x, float y, ImU32 color, const char* text) {
 //Width and height a label will take
 inline ImVec2 LabelSize(const char* text, float size) { return OverlayFont()->CalcTextSizeA(size, FLT_MAX, 0.0f, text); }
 
+//A big Text size on a narrow screen: text w px wide at size would not fit in room px (the screen's width less a margin).
+//The size at which it does fit, but never below 15 px (or size itself when that is smaller). Otherwise size.
+inline float FitSize(float size, float w, float room) {
+    return w > room && room > 0 ? std::max(std::min(size, 15.0f), size * room / w) : size;
+}
+
 //Text centred on x. Plain: white with a black outline, readable over any background. Card: on a dark rectangle.
-//dl: where to draw (null: the background list, under the menu)
+//Never wider than the screen (see FitSize). dl: where to draw (null: the background list, under the menu)
 inline void DrawLabelCentered(float x, float y, const char* text, float size = 15.0f, ImU32 color = IM_COL32(255, 255, 255, 255), bool card = false,
                               ImDrawList* dl = nullptr) {
     ImFont* font = OverlayFont();
     ImVec2 ts = font->CalcTextSizeA(size, FLT_MAX, 0.0f, text);
+    if (const float fit = FitSize(size, ts.x, (float)config::SCREEN_W - 16); fit < size) {
+        size = fit;
+        ts = font->CalcTextSizeA(size, FLT_MAX, 0.0f, text);
+    }
     ImVec2 p(x - ts.x / 2.0f, y - ts.y / 2.0f);
     if (!dl) dl = ImGui::GetBackgroundDrawList();
     if (card) {

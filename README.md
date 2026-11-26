@@ -124,7 +124,7 @@ They cover the name decoders, the label tables, the keyboard layout, the Insert 
 Insert opens the menu: black and white, tabs on the left. Switching tabs starts the new page at its top.
 
 - **Menu text size** (Settings > LOOK, 15 px by default, up to 30): makes the menu, the player list and the inventory windows bigger, with their buttons, switches, spacing and scrollbars. It changes when you let go of the slider. The menu never gets bigger than the screen; its page scrolls instead, and rows of buttons wrap onto a second line. On a narrow screen the player list stops growing once its rows fill the screen's width. High visibility raises it to at least 24.
-- **Text size** (Settings > LOOK, 15 px by default, up to 40): everything on the game picture. High visibility raises it to at least 28 and never lowers a bigger size.
+- **Text size** (Settings > LOOK, 15 px by default, up to 40): everything on the game picture. A line of text never gets wider than the screen: on a narrow screen a very long one (the close-enemy card for several enemies, the GAME UPDATED banner) stops growing once it fills the screen's width. High visibility raises it to at least 28 and never lowers a bigger size.
 
 | Tab | What it has |
 | --- | --- |

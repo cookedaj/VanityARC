@@ -882,7 +882,8 @@ inline std::string DrawCloseEnemyWarning(const std::vector<RenderEntity>& entiti
     char buf[96];
     if (count == 1) std::snprintf(buf, sizeof buf, "ENEMY %.0f m %s", best, where);
     else std::snprintf(buf, sizeof buf, "%d ENEMIES - NEAREST %.0f m %s", count, best, where);
-    const float size = config::labelSize * 2.0f, cx = (float)v.cx;
+    const float big = config::labelSize * 2.0f, cx = (float)v.cx;
+    const float size = FitSize(big, LabelSize(buf, big).x, (float)config::SCREEN_W - 28); //the card and its frame fit across the screen
     float cy = (float)v.cy + 140.0f;
     const ImVec2 ts = LabelSize(buf, size);
     const float hx = ts.x / 2 + 10, hy = ts.y / 2 + 6;

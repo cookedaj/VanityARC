@@ -878,6 +878,21 @@ int main() {
             CHECK(health, msg);
             std::snprintf(msg, sizeof msg, "Text size 40 on %.0fx%.0f: the status card and a toast are drawn fully on the screen", scr.x, scr.y);
             CHECK(onScreen(), msg);
+            //the close-enemy card for three enemies behind you, and the longest banner (GAME UPDATED at 1.6 x Text size)
+            const std::vector<RenderEntity> three = {ent(Object::PLAYER, -900, 0, 0), ent(Object::PLAYER, -1100, 300, 0), ent(Object::PLAYER, -1300, -300, 0)};
+            std::string said;
+            draw([&] { said = DrawCloseEnemyWarning(three, cam, 3); });
+            std::printf("      %s: %.0f px wide on %.0f\n", said.c_str(), g_maxX - g_minX, scr.x);
+            std::snprintf(msg, sizeof msg, "Text size 40 on %.0fx%.0f: the close-enemy card for three enemies fits across the screen", scr.x, scr.y);
+            CHECK(said.rfind("3 ENEMIES", 0) == 0 && onScreen(), msg);
+            draw([&] { DrawLabelCentered(scr.x * 0.5f, 12 + 32, "GAME UPDATED: MARKERS MAY BE WRONG", 40 * 1.6f, COLOR::white, true); });
+            std::snprintf(msg, sizeof msg, "Text size 40 on %.0fx%.0f: the GAME UPDATED banner fits across the screen", scr.x, scr.y);
+            CHECK(onScreen(), msg);
+        }
+        {   //a label that fits is drawn at its own size, whatever the screen
+            draw([&] { DrawLabelCentered(640, 360, "ENEMY 9 m BEHIND", 80, COLOR::white, true); });
+            const float w = g_maxX - g_minX;
+            CHECK(std::abs(w - (LabelSize("ENEMY 9 m BEHIND", 80).x + 8)) < 1.0f, "a big label that fits across the screen keeps its full size");
         }
         config::SCREEN_W = keepW; config::SCREEN_H = keepH;
         ImGui::GetIO().DisplaySize = ImVec2((float)keepW, (float)keepH);
