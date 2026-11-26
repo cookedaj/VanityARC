@@ -396,6 +396,11 @@ int main() {
         char msg[160];
         std::snprintf(msg, sizeof msg, "no conflicting IDs when hovering the menu (%s, menu text %.0f px, %d page steps to its end)", what, config::menuTextSize, steps);
         CHECK(page && hits == 0, msg);
+        //nothing on the page reaches past its right side (a half-hidden button still counts as reached above): narrower
+        //controls (ui::ControlW) and button rows that wrap (ui::SameLineIfFits) keep slider values and step buttons in view
+        const float shownW = page ? page->InnerRect.GetWidth() : 0, usedW = page ? page->ContentSize.x + page->WindowPadding.x : 0;
+        std::snprintf(msg, sizeof msg, "%s page at menu text %.0f px: everything on it fits its width (%.0f of %.0f px)", what, config::menuTextSize, usedW, shownW);
+        CHECK(page && usedW <= shownW + 1, msg);
     };
     auto sw = [&](const char* label) { return ImGui::GetIDWithSeed("##sw", nullptr, ImGui::GetIDWithSeed(label, nullptr, pageId)); };
     auto choice = [&](const char* label) { return ImGui::GetIDWithSeed("##c", nullptr, ImGui::GetIDWithSeed(label, nullptr, pageId)); };
@@ -596,10 +601,13 @@ int main() {
         auto inside = [](const ImRect& r, int sw, int sh) { return r.GetWidth() > 0 && r.Min.x >= 0 && r.Min.y >= 0 && r.Max.x <= sw && r.Max.y <= sh; };
         const ImRect small = windowAt("##playerlist", 15, 1920, 1080), big = windowAt("##playerlist", 30, 1920, 1080),
                      narrow = windowAt("##playerlist", 30, 1280, 720);
-        std::printf("player list width: %.0f at 15 px, %.0f at 30 px (1920 wide), %.0f at 30 px (1280 wide)\n", small.GetWidth(), big.GetWidth(), narrow.GetWidth());
+        //ImGui keeps an auto-sized window on the screen by itself: only the rows' own width shows whether they are cut off
+        const ImGuiWindow* nw = ImGui::FindWindowByName("##playerlist"); //as narrow left it
+        const float rowsW = nw ? nw->ContentSize.x + 2 * nw->WindowPadding.x : 1e9f;
+        std::printf("player list width: %.0f at 15 px, %.0f at 30 px (1920 wide), %.0f at 30 px (1280 wide, rows %.0f)\n", small.GetWidth(), big.GetWidth(), narrow.GetWidth(), rowsW);
         CHECK(big.GetWidth() > 1.8f * small.GetWidth() && inside(big, 1920, 1080), "menu text 30 px: the player list is twice as wide on a 1920x1080 screen, and on it");
-        CHECK(narrow.GetWidth() > 1.4f * small.GetWidth() && inside(narrow, 1280, 720),
-              "menu text 30 px on 1280x720: the player list grows only as far as the screen's width");
+        CHECK(narrow.GetWidth() > 1.4f * small.GetWidth() && inside(narrow, 1280, 720) && rowsW <= narrow.GetWidth() + 1,
+              "menu text 30 px on 1280x720: the player list grows only as far as the screen's width, and its rows fit in it");
         g_inspect = {"1122334455667788"}; //a window not opened before: it gets the size for 30 px text
         const ImRect inv = windowAt("###inv1122334455667788", 30, 1280, 720); //its ID comes from the part after ###
         CHECK(inv.GetWidth() > 1.8f * 360 && inside(inv, 1280, 720), "menu text 30 px on 1280x720: a new inventory window is twice as wide and fits on the screen");
