@@ -38,6 +38,15 @@ int main() {
     CHECK(itemvalues::valueOf("Light Ammo") == -1, "old entries are gone after parse");
     CHECK(itemvalues::parse("Light Ammo | 1,23\n| 5\nName |\n") == 3, "a wrong thousands group, no name, no number: each line counted");
 
+    //names in another script (your own names from labels.txt) stay apart; a name of signs only is ignored, not a price
+    //for every such name. A no-break space or a curly quote counts as little as a space or a straight quote.
+    CHECK(itemvalues::parse("Бинт | 500\nАптечка | 20000\n*** | 9000\n") == 1, "a name of signs only is ignored");
+    CHECK(itemvalues::valueOf("Бинт") == 500 && itemvalues::valueOf("Аптечка") == 20000 && itemvalues::valueOf("Ферро") == -1 &&
+          itemvalues::valueOf("\xE2\x98\x85") == -1 && itemvalues::valueOf("") == -1,
+          "Cyrillic names: each its own price; an unlisted one, a star and an empty name have none");
+    CHECK(itemvalues::parse("Snap\xC2\xA0Hook | 14000\nLance\xE2\x80\x99s Mixtape | 10000\n") == 0 && itemvalues::valueOf("Snap Hook") == 14000 &&
+          itemvalues::valueOf("Lance's Mixtape") == 10000, "a no-break space and a curly quote match a plain space and quote");
+
     //prices written with thousands separators or with k and m
     CHECK(itemvalues::parse("A | 14,000\nB | 14 000\nC | 14k\nD | 1.5k\nE | 2m\nF | 2M\nG | 1,234,567\nH | +500\nI | 1.25 K\nJ | 007\n") == 0,
           "14,000  14 000  14k  1.5k  2m  2M  1,234,567  +500  1.25 K  007: all read");

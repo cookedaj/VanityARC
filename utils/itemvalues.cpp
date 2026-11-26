@@ -37,10 +37,19 @@ std::string configDir() {
     return std::string(home ? home : ".") + "/.config/kwin-helper";
 }
 
-//Lookup key: letters and digits only, lower case, so "Lance's Mixtape (5th edition)" and "(5th Edition)" match
+//Lookup key: letters and digits only, lower case, so "Lance's Mixtape (5th edition)" and "(5th Edition)" match. A name
+//in another script (UTF-8: bytes from 0x80) keeps its letters, so "Бинт" and "Аптечка" are two names, not both "".
+//Like ASCII spaces and punctuation, a no-break space and the signs U+0080-U+00BF (bytes C2 xx) and the typographic
+//spaces, dashes and quotes U+2000-U+207F (E2 80 xx, E2 81 xx) are left out. ponytail: case is ignored for A-Z only.
 std::string norm(const std::string& s) {
     std::string out;
-    for (unsigned char c : s) if (std::isalnum(c)) out.push_back((char)std::tolower(c));
+    for (size_t i = 0; i < s.size(); i++) {
+        const unsigned char c = (unsigned char)s[i], next = i + 1 < s.size() ? (unsigned char)s[i + 1] : 0;
+        if (c == 0xC2) i += 1;
+        else if (c == 0xE2 && (next == 0x80 || next == 0x81)) i += 2;
+        else if (c >= 0x80) out.push_back((char)c);
+        else if (std::isalnum(c)) out.push_back((char)std::tolower(c));
+    }
     return out;
 }
 
@@ -122,7 +131,7 @@ int parse(const std::string& text) {
         std::string name = bar == std::string::npos ? "" : trim(line.substr(0, bar));
         std::string num = bar == std::string::npos ? "" : trim(line.substr(bar + 1));
         const long long v = num.empty() ? -1 : priceOf(num);
-        if (name.empty() || v < 0 || v > MAX_PRICE) {
+        if (norm(name).empty() || v < 0 || v > MAX_PRICE) { //a name of signs only would match every other one
             if (++ignored <= 5) //a few are enough to find them; the toast gives the total
                 std::printf("[!] values.txt line %d ignored: \"%s\" (expected: name | price, e.g. \"Snap Hook | 14000\", \"14,000\" or \"14k\")\n",
                             lineNo, line.c_str());
