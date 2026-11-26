@@ -71,6 +71,14 @@ int main() {
     bool zeroed = true;
     for (int i = 0; i < 50; i++) zeroed &= !zr[i].ok && z[i] == 0;
     CHECK(zn == 0 && zeroed, "no such process: all fail and are zeroed");
+    //more than one system call's worth, each marked done beforehand: every one is marked failed, not only the first 1024
+    std::vector<uint64_t> z2(1500, 0xBBBBBBBBBBBBBBBBULL);
+    std::vector<ReadReq> zr2(1500);
+    for (int i = 0; i < 1500; i++) zr2[i] = {(uintptr_t)m, &z2[i], 8, true};
+    ReadScatter(999999, zr2.data(), zr2.size());
+    bool allFailed = true;
+    for (int i = 0; i < 1500; i++) allFailed &= !zr2[i].ok && z2[i] == 0;
+    CHECK(allFailed, "no such process, 1500 reads: every one is marked failed and zeroed");
 
     CHECK(ReadScatter(nullptr, 0) == 0, "an empty list is fine");
 

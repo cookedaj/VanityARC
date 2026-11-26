@@ -20,8 +20,10 @@
 #include "gamestate/GameState.h"
 #include "gamestate/Tracker.h"
 #include "utils/labels.h"
+#include "utils/log.h"
 #include "utils/names.h"
 #include "utils/offsets.h"
+#include <sstream>
 
 static int fails = 0;
 #define CHECK(cond, msg) do { bool ok_ = (cond); std::printf("%s  %s\n", ok_ ? "PASS" : "FAIL", msg); if (!ok_) fails++; } while (0)
@@ -138,6 +140,17 @@ static double nowMs() {
 }
 
 int main() {
+    {   //console messages: each printed at most once every 5 s, and a stream of different ones is not all remembered
+        std::ostringstream sink;
+        std::streambuf* const out = std::cout.rdbuf(sink.rdbuf());
+        logThrottled("[-] test message"); logThrottled("[-] test message");
+        const bool once = sink.str() == "[-] test message\n";
+        for (int i = 0; i < 1000; i++) logThrottled(("[-] bone list has " + std::to_string(i) + " bones").c_str());
+        std::cout.rdbuf(out);
+        CHECK(once, "a console message repeated at once is printed once");
+        CHECK(logTimes().size() <= LOG_KEEP, "1000 different console messages: at most LOG_KEEP are remembered");
+        logTimes().clear();
+    }
     live::shieldValue = -1; //the world checks run without a shield; the shield block below sets its own
     ProcessId = getpid();
     const size_t size = 0x30000000;
@@ -284,6 +297,7 @@ int main() {
         put<double>(bones1 + 0x60 * 1 + 0x20 + 16, 85.0); //an animated, standing player: the pelvis is high, so this is a standing pose to learn
         fast.step();
         fast.step();
+        bump = (bump + 0xFFF) & ~0xFFFULL; //his mesh starts a page: the visibility part makes its draw time unreadable
         giveMesh(mate, cx + 2500, cy + 2500, cz - 182);   //a frozen player of the same stance: his own list never changes
         gsRet rfirst = fast.step();                       //its list is seen for the first time
         const RenderEntity* m0 = findPlayer(rfirst, mate);
@@ -420,6 +434,22 @@ int main() {
         gsRet rv3 = fast.step();
         const RenderEntity* a3 = findPlayer(rv3, enemy1);
         CHECK(a3 && a3->isVisible, "one player's garbage draw time does not dim the others");
+        //A draw time that cannot be read (the failed read gives 0) is no new draw: a hidden player stays hidden
+        std::this_thread::sleep_for(std::chrono::milliseconds(300)); //the mate is not drawn again
+        fast.step();
+        gsRet rh = fast.step();
+        const RenderEntity* h1 = findPlayer(rh, mate);
+        CHECK(h1 && !h1->isVisible, "(setup) the mate has not been drawn for a while");
+        const u64 page = (m2 + off::RENDER_TIME) & ~0xFFFULL; //his mesh's own page (see the skeleton part)
+        mprotect((void*)page, 0x1000, PROT_NONE);
+        fast.step();
+        gsRet rh2 = fast.step();
+        mprotect((void*)page, 0x1000, PROT_READ | PROT_WRITE);
+        gsRet rh3 = fast.step(); //readable again, the same old time
+        const RenderEntity* h2 = findPlayer(rh2, mate);
+        const RenderEntity* h3 = findPlayer(rh3, mate);
+        CHECK(h2 && !h2->isVisible && h3 && !h3->isVisible,
+              "a draw time that cannot be read does not make a hidden player visible (nor does reading it again)");
     }
 
     //--- the pawn with a PlayerController is you, wherever the camera is
@@ -660,7 +690,8 @@ int main() {
             for (const auto& e : r.entities) if (e.actor == actor) return &e;
             return nullptr;
         };
-        for (u64 p : people) put<u64>(p + 0x1000, alloc(0x700)); //a shield component of its own, at pawn+0x1000
+        bump = (bump + 0xFFF) & ~0xFFFULL; //enemy1's gets a page of its own: below, its read fails
+        for (u64 p : people) put<u64>(p + 0x1000, alloc(0x1000)); //a shield component of its own, at pawn+0x1000
         auto comp = [](u64 p) { return get<u64>(p + (live::shieldComponent >= 0 ? (u64)live::shieldComponent : (u64)off::HEALTH_COMPONENT)); };
         auto putNum = [](u64 a, double v) { put<u64>(a, 0); if (live::shieldIsFloat) put<float>(a, (float)v); else put<double>(a, v); };
         for (int c = 0; c < 4; c++) { //each case writes other numbers: reading the wrong component finds the last case's
@@ -679,6 +710,15 @@ int main() {
             std::snprintf(msg, sizeof msg, "shield in %s, as %s: tick() and step() show the numbers written",
                           (c & 1) ? "a component of its own" : "the HealthComponent", (c >> 1) ? "floats" : "doubles");
             CHECK(ok, msg);
+        }
+        {   //a shield read that fails (it gives 0) keeps his last shield and full bar instead of flickering them off
+            const u64 c1 = comp(enemy1); //its own page (see above); the last case: floats in a component of its own
+            fast.step();
+            mprotect((void*)c1, 0x1000, PROT_NONE);
+            const gsRet sf = fast.step();
+            mprotect((void*)c1, 0x1000, PROT_READ | PROT_WRITE);
+            const RenderEntity* f1 = findIn(sf, enemy1);
+            CHECK(f1 && f1->hasShield && f1->shield == 23.5 && f1->shieldMax == 103.0, "a shield read that fails keeps the last shield and full bar");
         }
         //No maximum in the game: step() keeps the highest shield seen as the full bar (tick() has no such fallback: not compared)
         live::shieldComponent = -1; live::shieldIsFloat = 0; live::shieldMax = -1;

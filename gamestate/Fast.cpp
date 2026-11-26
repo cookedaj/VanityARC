@@ -335,7 +335,8 @@ void GameState::updateDynamic(FminimalViewInfo& vm) {
         ptr vt = 0, root = 0, hc = 0, sc = 0; int team = 0; uint8_t destroyed = 0; RootXf xf{}; double hp = 0; uint64_t shRaw = 0, shMaxRaw = 0;
         bool wantPose = false; ptr ctrl = 0, mesh = 0, boneData = 0; uint64_t rtRaw = 0; int boneNum = 0; MeshXf mx{}; std::vector<uint8_t> bones;
         const std::vector<uint8_t>* view = nullptr; bool freshBones = false; //the bone list to use: this step's read, or the cached one
-        double hpMax = 0; int teamAt = -1, hpAt = -1, maxAt = -1, shAt = -1, deadAt = -1; bool teamOk = false, hpOk = false, shOk = false, deadOk = false; //which reads worked (a failed one reads as 0)
+        double hpMax = 0; int teamAt = -1, hpAt = -1, maxAt = -1, shAt = -1, deadAt = -1, rtAt = -1; //which reads worked (a failed one reads as 0)
+        bool teamOk = false, hpOk = false, shOk = false, deadOk = false, rtOk = false;
         bool skip = false; //a far ARC not due this step: it keeps what it had
     };
     const bool shieldOn = live::shieldValue >= 0;
@@ -394,7 +395,7 @@ void GameState::updateDynamic(FminimalViewInfo& vm) {
         Row& r = rows[i];
         if (r.skip || r.vt != dyn_[i].ent.vt || !isValidPtr(r.root)) continue;
         queue(rq, r.root + off::POS_PTR - 0x20, &r.xf); //the rotation sits right before the position (config.h)
-        if (dyn_[i].ent.type == Object::PLAYER && isValidPtr(r.mesh)) queue(rq, r.mesh + off::RENDER_TIME, &r.rtRaw);
+        if (dyn_[i].ent.type == Object::PLAYER && isValidPtr(r.mesh)) { r.rtAt = (int)rq.size(); queue(rq, r.mesh + off::RENDER_TIME, &r.rtRaw); }
         if (r.wantPose && isValidPtr(r.mesh)) {
             queue(rq, r.mesh + off::MESH_TRANSFORM, &r.mx);
             queue(rq, r.mesh + off::BONE_ARRAY, &r.boneData);
@@ -416,7 +417,9 @@ void GameState::updateDynamic(FminimalViewInfo& vm) {
     for (Row& r : rows) { //before rq is reused. A failed read is 0 (dead): only a believable pair counts, as in printStatusLine
         r.hpOk = r.hpAt >= 0 && rq[(size_t)r.hpAt].ok && rq[(size_t)r.maxAt].ok &&
                  r.hpMax >= 50 && r.hpMax <= 500 && r.hp >= 0 && r.hp <= r.hpMax + 1;
-        r.shOk = r.shAt >= 0 && rq[(size_t)r.shAt].ok;
+        //the shield and its maximum (read right after it) both read: a failed one would be 0 (an empty or broken bar)
+        r.shOk = r.shAt >= 0 && rq[(size_t)r.shAt].ok && (live::shieldMax < 0 || rq[(size_t)r.shAt + 1].ok);
+        r.rtOk = r.rtAt >= 0 && rq[(size_t)r.rtAt].ok; //a failed one would be 0: a changed draw time, visible for a moment
     }
 
     //Third round: the bone list itself, only for players whose mesh and a list of exactly 97 bones were readable, and
@@ -466,11 +469,14 @@ void GameState::updateDynamic(FminimalViewInfo& vm) {
             t.ent.isDead = t.ent.playerHealth < 1;
             t.ent.isLocal = isValidPtr(r.ctrl);
             t.ent.isVisible = true; //no mesh read: unknown, treated as visible
-            if (isValidPtr(r.mesh)) {
+            if (isValidPtr(r.mesh) && r.rtOk) {
                 const float drawn = renderTime(r);
                 DrawnState& ds = drawnSeen_.try_emplace(t.ent.actor, DrawnState{drawn, clockNow}).first->second; //first read: unknown, visible for now
                 if (drawn != ds.rt) { ds.rt = drawn; ds.changed = clockNow; }
                 t.ent.isVisible = clockNow - ds.changed < std::chrono::milliseconds(250);
+            } else if (isValidPtr(r.mesh)) { //the read failed: judged by his last good draw time, never by the 0 it gives
+                const auto ds = drawnSeen_.find(t.ent.actor);
+                if (ds != drawnSeen_.end()) t.ent.isVisible = clockNow - ds->second.changed < std::chrono::milliseconds(250);
             }
             if (r.teamOk) t.ent.teamID = r.team & 0xFF; //the byte at TeamId only; the bytes after it belong to other fields. Failed: the last good one (-1 if none)
             t.ent.pose.reset();
@@ -496,16 +502,19 @@ void GameState::updateDynamic(FminimalViewInfo& vm) {
             const ptr comp = live::shieldComponent >= 0 ? r.sc : r.hc;
             const double lastShield = t.ent.shield; //his shield at the last step (0 right after a scan)
             t.ent.hasShield = shieldOn && isValidPtr(comp);
-            t.ent.shield = t.ent.hasShield ? shieldNumber(r.shRaw) : 0.0;
-            if (t.ent.hasShield) {
+            if (t.ent.hasShield && !r.shOk) {
+                //the read failed: his last shield and full bar stay (the 0 it gives would flicker the bar off or full)
+            } else if (t.ent.hasShield) {
+                t.ent.shield = shieldNumber(r.shRaw);
                 double& seen = shieldSeen_[t.ent.actor]; //the longest the bar has been
                 seen = std::max(seen, t.ent.shield);
                 //The same number on two steps in a row is a real reading, not one bad read: it may raise the session's cap,
                 //so a player first seen with a damaged shield is not drawn as full
                 if (t.ent.shield == lastShield && t.ent.shield < 1000.0) shieldCap_ = std::max(shieldCap_, t.ent.shield);
                 t.ent.shieldMax = live::shieldMax >= 0 ? std::max(shieldNumber(r.shMaxRaw), t.ent.shield) : std::max(seen, shieldCap_);
-                if (r.shOk) t.shieldRead = t.ent.shield;
+                t.shieldRead = t.ent.shield;
             } else {
+                t.ent.shield = 0;
                 t.shieldRead = -1;
             }
         } else {

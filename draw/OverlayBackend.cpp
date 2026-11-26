@@ -104,6 +104,10 @@ bool initGlfw() {
         return false;
     }
     const GLFWvidmode* mode = glfwGetVideoMode(monitor);
+    if (!mode) {
+        std::cerr << "[-] Failed to read the monitor's size." << std::endl;
+        return false;
+    }
     //The mode is in pixels; a Wayland window is sized in the compositor's scaled units
     float xs = 1.0f, ys = 1.0f;
     glfwGetMonitorContentScale(monitor, &xs, &ys);

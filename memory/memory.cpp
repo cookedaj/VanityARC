@@ -78,8 +78,8 @@ size_t ReadScatter(pid_t pid, ReadReq* r, size_t n)
         }
         ssize_t got = process_vm_readv(pid, loc.data(), cnt, rem.data(), cnt, 0);
         if (got < 0) {
-            if (errno != EFAULT) { //no such process / no permission: nothing in this batch can be read
-                for (size_t k = i; k < n; k++) std::memset(r[k].dst, 0, r[k].len);
+            if (errno != EFAULT) { //no such process / no permission: nothing in this batch or the ones after it can be read
+                for (size_t k = i; k < n; k++) { std::memset(r[k].dst, 0, r[k].len); r[k].ok = false; }
                 return ok;
             }
             got = 0;
