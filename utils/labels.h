@@ -28,6 +28,20 @@ std::string itemToken(const std::string& raw);
 //or an augment, so their "_T1" or "_02" is never read as a gun level.
 bool isGun(const std::string& key);
 
+//What a ground item is, judged from its key (DA_Item_ name or itemToken) alone: your names in labels.txt never change
+//it. The order is the Loot tab's.
+enum class Kind { Gun, Ammo, Meds, Shield, Grenade, Gadget, Mod, Augment, Blueprint, Key, Material, Valuable, Other };
+constexpr int KIND_COUNT = 13;
+Kind kindOf(const std::string& key);
+const char* kindName(Kind k); //"Guns", "Ammo", "Meds" ... as the Loot tab shows them
+
+//Which group a container is in, judged from its class name ("BP_SocketContainer_Sct_LockerMedical_01_A_C" is Medical,
+//though it shows as "Locker"). The order is the Loot tab's.
+enum class Group { Medical, Weapons, Tech, Industrial, Home, Lockers, Trash, Arc, Nature, Caches, Other };
+constexpr int GROUP_COUNT = 11;
+Group containerKind(const std::string& cls);
+const char* groupName(Group g); //"Medical", "Weapons and ammo" ... as the Loot tab shows them
+
 int load();                       //read labels.txt (call once at start); returns how many lines were ignored
 void setDir(const std::string& dir); //tests only; default is ~/.config/kwin-helper
 

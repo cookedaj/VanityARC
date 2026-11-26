@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <initializer_list>
 #include <mutex>
 #include <utility>
 #include <unordered_map>
@@ -507,6 +508,72 @@ static const Rule* gunRule(const std::string& t) {
 bool isGun(const std::string& key) {
     const Rule* g = gunRule(norm(itemToken(key)));
     return g && defaultName(Cat::Item, key) == g->name; //not a blueprint or another item that only contains a gun key
+}
+
+static bool hasAny(const std::string& t, std::initializer_list<const char*> parts) {
+    return std::any_of(parts.begin(), parts.end(), [&](const char* p) { return t.find(p) != std::string::npos; });
+}
+static bool startsAny(const std::string& t, std::initializer_list<const char*> parts) {
+    return std::any_of(parts.begin(), parts.end(), [&](const char* p) { return startsWith(t, p); });
+}
+
+//Ordered rules on the letters-and-digits key, from the groups of KEY_NAMES above. A new item whose key fits no rule is
+//Other (so is a new gun family). ponytail: name rules; the DA_Item asset's own type field would be exact once probed.
+Kind kindOf(const std::string& key) {
+    const std::string t = norm(itemToken(key));
+    if (startsWith(t, "recipe")) return Kind::Blueprint; //first: a blueprint names its gun
+    if (hasAny(t, {"ammo"})) return Kind::Ammo;
+    if (isGun(key) || startsAny(t, {"assaultrifle", "battlerifle", "smg", "pistol", "shotgun", "sniperrifle", "lmg", "launcher", "handcannon"}))
+        return Kind::Gun;
+    if (startsWith(t, "weaponmod")) return Kind::Mod;
+    if (startsWith(t, "augment")) return Kind::Augment;
+    if (startsWith(t, "armor") && hasAny(t, {"body"})) return Kind::Shield; //ArmorPack is a recharger: Meds
+    if (startsAny(t, {"healing", "health", "adrenalin", "armorpack", "consumableshield", "integratedshield"}) || hasAny(t, {"bandage", "defib"}))
+        return Kind::Meds;
+    if (hasAny(t, {"grenade", "jumpmine", "timedmine", "lasertrap"}) || startsAny(t, {"throwable", "firecracker"}))
+        return Kind::Grenade; //before Gadget: Deployable_JumpMine is a mine
+    if (startsAny(t, {"deployable", "gadget", "metaldetector", "remotetrap", "emittertrap", "spraycan", "arcfriendifier", "commonbinoculars"}) ||
+        t == "tethergun" || t == "crashpad")
+        return Kind::Gadget;
+    if (startsWith(t, "keyitem")) return Kind::Key;
+    if (startsWith(t, "salvage")) {
+        //the Collector Key and its couplers are crafting parts, not keys
+        if (hasAny(t, {"quest", "securitycode", "accesscard"}) || (hasAny(t, {"key"}) && !hasAny(t, {"collectorkey"}))) return Kind::Key;
+        if (hasAny(t, {"trinket", "rubberduck", "boatmodel", "matjunk", "footballshoes", "deadflower", "bronzemask", "majolica",
+                       "corruptedarc", "poster", "pillow"}))
+            return Kind::Valuable;
+        return Kind::Material;
+    }
+    return Kind::Other;
+}
+
+const char* kindName(Kind k) {
+    static const char* const n[KIND_COUNT] = {"Guns", "Ammo", "Meds", "Shields", "Grenades and mines", "Gadgets", "Gun mods",
+                                              "Augments", "Blueprints", "Keys and quest items", "Materials", "Valuables", "Other"};
+    return n[(int)k >= 0 && (int)k < KIND_COUNT ? (int)k : KIND_COUNT - 1];
+}
+
+//The first group with a word in the class name wins, from the words CONTAINER_RULES uses. Medical comes first:
+//Sct_LockerMedical is a medical locker.
+Group containerKind(const std::string& cls) {
+    const std::string n = norm(stripPrefix(cls));
+    if (hasAny(n, {"medical"})) return Group::Medical;
+    if (hasAny(n, {"weaponcase", "ammocase", "ammobox", "grenadetube", "grenadecontainer"})) return Group::Weapons;
+    if (hasAny(n, {"computer", "server", "terminal", "android", "electrical", "controlpanel", "breakerbox", "generator"})) return Group::Tech;
+    if (hasAny(n, {"carhood", "cartool", "industrial", "mechanical", "metalcrate", "toolcabinet", "truck"})) return Group::Industrial;
+    if (hasAny(n, {"residential", "closet", "fridge", "refrigerator", "suitcase", "basket", "multidrawer", "backpack"})) return Group::Home;
+    if (hasAny(n, {"locker", "museumcrate"})) return Group::Lockers;
+    if (hasAny(n, {"dumpster", "trash"})) return Group::Trash;
+    if (hasAny(n, {"arcprobe", "assessor", "husk", "courier", "emperorrelay"})) return Group::Arc;
+    if (hasAny(n, {"snowpile", "candleberries", "volcanicrock"}) || startsWith(cls, "BP_SalvageContainer_")) return Group::Nature;
+    if (hasAny(n, {"raidercache", "firstwavecache", "dropoffstation"})) return Group::Caches;
+    return Group::Other;
+}
+
+const char* groupName(Group g) {
+    static const char* const n[GROUP_COUNT] = {"Medical", "Weapons and ammo", "Tech", "Industrial", "Home", "Lockers and crates",
+                                               "Trash", "ARC", "Nature", "Caches", "Other"};
+    return n[(int)g >= 0 && (int)g < GROUP_COUNT ? (int)g : GROUP_COUNT - 1];
 }
 
 std::string defaultName(Cat c, const std::string& key) {

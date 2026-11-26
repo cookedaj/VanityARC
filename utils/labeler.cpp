@@ -47,6 +47,7 @@ struct Info {
     std::string account;
     uintptr_t ps = 0;   //the PlayerState the account came from
     bool turret = false;
+    int kind = -1;      //ground items: labels::Kind, containers: labels::Group; worked out once per asset or class (-1: not yet)
 };
 
 std::unordered_map<uintptr_t, Info> g_cache;
@@ -80,6 +81,7 @@ void refreshClass(Info& in, uintptr_t actor, double t) {
         in.sub.clear();
         in.assetPtr = 0;
         in.retry = 0;
+        in.kind = -1;
         in.labelT = in.gunsT = in.assetT = -1e9;
     }
     in.nameIndex = d.index;
@@ -197,6 +199,7 @@ void fillContainer(Info& in) {
     if (in.label.empty()) {
         in.key = in.cls;
         in.label = labels::display(labels::Cat::Container, in.key);
+        in.kind = (int)labels::containerKind(in.cls);
     }
 }
 
@@ -243,6 +246,7 @@ void fillPickup(Info& in, uintptr_t actor, double t) {
                 in.assetPtr = a;
                 in.assetOff = off;
                 in.key = labels::itemToken(n);
+                in.kind = (int)labels::kindOf(in.key);
                 in.resolved = true;
                 in.retry = 0;
                 in.label.clear();
@@ -293,6 +297,7 @@ void fill(RenderEntity& e) {
     e.sub = in.sub;
     e.account = in.account;
     e.isTurret = in.turret;
+    e.itemKind = in.kind;
 }
 
 std::vector<ItemRow> inventoryOf(uintptr_t pawn) {

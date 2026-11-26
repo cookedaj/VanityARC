@@ -181,6 +181,55 @@ int main() {
     CHECK(D(Cat::Item, "DA_Item_Salvage_Trinket_BurntoutCandles") == "Burnt-out Candles", "item name after Salvage_Trinket_, game spelling");
     CHECK(D(Cat::Item, "DA_Item_IntegratedDefibrillator") == "Integrated Defibrillator", "item Integrated Defibrillator");
 
+    //--- what kind a ground item is (the Loot tab's switches), from its key alone
+    {
+        using K = labels::Kind;
+        auto kind = [](const char* k) { return labels::kindOf(k); };
+        CHECK(kind("BattleRifle_BreachAction_01") == K::Gun && kind("DA_Item_Shotgun_PumpAction_01_Ascended") == K::Gun &&
+              kind("BasicMeleeWeapon") == K::Gun, "kind: Ferro, an amplified Il Toro and the Pickaxe are guns");
+        CHECK(kind("AssaultRifle_TestOnly_09") == K::Gun, "kind: a gun family not in the gun table is still a gun");
+        CHECK(kind("Recipe_BattlerifleLight01Recipe") == K::Blueprint && kind("Recipe_LauncherAntiARCSingleShot01Recipe") == K::Blueprint,
+              "kind: a gun's blueprint is a blueprint, not a gun");
+        CHECK(kind("EnergyAmmo") == K::Ammo && kind("LightAmmo") == K::Ammo, "kind: ammo");
+        CHECK(kind("WeaponMod_Muzzle_Silencer_02") == K::Mod && kind("WeaponMod_Tech_ProjectileSplitter") == K::Mod, "kind: gun mods");
+        CHECK(kind("Augment_Combat_T1") == K::Augment, "kind: augment");
+        CHECK(kind("ArmorHeavyBody") == K::Shield && kind("ArmorPack") == K::Meds, "kind: a body shield is a shield, the shield recharger is meds");
+        CHECK(kind("HealingHoT_Small") == K::Meds && kind("Bandage_01") == K::Meds && kind("AdrenalinShot") == K::Meds &&
+              kind("IntegratedShieldRepair") == K::Meds, "kind: bandages, adrenaline and shield repair are meds");
+        CHECK(kind("HEGrenade") == K::Grenade && kind("Throwable_TetherGrenade") == K::Grenade && kind("LaserTrap_DotGrenade") == K::Grenade,
+              "kind: grenades and traps");
+        CHECK(kind("Deployable_JumpMine_Explosive") == K::Grenade && kind("TimedMine_Explosive") == K::Grenade,
+              "kind: mines are grenades and mines, not gadgets");
+        CHECK(kind("TetherGun") == K::Gadget && kind("MetalDetector_02") == K::Gadget && kind("CrashPad") == K::Gadget &&
+              kind("Deployable_Barricade") == K::Gadget, "kind: gadgets");
+        CHECK(kind("Salvage_FrozenTrailObservatoryKey_01") == K::Key && kind("Salvage_Quest_CollectorCircuitry") == K::Key &&
+              kind("KeyItem_RaiderHatchKey") == K::Key && kind("Salvage_SecurityCode") == K::Key, "kind: keys and quest items");
+        CHECK(kind("Salvage_CollectorKey_01") == K::Material && kind("Salvage_CollectorKeyComponent_02") == K::Material,
+              "kind: the Collector Key and its parts are materials, not keys");
+        CHECK(kind("Salvage_Chonk_Part") == K::Material && kind("Salvage_Mat_ARCMetal") == K::Material, "kind: materials");
+        CHECK(kind("Salvage_Trinket_RubberDuck_Standard") == K::Valuable && kind("Salvage_RubberDuck_Winner01") == K::Valuable &&
+              kind("Salvage_Mat_Junk3") == K::Valuable, "kind: trinkets are valuables");
+        CHECK(kind("ESRAnalyzer_01") == K::Other && kind("") == K::Other, "kind: anything else is Other");
+        CHECK(kind("DA_Item_BattleRifle_BreachAction_01") == K::Gun, "kind: the full asset name works too");
+        CHECK(std::string(labels::kindName(K::Meds)) == "Meds" && std::string(labels::kindName(K::Grenade)) == "Grenades and mines" &&
+              std::string(labels::kindName((K)-1)) == "Other", "kind names as the Loot tab shows them");
+
+        using G = labels::Group;
+        auto group = [](const char* c) { return labels::containerKind(c); };
+        CHECK(group("BP_SocketContainer_Sct_LockerMedical_01_A_C") == G::Medical && group("BP_SocketContainer_Sct_Locker_01_A_C") == G::Lockers,
+              "container group: a medical locker is Medical (checked before Locker), a plain locker is a locker");
+        CHECK(group("BP_SocketContainer_Raider_AmmoBox_01_Lid_A_Dynamic_C") == G::Weapons && group("BP_SocketContainer_Gvt_BinTrash_01_A_C") == G::Trash,
+              "container group: ammo box, trash can");
+        CHECK(group("DA_LootContainer_InformationTerminal_01_Lid_01_A") == G::Tech && group("BP_SocketContainer_Res_Refrigerator_01_C") == G::Home &&
+              group("BP_SocketContainer_Raider_FruitBasket_01_Dynamic_C") == G::Home, "container group: tech and home");
+        CHECK(group("BP_SocketContainer_WaspHusk_01_C") == G::Arc && group("BP_SalvageContainer_GreatMullein_C") == G::Nature &&
+              group("BP_SocketContainer_CUL_MuseumCrate_01_A_C") == G::Lockers, "container group: ARC husk, a plant, a museum crate");
+        CHECK(group("BP_SocketContainer_Raider_RaiderCache_01_C") == G::Caches, "container group: a raider cache");
+        CHECK(group("BP_SocketContainer_TestOnly_Statue_C") == G::Other && group("") == G::Other, "container group: anything else is Other");
+        CHECK(std::string(labels::groupName(G::Arc)) == "ARC" && std::string(labels::groupName(G::Weapons)) == "Weapons and ammo",
+              "group names as the Loot tab shows them");
+    }
+
     //the owner's names (November 2026), by the game's real internal names
     const struct { Cat c; const char* key; const char* name; } owner[] = {
         {Cat::Arc, "DA_EnemyType_Rose", "Frigate Cannon"},
@@ -361,11 +410,18 @@ int main() {
     CHECK(e1.type == Object::PICKUP, "ground item is told apart from containers");
     labeler::fill(e1);
     CHECK(e1.label == "Ferro", "ground item named Ferro");
+    CHECK(e1.itemKind == (int)labels::Kind::Gun, "ground item Ferro is a gun (Loot tab)");
 
     u64 bin = makeObject(0x1000, 0x12C0, 7);
     RenderEntity e2 = ent(Object::SEARCH, 10.0, bin);
     labeler::refine(e2); labeler::fill(e2);
     CHECK(e2.type == Object::SEARCH && e2.label == "Trash Can", "container named Trash can");
+    CHECK(e2.itemKind == (int)labels::Group::Trash, "container Trash can is in the Trash group (Loot tab)");
+
+    //a ground item whose asset cannot be read (yet): no name, and its kind is not known (-1, drawn as Other)
+    RenderEntity eBare = ent(Object::SEARCH, 4.0, makeObject(0x1000, 0x1240, 0));
+    labeler::refine(eBare); labeler::fill(eBare);
+    CHECK(eBare.type == Object::PICKUP && eBare.label.empty() && eBare.itemKind == -1, "ground item not read yet: kind -1");
 
     //---- inventory lists named in offsets.txt
     addPoolName(0x2400, "DA_Item_Bandage_01");
@@ -486,6 +542,8 @@ int main() {
     labels::load();
     CHECK(labeler::itemName("SMG_Medium_01_Carbine") == "My Canto", "labels.txt: a TAB line for the full internal key of an amplified gun still works");
     CHECK(labeler::itemName("Shotgun_PumpAction_01_Ascended") == "Bull", "labels.txt: 'AMP Il Toro = ...' works");
+    CHECK(labels::kindOf("SMG_Medium_01_Carbine") == labels::Kind::Gun && labels::kindOf("Shotgun_PumpAction_01_Ascended") == labels::Kind::Gun,
+          "labels.txt: a renamed gun is still a gun (the Loot tab's switches)");
 
     //player with no PlayerState: no name, no crash
     u64 lone = makeObject(0x1400, 0x2000, 2);
@@ -531,6 +589,7 @@ int main() {
     CHECK(e8.label == "Tick", "ARC at a reused address gets its new name");
     RenderEntity e9 = ent(Object::PICKUP, 3.0, ferro); labeler::fill(e9);
     CHECK(e9.label == "Stitcher", "ground item at a reused address gets its new name");
+    CHECK(e9.itemKind == (int)labels::Kind::Gun, "and its kind from the new asset");
 
     std::this_thread::sleep_for(std::chrono::milliseconds(3000));
     CHECK(names::name(late) == "DA_Late_Name", "a name that failed to read is tried again later");
