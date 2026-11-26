@@ -386,38 +386,48 @@ inline float LowHealthX(float y) {
 //(18 px or more above that card) stays free between them
 constexpr float LOW_HEALTH_ABOVE = 40;
 
-//Your own health and shield in big white text on a dark card, at the bottom left just above the game's health bar,
-//and a big red LOW HEALTH card below the crosshair under Low health from. hp < 0: not read, so nothing (never a guessed
-//number). shield < 0: not read or no shield offset, so health only. below / above: the bottom and top of the
-//close-enemy card (0: none); LOW HEALTH then goes right under it instead of on top of it (the card leaves
-//LowHealthRoom for it), or above it when the screen has no room left under it (a short screen, big text and a tall
-//player list). Never under the player list or off the screen. Overlay opacity never fades these. dl: where the HP/SH
-//readout goes (null: the background list; DrawWarnings passes the foreground list while the menu is closed, so a tall
-//player list never covers it). LOW HEALTH always goes on the background list: it keeps above the player list itself.
-inline void DrawSelfHealth(double hp, double shield, float below = 0, float above = 0, ImDrawList* dl = nullptr) {
-    g_lowHealthRect = {};
+//Your own health and shield in big white text on a dark card, at the bottom left just above the game's health bar.
+//hp < 0: not read, so nothing (never a guessed number). shield < 0: not read or no shield offset, so health only.
+//Overlay opacity never fades it. dl: where it goes (null: the background list).
+inline void DrawSelfReadout(double hp, double shield, ImDrawList* dl = nullptr) {
     if (!(hp >= 0)) return; //also NaN
     const FullStrength solid;
     const int h = (int)std::lround(hp);
     char buf[48];
     if (shield >= 0) std::snprintf(buf, sizeof buf, "HP %d   SH %.0f", h, shield);
     else std::snprintf(buf, sizeof buf, "HP %d", h);
-    const float ls = config::labelSize, big = ls * 1.8f;
     const LabelRect r = SelfHealthRect(buf);
-    DrawLabelCentered((r.x0 + r.x1) / 2, (r.y0 + r.y1) / 2, buf, big, COLOR::white, true, dl);
-    if (!IsLowHealth(hp)) return;
+    DrawLabelCentered((r.x0 + r.x1) / 2, (r.y0 + r.y1) / 2, buf, config::labelSize * 1.8f, COLOR::white, true, dl);
+}
+
+//A big red LOW HEALTH card below the crosshair under Low health from. below / above: the bottom and top of the
+//close-enemy card (0: none); LOW HEALTH then goes right under it instead of on top of it (the card leaves LowHealthRoom
+//for it), or above it when the screen has no room left under it (a short screen, big text and a tall player list).
+//Never under the player list (WarnFloor, also above the card) and never off the screen: when the list reaches almost
+//to the screen's top, at the top. Overlay opacity never fades it. dl: where it goes (null: the background list;
+//DrawWarnings passes the foreground list while the menu is closed, so it is drawn over the readout and the player list).
+inline void DrawLowHealth(double hp, float below = 0, float above = 0, ImDrawList* dl = nullptr) {
+    g_lowHealthRect = {};
+    if (!IsLowHealth(hp)) return; //also not read or NaN
+    const FullStrength solid;
     const char* warn = "LOW HEALTH";
-    const float huge = ls * 2.4f;
+    const float huge = config::labelSize * 2.4f;
     const ImVec2 ts = LabelSize(warn, huge);
     const float half = ts.y / 2 + 6;
     float y = below > 0 ? below + 10 + half : (float)config::SCREEN_H * 0.62f;
-    if (below > 0 && above > 0 && y + half > WarnFloor()) y = std::max(half, above - LOW_HEALTH_ABOVE - half); //no room under the card
-    else y = std::min(y, WarnFloor() - half);
+    if (below > 0 && above > 0 && y + half > WarnFloor()) y = above - LOW_HEALTH_ABOVE - half; //no room under the card
+    y = std::max(half, std::min(y, WarnFloor() - half));
     const float x = LowHealthX(y); //off the HP/SH readout
     if (!COLOR::mono()) //white on solid red; monochrome: white on the dark card
-        DrawRectFilled(x - ts.x / 2 - 14, y - half, x + ts.x / 2 + 14, y + half, COLOR::red);
-    DrawLabelCentered(x, y, warn, huge, COLOR::white, COLOR::mono());
+        DrawRectFilled(x - ts.x / 2 - 14, y - half, x + ts.x / 2 + 14, y + half, COLOR::red, dl);
+    DrawLabelCentered(x, y, warn, huge, COLOR::white, COLOR::mono(), dl);
     g_lowHealthRect = {x - ts.x / 2 - 14, y - half, x + ts.x / 2 + 14, y + half};
+}
+
+//Both on the background list, LOW HEALTH over the readout
+inline void DrawSelfHealth(double hp, double shield, float below = 0, float above = 0) {
+    DrawSelfReadout(hp, shield);
+    DrawLowHealth(hp, below, above);
 }
 
 //--- spoken news about yourself and the game data, each said once: "Low health" when your health drops under Low health
@@ -1241,16 +1251,19 @@ inline std::string DrawCloseEnemyWarning(const std::vector<RenderEntity>& entiti
     return buf;
 }
 
-//Last of all (main.cpp, with live data): the close-enemy card, then your HP/SH readout and LOW HEALTH, which moves below
-//or above the card. The card goes on the foreground list, over every window (the menu, the player list, inventory
-//windows), so nothing ever hides it: with a big Menu text size the player list grew over the place under the crosshair
-//it moves up to. The readout goes there too while the menu is closed (that taller list reached over it); with the menu
-//open it stays under the menu, like LOW HEALTH (on top they would block menu rows for long).
+//Last of all (main.cpp, with live data): your HP/SH readout, the close-enemy card over it (its direction arrow can reach
+//over the readout), then LOW HEALTH, which moves below or above the card. The card goes on the foreground list, over
+//every window (the menu, the player list, inventory windows), so nothing ever hides it: with a big Menu text size the
+//player list grew over the place under the crosshair it moves up to. The readout and LOW HEALTH go there too while the
+//menu is closed (that taller list reached over them), LOW HEALTH over the readout; with the menu open they stay under
+//the menu (on top they would block menu rows for long).
 inline void DrawWarnings(const std::vector<RenderEntity>& ents, FminimalViewInfo vm, int localTeam, double hp, double shield, bool menuOpen) {
     ImDrawList* const fg = ImGui::GetForegroundDrawList();
+    ImDrawList* const self = menuOpen ? nullptr : fg;
     float warnBottom = 0, warnTop = 0;
+    if (config::showSelfHealth) DrawSelfReadout(hp, shield, self); //old data: never called, never an old number
     if (config::espEnabled) DrawCloseEnemyWarning(ents, vm, localTeam, &warnBottom, LowHealthRoom(hp), fg, &warnTop);
-    if (config::showSelfHealth) DrawSelfHealth(hp, shield, warnBottom, warnTop, menuOpen ? nullptr : fg); //old data: never called, never an old number
+    if (config::showSelfHealth) DrawLowHealth(hp, warnBottom, warnTop, self);
 }
 
 //The radar: a panel with three rings (each with its range), your own arrow, and the edges of your view. Its lines grow
