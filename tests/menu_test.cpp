@@ -434,6 +434,29 @@ int main() {
         io.AddMousePosEvent(-1000, -1000); frame(list); frame(list);
     }
 
+    //menu text 30 px: the player list and a newly opened inventory window grow with it, and stay on the screen
+    {
+        auto windowAt = [&](const char* name, float text, int sw, int sh) {
+            config::menuTextSize = text; config::SCREEN_W = sw; config::SCREEN_H = sh; io.DisplaySize = ImVec2((float)sw, (float)sh);
+            for (int i = 0; i < 4; i++) frame([] { DrawPlayerListWindow(true); DrawInspectWindows(); });
+            ImGuiWindow* win = ImGui::FindWindowByName(name);
+            return win ? ImRect(win->Pos.x, win->Pos.y, win->Pos.x + win->Size.x, win->Pos.y + win->Size.y) : ImRect();
+        };
+        auto inside = [](const ImRect& r, int sw, int sh) { return r.GetWidth() > 0 && r.Min.x >= 0 && r.Min.y >= 0 && r.Max.x <= sw && r.Max.y <= sh; };
+        const ImRect small = windowAt("##playerlist", 15, 1920, 1080), big = windowAt("##playerlist", 30, 1920, 1080),
+                     narrow = windowAt("##playerlist", 30, 1280, 720);
+        std::printf("player list width: %.0f at 15 px, %.0f at 30 px (1920 wide), %.0f at 30 px (1280 wide)\n", small.GetWidth(), big.GetWidth(), narrow.GetWidth());
+        CHECK(big.GetWidth() > 1.8f * small.GetWidth() && inside(big, 1920, 1080), "menu text 30 px: the player list is twice as wide on a 1920x1080 screen, and on it");
+        CHECK(narrow.GetWidth() > 1.4f * small.GetWidth() && inside(narrow, 1280, 720),
+              "menu text 30 px on 1280x720: the player list grows only as far as the screen's width");
+        g_inspect = {"1122334455667788"}; //a window not opened before: it gets the size for 30 px text
+        const ImRect inv = windowAt("###inv1122334455667788", 30, 1280, 720); //its ID comes from the part after ###
+        CHECK(inv.GetWidth() > 1.8f * 360 && inside(inv, 1280, 720), "menu text 30 px on 1280x720: a new inventory window is twice as wide and fits on the screen");
+        g_inspect.clear();
+        config::menuTextSize = 15; config::SCREEN_W = 2560; config::SCREEN_H = 1440; io.DisplaySize = ImVec2(1280, 1700);
+        frame([] { DrawUi(); });
+    }
+
     //the High visibility preset: every value it sets is inside its saved range, and it is written to settings.txt
     {
         std::error_code ec;

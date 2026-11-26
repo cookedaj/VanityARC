@@ -5,6 +5,7 @@
 #define KWINHELPER_UIKIT_H
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <initializer_list>
@@ -71,8 +72,9 @@ inline void PushTheme(float opacity, float textSize = BASE_TEXT) {
     c(ImGuiCol_ScrollbarGrabHovered, ImVec4(0.75f, 0.75f, 0.75f, 1)); c(ImGuiCol_ScrollbarGrabActive, white);
     c(ImGuiCol_TextSelectedBg, hover);
     c(ImGuiCol_NavCursor, white);
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f); //the Border colour around every button, drop-down, slider and box
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.0f);
+    const float border = std::max(1.0f, std::round(g_scale)); //whole pixels: 1, and 2 from 23 px text
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, border); //the Border colour around every button, drop-down, slider and box
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, border);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 0.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 0.0f);
