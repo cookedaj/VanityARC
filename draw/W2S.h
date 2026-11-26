@@ -1,5 +1,6 @@
 #ifndef KWINHELPER_W2S_H
 #define KWINHELPER_W2S_H
+#include <algorithm>
 #include <cmath>
 
 #include "../utils/gameUtil.h"
@@ -70,6 +71,43 @@ struct View {
         if (z < 1.0) return false;
         out = Vector2(cx + (x / z) * focal * sx, cy - (y / z) * focal * sy);
         return true;
+    }
+
+    static constexpr double NEAR = 10.0; //cm: a line is cut where it passes this close in front of the camera
+
+    //A line between two world points on screen, cut where it goes behind the camera (NEAR) and where it leaves the
+    //picture plus margin px. So a limb right next to the camera is still drawn, and never streaks across the screen.
+    //False when nothing of it is on screen.
+    bool projectSegment(const Vector3& a, const Vector3& b, Vector2& pa, Vector2& pb, double margin = 60) const {
+        if (!ok) return false;
+        double ax, ay, az, bx, by, bz;
+        toCamera(a, ax, ay, az);
+        toCamera(b, bx, by, bz);
+        if (!std::isfinite(ax + ay + az + bx + by + bz) || (az < NEAR && bz < NEAR)) return false;
+        if (az < NEAR || bz < NEAR) { //one end behind: move it to where the line crosses NEAR
+            const double f = (NEAR - az) / (bz - az);
+            const double nx = ax + (bx - ax) * f, ny = ay + (by - ay) * f;
+            if (az < NEAR) { ax = nx; ay = ny; az = NEAR; } else { bx = nx; by = ny; bz = NEAR; }
+        }
+        double x0 = cx + ax / az * focal * sx, y0 = cy - ay / az * focal * sy, x1 = cx + bx / bz * focal * sx, y1 = cy - by / bz * focal * sy;
+        //Liang-Barsky against the picture plus margin
+        const double dx = x1 - x0, dy = y1 - y0;
+        const double p[4] = {-dx, dx, -dy, dy}, q[4] = {x0 - (rx - margin), rx + rw + margin - x0, y0 - (ry - margin), ry + rh + margin - y0};
+        double t0 = 0, t1 = 1;
+        for (int i = 0; i < 4; i++) {
+            if (p[i] == 0) { if (q[i] < 0) return false; continue; }
+            const double r = q[i] / p[i];
+            if (p[i] < 0) t0 = std::max(t0, r); else t1 = std::min(t1, r);
+        }
+        if (t0 > t1) return false;
+        pa = Vector2(x0 + dx * t0, y0 + dy * t0);
+        pb = Vector2(x0 + dx * t1, y0 + dy * t1);
+        return true;
+    }
+
+    //True when a screen point lies on the picture plus margin px
+    bool onPicture(const Vector2& s, double margin = 60) const {
+        return s.x >= rx - margin && s.x <= rx + rw + margin && s.y >= ry - margin && s.y <= ry + rh + margin;
     }
 };
 

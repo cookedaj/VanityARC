@@ -261,10 +261,11 @@ int main() {
         g_MenuOpen = false;
     }
 
-    //bottom: scroll the page to its end first, and hover only the page (what lies below the first screen)
+    //at: scroll the page that far first (1: to its end, 0: not at all), and hover only the page (what lies below the first screen)
     std::set<ImGuiID> hovered;
     ImGuiID pageId = 0;
-    auto scan = [&](const char* what, bool bottom) {
+    auto scan = [&](const char* what, float at) {
+        const bool bottom = at > 0;
         g_MenuOpen = true;
         frame([] { DrawMenu(); }); frame([] { DrawMenu(); });
         ImGuiWindow* mw = ImGui::FindWindowByName("kwin-helper");
@@ -273,7 +274,7 @@ int main() {
         pageId = page ? page->ID : 0;
         float x0 = mw->Pos.x + 4;
         if (bottom && page) {
-            ImGui::SetScrollY(page, page->ScrollMax.y);
+            ImGui::SetScrollY(page, page->ScrollMax.y * at);
             frame([] { DrawMenu(); }); frame([] { DrawMenu(); });
             x0 = page->Pos.x + 2;
         }
@@ -289,19 +290,27 @@ int main() {
         io.AddMousePosEvent(-1000, -1000);
         if (page) ImGui::SetScrollY(page, 0); //the pages share one scroll position
         frame([] { DrawMenu(); }); frame([] { DrawMenu(); });
-        char msg[112]; std::snprintf(msg, sizeof msg, "no conflicting IDs when hovering the menu (%s%s)", what, bottom ? ", scrolled to the end" : "");
+        char msg[112]; std::snprintf(msg, sizeof msg, "no conflicting IDs when hovering the menu (%s%s)", what, at >= 1 ? ", scrolled to the end" : bottom ? ", scrolled part way" : "");
         CHECK(hits == 0, msg);
     };
     auto sw = [&](const char* label) { return ImGui::GetIDWithSeed("##sw", nullptr, ImGui::GetIDWithSeed(label, nullptr, pageId)); };
+    auto choice = [&](const char* label) { return ImGui::GetIDWithSeed("##c", nullptr, ImGui::GetIDWithSeed(label, nullptr, pageId)); };
     for (int tab = 0; tab < MENU_TAB_COUNT; tab++) {
         g_MenuTab = tab;
-        scan(MENU_TABS[tab], false);
+        scan(MENU_TABS[tab], 0);
         if (tab == 1) CHECK(hovered.count(sw("Ground items")) && hovered.count(sw("Guns")), "Loot tab: the mouse reaches Ground items and Guns");
     }
     g_MenuTab = 1;
-    scan("Loot", true);
+    scan("Loot", 1);
     CHECK(hovered.count(sw("Containers")) && hovered.count(sw("Other##box")) && hovered.count(sw("Medical##box")),
           "Loot tab scrolled to the end: the mouse reaches the container switches");
+    //the ESP tab's BOXES and SKELETON parts lie below its first screen
+    g_MenuTab = 0;
+    std::set<ImGuiID> espSeen;
+    for (float at : {0.5f, 0.75f, 1.0f}) { scan("ESP", at); espSeen.insert(hovered.begin(), hovered.end()); }
+    CHECK(espSeen.count(choice("Box style")) && espSeen.count(sw("Skeleton on players")) && espSeen.count(choice("Head marker")) &&
+          espSeen.count(choice("Skeleton colour")) && espSeen.count(sw("Dim players behind cover")),
+          "ESP tab scrolled down: the mouse reaches Box style and every skeleton option");
 
     //the player list and an inventory window next to the menu draw without clashing IDs either
     g_MenuTab = 2;

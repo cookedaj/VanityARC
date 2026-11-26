@@ -29,6 +29,10 @@ static FminimalViewInfo camera() {
 static int g_verts = 0;
 static bool g_finite = true;
 static float g_minY = 1e9f; //the highest point on screen that was drawn (smallest y)
+static float g_minX = 1e9f, g_maxX = -1e9f, g_maxY = -1e9f; //and the other edges of everything drawn
+static ImU32 g_findCol = 0; //vertices of exactly this colour: how many, and the y range they span
+static int g_colVerts = 0;
+static float g_colMinY = 1e9f, g_colMaxY = -1e9f;
 template <typename F> static int draw(F fn) {
     ImGui::GetIO().DeltaTime = 1.0f / 60.0f;
     ImGui::NewFrame();
@@ -36,13 +40,38 @@ template <typename F> static int draw(F fn) {
     ImDrawList* dl = ImGui::GetBackgroundDrawList();
     g_verts = dl->VtxBuffer.Size;
     g_finite = true;
-    g_minY = 1e9f;
+    g_minY = g_minX = g_colMinY = 1e9f;
+    g_maxX = g_maxY = g_colMaxY = -1e9f;
+    g_colVerts = 0;
     for (const ImDrawVert& v : dl->VtxBuffer) {
-        if (!std::isfinite(v.pos.x) || !std::isfinite(v.pos.y)) g_finite = false;
-        else g_minY = std::min(g_minY, v.pos.y);
+        if (!std::isfinite(v.pos.x) || !std::isfinite(v.pos.y)) { g_finite = false; continue; }
+        g_minY = std::min(g_minY, v.pos.y); g_maxY = std::max(g_maxY, v.pos.y);
+        g_minX = std::min(g_minX, v.pos.x); g_maxX = std::max(g_maxX, v.pos.x);
+        if (g_findCol && v.col == g_findCol) { g_colVerts++; g_colMinY = std::min(g_colMinY, v.pos.y); g_colMaxY = std::max(g_colMaxY, v.pos.y); }
     }
     ImGui::Render();
     return g_verts;
+}
+
+//A standing player's stick figure (feet at z - 90, as his box), facing +x, at (x, y)
+static std::shared_ptr<skeleton::Pose> standingPose(double x, double y, double z) {
+    using namespace skeleton;
+    auto p = std::make_shared<Pose>();
+    const double b = z - 90;
+    const double spine[7] = {95, 105, 118, 132, 148, 155, 162}; //pelvis up to the head bone
+    for (int k = PELVIS; k <= HEAD; k++) p->j[k] = Vector3(x, y, b + spine[k]);
+    for (int s : {-1, 1}) {
+        const int o = s < 0 ? 0 : 4; //side A, then side B
+        p->j[SHOULDER_A + o] = Vector3(x, y + s * 5, b + 140);
+        p->j[ARM_A + o] = Vector3(x, y + s * 18, b + 140);
+        p->j[FOREARM_A + o] = Vector3(x, y + s * 22, b + 112);
+        p->j[HAND_A + o] = Vector3(x, y + s * 24, b + 88);
+        p->j[HIP_A + o] = Vector3(x, y + s * 10, b + 92);
+        p->j[KNEE_A + o] = Vector3(x, y + s * 11, b + 50);
+        p->j[ANKLE_A + o] = Vector3(x, y + s * 12, b + 8);
+        p->j[TOE_A + o] = Vector3(x + 12, y + s * 12, b + 2);
+    }
+    return p;
 }
 
 int main() {
@@ -291,6 +320,163 @@ int main() {
         CHECK(underName.y0 >= 40, "bar numbers at the screen's top stay under the name's place");
         config::barStyle = 0; config::barNumbers = false;
         config::boxStyle = 0; config::showSkeleton = true; config::showOffscreen = true;
+    }
+
+    //---- the skeleton: the box holds the head, lines are cut at the camera and the screen, Skeleton only, the simple far
+    //figure, a wider box for a player lying down, head marker, colour, and the facing arrow at the head
+    {
+        config::showSkeleton = true; config::skeletonMaxDist = 300; config::showBars = false; config::showPlayerNames = false;
+        config::showPlayerGuns = false; config::showFacing = false; config::showOffscreen = false; config::boxStyle = 1;
+        const View v(cam, MakeProjection());
+        const float SW = (float)config::SCREEN_W, SH = (float)config::SCREEN_H;
+        for (double d : {300.0, 500.0, 3000.0, 10000.0}) {
+            std::vector<RenderEntity> one = {ent(Object::PLAYER, d, 30, 0)};
+            one[0].pose = standingPose(d, 30, 0);
+            float bx, by, bw, bh;
+            PlayerScreenBox(v, one[0], bx, by, bw, bh);
+            draw([&] { DrawBoxOutlined(bx - bw / 2, by, bw, bh, COLOR::enemy(), BoxThickness()); });
+            const float boxTop = g_minY, boxL = g_minX, boxR = g_maxX;
+            draw([&] { DrawESP(one, cam, 3); });
+            const float allTop = g_minY;
+            const bool fine = g_finite;
+            draw([&] { DrawSkeleton(v, *one[0].pose, COLOR::enemy(), SkeletonWidth(v, one[0]), SkeletonSimple(StandingBoxPx(v, one[0].pos))); });
+            char msg[112];
+            std::snprintf(msg, sizeof msg, "%.0f m: the box holds the head marker and the whole figure (nothing above or beside it)", d / 100);
+            CHECK(fine && allTop >= boxTop - 0.01f && g_minY >= boxTop - 0.01f && g_minX >= boxL - 0.01f && g_maxX <= boxR + 0.01f, msg);
+        }
+        {   //a joint that could not be read is left out of the box, not a reason for the standing box
+            std::vector<RenderEntity> whole = {ent(Object::PLAYER, 3000, 30, 0)}, holes = whole, bare = whole;
+            whole[0].pose = standingPose(3000, 30, 0);
+            auto h = standingPose(3000, 30, 0);
+            h->j[skeleton::HAND_A] = skeleton::badJoint(); h->j[skeleton::TOE_B] = skeleton::badJoint();
+            holes[0].pose = h;
+            float x1, y1, w1, h1, x2, y2, w2, h2, x3, y3, w3, h3;
+            PlayerScreenBox(v, whole[0], x1, y1, w1, h1);
+            PlayerScreenBox(v, holes[0], x2, y2, w2, h2);
+            PlayerScreenBox(v, bare[0], x3, y3, w3, h3);
+            CHECK(std::abs(y1 - y2) < 0.01f && std::abs(h1 - h2) < 0.01f && std::abs(y1 - y3) > 1, "a pose with joints missing keeps its own box");
+            draw([&] { DrawESP(holes, cam, 3); });
+            CHECK(g_finite, "and draws without a broken line");
+        }
+        {   //right in front of the camera: one hand 2 cm in front of it, a forearm behind it
+            std::vector<RenderEntity> close1 = {ent(Object::PLAYER, 150, 0, 0)};
+            auto p = standingPose(150, 0, 0);
+            p->j[skeleton::HAND_A] = Vector3(2, -30, 10);
+            p->j[skeleton::FOREARM_B] = Vector3(-30, 40, 0);
+            close1[0].pose = p;
+            const int n = draw([&] { DrawESP(close1, cam, 3); });
+            CHECK(n > 0 && g_finite && g_minX > -300 && g_maxX < SW + 300 && g_minY > -300 && g_maxY < SH + 300,
+                  "a limb next to or behind the camera is cut at the screen's edge: nothing streaks far off it, nothing breaks");
+            Vector2 a, b;
+            CHECK(v.projectSegment(p->j[skeleton::ARM_B], p->j[skeleton::FOREARM_B], a, b), "and the arm going behind the camera is still drawn up to the edge");
+        }
+        {   //Skeleton only: no box where a skeleton is drawn, the full box where none is
+            std::vector<RenderEntity> one = {ent(Object::PLAYER, 3000, 30, 0)}, bare = {ent(Object::PLAYER, 3000, 30, 0)};
+            one[0].pose = standingPose(3000, 30, 0);
+            config::boxStyle = 1;
+            const int fullWith = draw([&] { DrawESP(one, cam, 3); }), fullBare = draw([&] { DrawESP(bare, cam, 3); });
+            config::boxStyle = 3;
+            const int onlyWith = draw([&] { DrawESP(one, cam, 3); }), onlyBare = draw([&] { DrawESP(bare, cam, 3); });
+            config::showSkeleton = false;
+            const int onlyOff = draw([&] { DrawESP(one, cam, 3); });
+            config::showSkeleton = true;
+            config::boxStyle = 1;
+            CHECK(onlyWith < fullWith && onlyWith > fullBare, "Skeleton only: the skeleton without its box");
+            CHECK(onlyBare == fullBare && onlyOff == fullBare, "Skeleton only: a player without a skeleton gets the full box");
+        }
+        {   //far away: a few thick lines, fewer vertices than the full figure, still drawn; no jump where it changes
+            std::vector<RenderEntity> far1 = {ent(Object::PLAYER, 10000, 30, 0)};
+            far1[0].pose = standingPose(10000, 30, 0);
+            CHECK(SkeletonSimple(StandingBoxPx(v, far1[0].pos)) == 1.0f && SkeletonSimple(StandingBoxPx(v, Vector3(1000, 0, 0))) == 0.0f,
+                  "100 m away the figure is simple, 10 m away it is full");
+            const float t = SkeletonWidth(v, far1[0]);
+            CHECK(t >= BoxThickness() + SIMPLE_EXTRA - 1e-4f, "the simple figure's lines are thicker than the box's");
+            const int full = draw([&] { DrawSkeleton(v, *far1[0].pose, COLOR::red, t, 0); });
+            const int simple = draw([&] { DrawSkeleton(v, *far1[0].pose, COLOR::red, t, 1); });
+            const float s0 = g_minX, s1 = g_maxX, s2 = g_minY, s3 = g_maxY;
+            draw([&] { DrawSkeleton(v, *far1[0].pose, COLOR::red, t, 0.999f); });
+            CHECK(simple < full && simple > 0, "the simple far figure has fewer vertices than the full one");
+            CHECK(std::abs(g_minX - s0) < 0.5f && std::abs(g_maxX - s1) < 0.5f && std::abs(g_minY - s2) < 0.5f && std::abs(g_maxY - s3) < 0.5f,
+                  "just before it becomes simple the figure covers the same place (no jump)");
+            config::showSkeleton = false;
+            const int boxAlone = draw([&] { DrawESP(far1, cam, 3); });
+            config::showSkeleton = true;
+            CHECK(draw([&] { DrawESP(far1, cam, 3); }) > boxAlone, "and it is drawn over the box");
+            //walking away through the change, 2 cm a frame: the figure's edges never jump
+            float jump = 0, last[4] = {0, 0, 0, 0};
+            for (double d = 3500; d <= 4800; d += 2) {
+                RenderEntity e = ent(Object::PLAYER, d, 30, 0);
+                e.pose = standingPose(d, 30, 0);
+                draw([&] { DrawSkeleton(v, *e.pose, COLOR::red, SkeletonWidth(v, e), SkeletonSimple(StandingBoxPx(v, e.pos))); });
+                const float now[4] = {g_minX, g_maxX, g_minY, g_maxY};
+                if (d > 3500) for (int k = 0; k < 4; k++) jump = std::max(jump, std::abs(now[k] - last[k]));
+                std::copy(now, now + 4, last);
+            }
+            CHECK(jump < 1.5f, "walking away through the change to the simple figure, its edges move smoothly");
+        }
+        {   //lying down across the view: a wider box, out to his joints; getting up, it narrows smoothly
+            auto lying = std::make_shared<skeleton::Pose>();
+            for (int k = 0; k < skeleton::JOINT_COUNT; k++) lying->j[k] = Vector3(3000, 30 + 88 - k * 8.0, -75 + (k % 3) * 5.0);
+            std::vector<RenderEntity> l = {ent(Object::PLAYER, 3000, 30, 0)}, bare = l;
+            l[0].pose = lying;
+            float bx, by, bw, bh, sx, sy, sw, sh;
+            PlayerScreenBox(v, l[0], bx, by, bw, bh);
+            PlayerScreenBox(v, bare[0], sx, sy, sw, sh);
+            CHECK(bw > sw * 1.6f, "a player lying down gets a wider box, out to his joints");
+            const auto up = standingPose(3000, 30, 0);
+            float maxStep = 0, lastW = bw, lastY = by;
+            bool neverNarrow = true;
+            for (int i = 1; i <= 400; i++) {
+                auto mid = std::make_shared<skeleton::Pose>();
+                for (int k = 0; k < skeleton::JOINT_COUNT; k++) mid->j[k] = skeleton::lerp(lying->j[k], up->j[k], i / 400.0);
+                l[0].pose = mid;
+                PlayerScreenBox(v, l[0], bx, by, bw, bh);
+                maxStep = std::max({maxStep, std::abs(bw - lastW), std::abs(by - lastY)});
+                neverNarrow = neverNarrow && bw >= sw - 0.01f;
+                lastW = bw; lastY = by;
+            }
+            CHECK(maxStep < 2.0f && neverNarrow, "getting up, the box changes smoothly and is never narrower than 90 cm");
+        }
+        {   //head marker: filled or ring; an estimated pose has a dashed ring, as solid as a live one
+            std::vector<RenderEntity> one = {ent(Object::PLAYER, 500, 30, 0)};
+            one[0].pose = standingPose(500, 30, 0);
+            config::headMarker = 1;
+            const int filled = draw([&] { DrawESP(one, cam, 3); });
+            config::headMarker = 0;
+            const int ring = draw([&] { DrawESP(one, cam, 3); });
+            one[0].poseLive = false;
+            const int dashed = draw([&] { DrawESP(one, cam, 3); });
+            config::headMarker = 1;
+            const int dashedToo = draw([&] { DrawESP(one, cam, 3); });
+            one[0].poseLive = true;
+            CHECK(g_finite && filled != ring && dashed != ring && dashed == dashedToo, "head marker: filled, ring, and a dashed ring for an estimate");
+            //colour: same as the box, white or yellow (white in monochrome)
+            g_findCol = IM_COL32(255, 230, 0, 255);
+            config::skeletonColor = 2;
+            draw([&] { DrawESP(one, cam, 3); });
+            const int yellow = g_colVerts;
+            config::monochrome = true;
+            draw([&] { DrawESP(one, cam, 3); });
+            const int monoYellow = g_colVerts;
+            config::monochrome = false;
+            config::skeletonColor = 0;
+            draw([&] { DrawESP(one, cam, 3); });
+            CHECK(yellow > 0 && monoYellow == 0 && g_colVerts == 0, "Skeleton colour Yellow draws it yellow (monochrome: white); Same as box: no yellow");
+            //the facing arrow starts at the head when there is a skeleton (Skeleton only, white skeleton: the arrow is the only red)
+            config::showFacing = true; config::boxStyle = 3; config::skeletonColor = 1;
+            std::vector<RenderEntity> f = {ent(Object::PLAYER, 3000, 30, 0)};
+            f[0].pose = standingPose(3000, 30, 0);
+            f[0].yaw = 90; //facing to your right: a flat arrow
+            float bx, by, bw, bh;
+            PlayerScreenBox(v, f[0], bx, by, bw, bh);
+            g_findCol = COLOR::enemy();
+            draw([&] { DrawESP(f, cam, 3); });
+            const float atHead = (g_colMinY + g_colMaxY) / 2;
+            CHECK(g_colVerts > 0 && atHead < by + bh * 0.35f, "with a skeleton the facing arrow starts at the head, not over the spine");
+            g_findCol = 0;
+        }
+        config::skeletonMaxDist = 120; config::showBars = true; config::showPlayerNames = true; config::showPlayerGuns = true;
+        config::showFacing = true; config::showOffscreen = true; config::boxStyle = 0; config::headMarker = 1; config::skeletonColor = 0;
     }
 
     //---- which way they face: up = away from you, down = towards you, right = to your right; drawn only when known

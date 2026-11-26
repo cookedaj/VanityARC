@@ -155,7 +155,7 @@ inline bool ConfirmButton(const char* label, const char* confirm, double* armedA
     return yes;
 }
 
-//The readable setup in one go: text size 28, lines at least 4 px, full boxes, label cards, overlay and menu fully solid,
+//The readable setup in one go: text size 28, box and skeleton lines at least 4 px (the skeleton is never thinner than the box), full boxes, label cards, overlay and menu fully solid,
 //hidden players at least 200 (Hidden player opacity). Saved at once.
 inline void ApplyHighVisibility() {
     config::labelSize = 28.0f;
@@ -181,7 +181,7 @@ inline void HighVisibilityButton() {
     ImGui::PushFont(OverlayFont(), 22.0f);
     if (ImGui::Button("High visibility", ImVec2(320, 46))) { ApplyHighVisibility(); Toast("High visibility on"); }
     ImGui::PopFont();
-    ui::Note("One click: text size 28, lines at least 4 px, full boxes, label cards, overlay and menu fully solid, hidden players at least 200 (Hidden player opacity).");
+    ui::Note("One click: text size 28, box and skeleton lines at least 4 px, full boxes, label cards, overlay and menu fully solid, hidden players at least 200 (Hidden player opacity).");
 }
 
 //--- the pages
@@ -215,7 +215,7 @@ inline void PageEsp() {
     ImGui::Columns(1);
     SliderD("Loot name range", &config::nameMaxLootDist, 3, 150, "%.0f m");
     Section("BOXES");
-    Choice("Box style", &config::boxStyle, {"Corners", "Full", "Sides"});
+    Choice("Box style", &config::boxStyle, {"Corners", "Full", "Sides", "Skeleton only"});
     Choice("Box colour", &config::boxColor, {"Red", "White", "Yellow", "Blue", "Green", "Violet"});
     Switch("Monochrome (white and grey)", &config::monochrome);
     Slider("Line thickness", &config::boxThickness, 1.0f, 10.0f,"%.1f px");
@@ -231,10 +231,15 @@ inline void PageEsp() {
     Note("Your own health and shield in big text at the bottom left, and a red LOW HEALTH card below the crosshair under 35.");
     Section("SKELETON");
     Switch("Skeleton on players", &config::showSkeleton);
-    Note("A faint skeleton means the game is not drawing that player right now, so the pose is an estimate.");
+    Choice("Head marker", &config::headMarker, {"Ring", "Filled"});
+    Choice("Skeleton colour", &config::skeletonColor, {"Same as box", "White", "Yellow"});
+    Note("Lines grow thicker as players come closer; far away the figure becomes a few thick lines. A dashed ring for a "
+         "head means the game is not animating that player right now, so the pose is an estimate. Box style Skeleton "
+         "only leaves the box out where a skeleton is drawn.");
     SliderD("Skeleton range", &config::skeletonMaxDist, 20, 300, "%.0f m");
     Switch("Dim players behind cover", &config::dimHidden);
     if (config::dimHidden) SliderD("Hidden player opacity", &config::hiddenAlpha, 40, 255, "%.0f");
+    Note("Dimming makes the box and skeleton of a player the game is not drawing right now (behind cover) fainter.");
     Section("DISTANCE");
     SliderD("Players range", &config::maxPlayerDist, 50, 800, "%.0f m");
     SliderD("ARC range", &config::maxArcDist, 20, 500, "%.0f m");

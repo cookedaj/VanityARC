@@ -62,13 +62,16 @@ int main() {
     config::barStyle = 2; config::barNumbers = true;
     config::showLootGuns = false; config::showLootValuables = false; config::showContainerTrash = false;
     config::colorLootKinds = true; config::highlightValuable = true; config::valuableFrom = 25000;
+    config::headMarker = 0; config::skeletonColor = 2; config::boxStyle = 3;
     settings::save(dir);
     config::maxArcDist = 50; config::boxColor = 0; config::monochrome = false; config::labelCards = false; config::overlayOpacity = 1.0f; config::trackerHz = 240;
     config::showItemValues = false;
     config::barStyle = 0; config::barNumbers = false;
     config::showLootGuns = true; config::showLootValuables = true; config::showContainerTrash = true;
     config::colorLootKinds = false; config::highlightValuable = false; config::valuableFrom = 10000;
+    config::headMarker = 1; config::skeletonColor = 0; config::boxStyle = 0;
     CHECK(settings::load(dir) == 0, "a file the overlay saved has no ignored lines");
+    CHECK(config::headMarker == 0 && config::skeletonColor == 2 && config::boxStyle == 3, "head marker, skeleton colour and the Skeleton only box style are saved");
     CHECK(config::maxArcDist == 222 && config::boxColor == 4 && config::monochrome && config::labelCards && std::abs(config::overlayOpacity - 0.7f) < 1e-6 && config::trackerHz == 90,
           "saved values come back after loading");
     CHECK(config::showItemValues, "Show item values is saved");
@@ -87,6 +90,7 @@ int main() {
     CHECK(config::barStyle == 0 && !config::barNumbers, "Reset: health and shield side by side, no numbers");
     CHECK(config::showLootGuns && config::showLootValuables && config::showContainerTrash && !config::colorLootKinds &&
           !config::highlightValuable && config::valuableFrom == 10000, "Reset: every kind and group on, no kind colours, no valuable highlight");
+    CHECK(config::headMarker == 1 && config::skeletonColor == 0 && config::boxStyle == 0, "Reset: a filled head marker, the skeleton in the box colour, corner boxes");
 
     //a value that left its range by a bug is brought back
     config::fovScale = 9.0f; config::listMode = -4;

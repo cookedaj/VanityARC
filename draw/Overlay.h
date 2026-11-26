@@ -70,6 +70,20 @@ inline void DrawEllipseRing(float x, float y, float rx, float ry, ImU32 color, f
     ImGui::GetBackgroundDrawList()->AddEllipse(ImVec2(x, y), ImVec2(rx, ry), Fade(color), 0.0f, 0, thickness);
 }
 
+inline void DrawEllipseFilled(float x, float y, float rx, float ry, ImU32 color) {
+    ImGui::GetBackgroundDrawList()->AddEllipseFilled(ImVec2(x, y), ImVec2(rx, ry), Fade(color));
+}
+
+//An ellipse drawn as "dashes" equal dashes with equal gaps between them (the first one starts at the top)
+inline void DrawEllipseDashes(float x, float y, float rx, float ry, ImU32 color, float thickness, int dashes = 8) {
+    ImDrawList* dl = ImGui::GetBackgroundDrawList();
+    const float step = 2.0f * 3.14159265f / (float)dashes, a0 = -3.14159265f / 2.0f;
+    for (int i = 0; i < dashes; i++) {
+        dl->PathEllipticalArcTo(ImVec2(x, y), ImVec2(rx, ry), 0.0f, a0 + step * i, a0 + step * (i + 0.5f), 6);
+        dl->PathStroke(Fade(color), ImDrawFlags_None, thickness);
+    }
+}
+
 inline void DrawLine(float x1, float y1, float x2, float y2, ImU32 color, float thickness = 1.5f) {
     ImGui::GetBackgroundDrawList()->AddLine(ImVec2(x1, y1), ImVec2(x2, y2), Fade(color), thickness);
 }

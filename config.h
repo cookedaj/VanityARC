@@ -45,7 +45,7 @@ namespace config {
     inline bool showDebugInfo = false;     //"Status card": stats at the top middle of the screen (fps, update rate, counts), only while the game is found; Insert menu: Settings > Other > Status card
 
     //How things look (Insert menu: spread over the ESP, Players and Settings tabs)
-    inline double boxStyle = 0;            //player boxes: 0 corner brackets, 1 full rectangle, 2 sides only
+    inline double boxStyle = 0;            //player boxes: 0 corner brackets, 1 full rectangle, 2 sides only, 3 skeleton only (a full box for players without one)
     inline double boxColor = 0;            //enemy colour: 0 red, 1 white, 2 yellow, 3 blue, 4 green, 5 violet
     inline float boxThickness = 1.5f;      //px
     inline bool showTurrets = true;        //ARC turrets (separate from the other ARC)
@@ -58,6 +58,8 @@ namespace config {
     inline bool showFacing = true;         //an arrow in each player's box and a line on each radar dot: the way they face
     inline bool showSkeleton = true;       //a stick figure on players (the box stays; players without a readable pose get the box only)
     inline double skeletonMaxDist = 120;   //m, further players only get the box: the pose is read for nearer ones only
+    inline double headMarker = 1;          //ESP tab, SKELETON, "Head marker": 0 a ring, 1 a filled disc with a dark edge
+    inline double skeletonColor = 0;       //ESP tab, SKELETON, "Skeleton colour": 0 same as the box, 1 white, 2 yellow
     inline float overlayOpacity = 1.0f;    //everything the overlay draws (menu excluded) is multiplied by this
     inline double trackerHz = 120;         //how often players and ARC are read (30 to 240)
     inline double listMode = 1;            //player list at the bottom: 0 off, 1 always, 2 only while the menu is open

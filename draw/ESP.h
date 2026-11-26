@@ -338,18 +338,64 @@ inline void FlushLabels() {
     v.clear();
 }
 
+//The box's line thickness as drawn: the Line thickness setting, kept to 1..10 px
+inline float BoxThickness() { return std::min(10.0f, std::max(1.0f, config::boxThickness)); }
+
+//Is his stick figure drawn? The switch, a pose, and within Skeleton range of the camera.
+inline bool SkeletonShown(const View& v, const RenderEntity& ent) {
+    return config::showSkeleton && ent.pose && ent.pos.Dist(v.loc) / 100.0 <= config::skeletonMaxDist;
+}
+
+//How tall a standing player's box is at his distance, in px. The skeleton's thickness and its simple far figure go by
+//this, not by his pose, so they stay the same when he crouches.
+inline float StandingBoxPx(const View& v, const Vector3& pos) {
+    double x, y, z;
+    v.toCamera(pos, x, y, z);
+    return z > 1.0 ? (float)(180.0 * v.focal * v.sy / z) : 1e6f;
+}
+//The simple far figure: it starts to form when a standing box is SIMPLE_FROM_PX tall and is complete at SIMPLE_AT_PX
+//(about 40 m on a 1440p screen), its lines SIMPLE_EXTRA px thicker. In between the figure changes smoothly.
+constexpr float SIMPLE_FROM_PX = 50.0f, SIMPLE_AT_PX = 40.0f, SIMPLE_EXTRA = 1.0f;
+inline float SkeletonSimple(float boxPx) { return std::clamp((SIMPLE_FROM_PX - boxPx) / (SIMPLE_FROM_PX - SIMPLE_AT_PX), 0.0f, 1.0f); }
+//The skeleton's line thickness in px (see skeleton::thickness): never thinner than the box's lines
+inline float SkeletonWidth(const View& v, const RenderEntity& ent) {
+    const float px = StandingBoxPx(v, ent.pos);
+    return skeleton::thickness(BoxThickness(), px) + SIMPLE_EXTRA * SkeletonSimple(px);
+}
+
+//Where the head marker goes on screen: its middle c and its radii, 9 cm in the world but never under t + 3 px, so a far
+//player's head still reads. False when the head is not known or not in front of the camera.
+inline bool HeadOnScreen(const View& v, const skeleton::Pose& pose, float t, Vector2& c, float& rx, float& ry) {
+    const Vector3 centre = skeleton::headCentre(pose);
+    if (!skeleton::jointOk(centre)) return false;
+    double x, y, z;
+    v.toCamera(centre, x, y, z);
+    if (!(z >= View::NEAR) || !v.project(centre, c)) return false;
+    rx = std::max((float)(skeleton::HEAD_RADIUS * v.focal * v.sx / z), t + 3.0f);
+    ry = std::max((float)(skeleton::HEAD_RADIUS * v.focal * v.sy / z), t + 3.0f);
+    return std::isfinite(c.x + c.y + rx + ry);
+}
+//How far the head marker reaches past its radius: a ring's half thickness plus the 2 px dark edge (a filled one reaches less)
+inline float HeadReach(float t) { return t / 2 + 2.0f; }
+
 //Top and bottom of a player's box, as heights in the world. Standing, that is 90 cm each way from his position; when a
-//pose is known (crouching, rolling) the box follows the real figure instead of staying standing-sized.
+//pose is known (crouching, rolling, lying down) the box follows the real figure, head marker included, instead of
+//staying standing-sized. Joints that could not be read are left out.
 inline void PlayerBoxZ(const RenderEntity& ent, double& top, double& bottom) {
     top = ent.pos.z + 90; bottom = ent.pos.z - 90;
     if (!ent.pose) return;
-    double lo = 1e18, hi = -1e18;
+    double lo = 1e18, hi = -1e18, x0 = 1e18, x1 = -1e18, y0 = 1e18, y1 = -1e18;
     for (const Vector3& j : ent.pose->j) {
-        if (!std::isfinite(j.z)) return;
+        if (!skeleton::jointOk(j)) continue;
         lo = std::min(lo, j.z); hi = std::max(hi, j.z);
+        x0 = std::min(x0, j.x); x1 = std::max(x1, j.x); y0 = std::min(y0, j.y); y1 = std::max(y1, j.y);
     }
-    if (hi - lo < 40.0 || hi - lo > 260.0) return; //not a believable figure: keep the standing box
-    top = hi + 12.0;   //the head ring sits above the head bone
+    //Not a believable figure (no joints, all in one spot, or far too big): keep the standing box. Lying down counts.
+    const double size = std::max(hi - lo, std::hypot(x1 - x0, y1 - y0));
+    if (!(size >= 40.0 && size <= 260.0) || hi - lo > 260.0) return;
+    const Vector3 head = skeleton::headCentre(*ent.pose);
+    if (skeleton::jointOk(head)) hi = std::max(hi, head.z + skeleton::HEAD_RADIUS);
+    top = hi + 2.0;
     bottom = lo - 3.0;
 }
 
@@ -376,6 +422,39 @@ inline bool PlayerScreenBox(const View& v, const RenderEntity& ent, float& cx, f
     w = std::max(3.0f, (float)(90.0 * v.focal * v.sx / mz));
     cx = (float)sHead.x;
     y0 = (float)sHead.y;
+    if (!ent.pose || !std::isfinite(w)) return true;
+    //Lying down: wider, out to his joints on screen. Fully so for a figure 90 cm tall or less, not at all from 130 cm,
+    //smoothly in between, and never narrower than 90 cm.
+    const float reach = SkeletonWidth(v, ent) / 2 + 2.0f; //a joint's dark edge
+    double lo = 1e18, hi = -1e18;
+    float sx0 = 1e9f, sx1 = -1e9f;
+    for (const Vector3& j : ent.pose->j) {
+        double jx, jy, jz;
+        Vector2 s;
+        if (!skeleton::jointOk(j)) continue;
+        lo = std::min(lo, j.z); hi = std::max(hi, j.z);
+        v.toCamera(j, jx, jy, jz);
+        if (jz < View::NEAR || !v.project(j, s)) continue;
+        const float x = (float)std::clamp(s.x, v.rx - 60, v.rx + v.rw + 60);
+        sx0 = std::min(sx0, x - reach); sx1 = std::max(sx1, x + reach);
+    }
+    const float low = std::clamp((float)(130.0 - (hi - lo)) / 40.0f, 0.0f, 1.0f);
+    if (low > 0 && sx1 > sx0) {
+        const float l0 = cx - w / 2, r0 = cx + w / 2;
+        const float l = l0 + (std::min(l0, sx0) - l0) * low, r = r0 + (std::max(r0, sx1) - r0) * low;
+        cx = (l + r) / 2; w = r - l;
+    }
+    //The head marker keeps a size on screen it may not have in the world (a far player): the box reaches round it, so
+    //it never pokes out into the name above
+    Vector2 hc;
+    float hrx, hry;
+    const float t = SkeletonWidth(v, ent);
+    if (SkeletonShown(v, ent) && HeadOnScreen(v, *ent.pose, t, hc, hrx, hry)) {
+        const float top = (float)hc.y - hry - HeadReach(t) - 1;
+        if (top < y0) { h += y0 - top; y0 = top; }
+        const float l = std::min(cx - w / 2, (float)hc.x - hrx - HeadReach(t) - 1), r = std::max(cx + w / 2, (float)hc.x + hrx + HeadReach(t) + 1);
+        cx = (l + r) / 2; w = r - l;
+    }
     return true;
 }
 
@@ -507,37 +586,58 @@ inline std::vector<LabelRect> DrawEdgeArrows(const View& v, std::vector<EdgeArro
     return used;
 }
 
-//The stick figure: dark outline first so it shows on any background, then the colour. A line is drawn only when both of
-//its ends are in front of the camera.
-inline void DrawSkeleton(const View& v, const skeleton::Pose& pose, ImU32 color, float thickness) {
-    //color already carries the hidden-player dimming (dimHidden / hiddenAlpha): no second fade here
-    Vector2 s[skeleton::JOINT_COUNT];
-    bool ok[skeleton::JOINT_COUNT];
-    for (int k = 0; k < skeleton::JOINT_COUNT; k++) ok[k] = v.project(pose.j[k], s[k]) && std::isfinite(s[k].x + s[k].y);
-    const ImU32 dark = IM_COL32(0, 0, 0, 200);
-    for (int pass = 0; pass < 2; pass++)
-        for (int l = 0; l < skeleton::LINE_COUNT; l++) {
-            const int a = skeleton::LINES[l][0], b = skeleton::LINES[l][1];
-            if (!ok[a] || !ok[b]) continue;
-            if (pass == 0) DrawLine((float)s[a].x, (float)s[a].y, (float)s[b].x, (float)s[b].y, dark, thickness + 2.0f);
-            else DrawLine((float)s[a].x, (float)s[a].y, (float)s[b].x, (float)s[b].y, color, thickness);
-        }
+//The skeleton's colour (ESP tab, Skeleton colour): the box colour, white or yellow, as faint as the box (hidden players)
+inline ImU32 SkeletonColor(ImU32 box) {
+    const int c = (int)config::skeletonColor;
+    if (c <= 0) return box;
+    const ImU32 base = c == 2 && !COLOR::mono() ? IM_COL32(255, 230, 0, 255) : COLOR::white; //monochrome: white
+    return COLOR::withAlpha(base, (int)((box >> IM_COL32_A_SHIFT) & 0xFF));
+}
 
-    //The head: a ring around where the skull is, which is a little further up the neck's direction than the head bone
-    const Vector3& head = pose.j[skeleton::HEAD];
-    const Vector3& neck = pose.j[skeleton::NECK2];
-    Vector3 d(head.x - neck.x, head.y - neck.y, head.z - neck.z);
-    double len = std::sqrt(d.x * d.x + d.y * d.y + d.z * d.z);
-    if (!(len > 1e-3) || !std::isfinite(len)) { d = Vector3(0, 0, 1); len = 1; }
-    const double up = 12.0 / len; //the skull's centre is about 12 cm beyond the head bone
-    const Vector3 centre(head.x + d.x * up, head.y + d.y * up, head.z + d.z * up);
-    const Vector3 edge(centre.x + v.right.x * 9.0, centre.y + v.right.y * 9.0, centre.z + v.right.z * 9.0); //a head is about 9 cm in radius
-    Vector2 c, e;
-    if (v.project(centre, c) && v.project(edge, e) && std::isfinite(c.x + c.y + e.x + e.y)) {
-        const float r = (float)std::hypot(e.x - c.x, e.y - c.y); //across only: a stretched picture makes it sy/sx as tall
-        const float rx = std::max(2.0f, r), ry = std::max(2.0f, r * (float)(v.sy / v.sx));
-        DrawEllipseRing((float)c.x, (float)c.y, rx, ry, dark, thickness + 2.0f);
-        DrawEllipseRing((float)c.x, (float)c.y, rx, ry, color, thickness);
+//The stick figure: every dark outline first (lines, round joints, head), then every colour, so no outline cuts into a
+//line. Each joint is a round dot as wide as the lines (no notches at elbows and knees), the wrists a bigger dot.
+//Lines are cut at the camera and the screen's edge (View::projectSegment): a limb right next to the camera is still
+//drawn and never streaks across the screen. t: line thickness (SkeletonWidth); simple: 0 the full figure to 1 the simple
+//far figure (SkeletonSimple); guess: the pose is an estimate (the game is not animating him), so the head is a dashed ring.
+inline void DrawSkeleton(const View& v, const skeleton::Pose& pose, ImU32 color, float t, float simple = 0, bool guess = false) {
+    using namespace skeleton;
+    //color already carries the hidden-player dimming (dimHidden / hiddenAlpha): no second fade here
+    Pose p;
+    simplify(pose, simple, p);
+    const bool simpleOnly = simple >= 1; //every full line lies on a simple one now: the few simple lines look the same
+    const int n = simpleOnly ? SIMPLE_COUNT : LINE_COUNT;
+    const int (*lines)[2] = simpleOnly ? SIMPLE_LINES : LINES;
+    Vector2 a[LINE_COUNT], b[LINE_COUNT];
+    int segs = 0;
+    bool end[JOINT_COUNT] = {};
+    for (int l = 0; l < n; l++) {
+        const int ja = lines[l][0], jb = lines[l][1];
+        if (!jointOk(p.j[ja]) || !jointOk(p.j[jb]) || !v.projectSegment(p.j[ja], p.j[jb], a[segs], b[segs])) continue;
+        end[ja] = end[jb] = true;
+        segs++;
+    }
+    Vector2 dot[JOINT_COUNT];
+    bool hasDot[JOINT_COUNT];
+    for (int k = 0; k < JOINT_COUNT; k++) {
+        double x, y, z;
+        v.toCamera(p.j[k], x, y, z);
+        hasDot[k] = end[k] && z >= View::NEAR && v.project(p.j[k], dot[k]) && v.onPicture(dot[k]);
+    }
+    Vector2 c;
+    float rx = 0, ry = 0;
+    const bool head = HeadOnScreen(v, p, t, c, rx, ry) && v.onPicture(c, 60 + rx);
+    const bool filled = (int)config::headMarker == 1 && !guess;
+    const ImU32 dark = IM_COL32(0, 0, 0, 200);
+    for (int pass = 0; pass < 2; pass++) {
+        const ImU32 col = pass ? color : dark;
+        const float w = pass ? t : t + 4.0f, grow = pass ? 0.0f : 2.0f; //the dark edge: 2 px past every side
+        for (int i = 0; i < segs; i++) DrawLine((float)a[i].x, (float)a[i].y, (float)b[i].x, (float)b[i].y, col, w);
+        for (int k = 0; k < JOINT_COUNT; k++)
+            if (hasDot[k]) DrawCircleFilled((float)dot[k].x, (float)dot[k].y, (k == HAND_A || k == HAND_B ? 0.9f * t : t / 2) + grow, col);
+        if (!head) continue;
+        if (filled) DrawEllipseFilled((float)c.x, (float)c.y, rx + grow, ry + grow, col);
+        else if (guess) DrawEllipseDashes((float)c.x, (float)c.y, rx, ry, col, w);
+        else DrawEllipseRing((float)c.x, (float)c.y, rx, ry, col, w);
     }
 }
 
@@ -621,24 +721,38 @@ inline void DrawESP(const std::vector<RenderEntity>& entities, FminimalViewInfo 
                 continue;
             }
             const float x0 = bx - w / 2;
-            const float th = std::min(10.0f, std::max(1.0f, config::boxThickness));
+            const float th = BoxThickness();
             const float m = std::max(3.0f, th / 2 + 1); //how far the outline's dark edge reaches past the box (3 px up to th 4)
             const int style = (int)config::boxStyle;
-            if (style == 1) DrawBoxOutlined(x0, y0, w, h, color, th);
+            const bool skel = SkeletonShown(v, ent);
+            if (style == 3) { if (!skel) DrawBoxOutlined(x0, y0, w, h, color, th); } //Skeleton only: the full box for a player without one
+            else if (style == 1) DrawBoxOutlined(x0, y0, w, h, color, th);
             else if (style == 2) DrawSidesBox(x0, y0, w, h, color, th);
             else DrawCornerBox(x0, y0, w, h, color, th);
 
-            if (config::showSkeleton && ent.pose && dist <= config::skeletonMaxDist) DrawSkeleton(v, *ent.pose, color, th);
+            Vector2 headC;
+            bool headOk = false;
+            if (skel) {
+                const float st = SkeletonWidth(v, ent);
+                float hrx, hry;
+                DrawSkeleton(v, *ent.pose, SkeletonColor(color), st, SkeletonSimple(StandingBoxPx(v, ent.pos)), !ent.poseLive);
+                headOk = HeadOnScreen(v, *ent.pose, st, headC, hrx, hry);
+            }
 
-            //Which way he faces, seen from you: an arrow from the middle of the box, pointing down when he faces you.
-            //It stays inside the box, clear of his labels, except on a tiny far box: it is never under 12 px, so it still reads.
+            //Which way he faces, seen from you: an arrow from the middle of the box (from the head with a skeleton, not over
+            //the spine), pointing down when he faces you. It stays inside the box, clear of his labels, except on a tiny far
+            //box: it is never under 12 px, so it still reads.
             float fx = 0, fy = 0;
             const double toHim = std::atan2(ent.pos.y - vm.Location.y, ent.pos.x - vm.Location.x) * 180.0 / 3.14159265358979;
             if (config::showFacing && FacingOnScreen(ent.yaw, toHim, fx, fy)) {
-                const float mxs = bx, mys = y0 + h / 2;
                 //The head grows with the shaft (1.1 * tip wide vs lineT + 2 with the dark edge), so thick lines still read as an arrow
                 const float lineT = std::max(3.0f, th + 1.0f), len0 = std::clamp(std::min(w, h) * 0.4f, 12.0f, 40.0f);
                 const float tip = std::max({7.0f, len0 * 0.45f, 1.6f * (lineT + 2.0f)}), len = std::max(len0, tip);
+                float mxs = bx, mys = y0 + h / 2;
+                if (headOk) { //at the head, moved in just enough that the arrow stays in the box whichever way it points
+                    if (2 * len <= h) mys = std::clamp((float)headC.y, y0 + len, y0 + h - len);
+                    if (2 * len <= w) mxs = std::clamp((float)headC.x, x0 + len, x0 + w - len);
+                }
                 DrawFacingLine(mxs, mys, fx, fy, 0.0f, len - tip * 0.5f, color, lineT);
                 DrawArrow(mxs + fx * len, mys + fy * len, fx, fy, tip, color);
             }

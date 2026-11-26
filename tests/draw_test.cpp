@@ -70,6 +70,25 @@ int main() {
     CHECK(!View(cam(0, 0, 0, 0, 0, 0.0f), Projection{}).project(Vector3(1000, 0, 0), none), "and projects nothing");
     CHECK(!v.project(Vector3(-1000, 0, 0), none), "behind the camera is rejected");
 
+    //--- a line (a limb of the skeleton) cut where it goes behind the camera and where it leaves the picture plus 60 px
+    {
+        Vector2 a, b, pa, pb;
+        v.project(Vector3(1000, -100, 50), a);
+        v.project(Vector3(1200, 80, -40), b);
+        CHECK(v.projectSegment(Vector3(1000, -100, 50), Vector3(1200, 80, -40), pa, pb) && std::abs(pa.x - a.x) < 1e-9 && std::abs(pa.y - a.y) < 1e-9 &&
+              std::abs(pb.x - b.x) < 1e-9 && std::abs(pb.y - b.y) < 1e-9, "a line in front of the camera, on screen: its ends land where the points do");
+        auto inside = [](const Vector2& q) { return std::isfinite(q.x + q.y) && q.x >= -60.001 && q.x <= 2620.001 && q.y >= -60.001 && q.y <= 1500.001; };
+        CHECK(v.projectSegment(Vector3(300, 20, -10), Vector3(-200, -30, 15), pa, pb) && inside(pa) && inside(pb), "one end behind the camera: cut, and both ends on the picture");
+        CHECK(v.projectSegment(Vector3(300, 0, 0), Vector3(2, 40, 0), pa, pb) && std::abs(pa.x - 1280) < 1e-6 && std::abs(pb.x - 2620) < 1e-6 && std::abs(pb.y - 720) < 1e-6,
+              "an end 2 cm in front of the camera, off to the side: cut at the picture's edge (60 px out), no streak");
+        CHECK(!v.projectSegment(Vector3(-300, 0, 0), Vector3(-5, 10, 0), pa, pb), "both ends behind the camera: nothing");
+        CHECK(!v.projectSegment(Vector3(1000, 5000, 0), Vector3(1000, 6000, 0), pa, pb), "a line off to the side of the picture: nothing");
+        CHECK(v.projectSegment(Vector3(1000, -9000, 0), Vector3(1000, 9000, 0), pa, pb) && std::abs(pa.x + 60) < 1e-6 && std::abs(pb.x - 2620) < 1e-6 && std::abs(pa.y - 720) < 1e-6,
+              "a line across the whole view: cut at both edges");
+        CHECK(v.onPicture(Vector2(-59, 700)) && !v.onPicture(Vector2(-61, 700)) && v.onPicture(Vector2(10, 10), 0) && !v.onPicture(Vector2(1281, 1441), 0),
+              "on the picture: within 60 px of it");
+    }
+
     //--- a stretched picture: the game draws 1440x1080, the overlay is 2560x1440
     {
         FminimalViewInfo c2 = cam(0, 0, 0, 0, 0, 70);

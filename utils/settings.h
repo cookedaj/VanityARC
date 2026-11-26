@@ -49,6 +49,7 @@ inline std::vector<Entry>& table() {
         B("showArcNames", &config::showArcNames); B("showContainerNames", &config::showContainerNames);
         B("showItemNames", &config::showItemNames); B("labelCards", &config::labelCards);
         B("showSkeleton", &config::showSkeleton); B("dimHidden", &config::dimHidden); D("hiddenAlpha", &config::hiddenAlpha, 40, 255); B("showBars", &config::showBars); D("barStyle", &config::barStyle, 0, 2); B("barNumbers", &config::barNumbers); B("showFacing", &config::showFacing); D("skeletonMaxDist", &config::skeletonMaxDist, 20, 300);
+        D("headMarker", &config::headMarker, 0, 1); D("skeletonColor", &config::skeletonColor, 0, 2);
         B("showOffscreen", &config::showOffscreen); B("showArcOffscreen", &config::showArcOffscreen);
         B("showTeammates", &config::showTeammates);
         B("closeWarning", &config::closeWarning); D("warnDist", &config::warnDist, 5, 100);
@@ -56,7 +57,7 @@ inline std::vector<Entry>& table() {
         B("enableRadar", &config::enableRadar); B("showSelfHealth", &config::showSelfHealth);
         D("maxPlayerDist", &config::maxPlayerDist, 50, 800); D("maxArcDist", &config::maxArcDist, 20, 500);
         D("maxLootDist", &config::maxLootDist, 5, 150); D("nameMaxLootDist", &config::nameMaxLootDist, 3, 150);
-        D("boxStyle", &config::boxStyle, 0, 2); D("boxColor", &config::boxColor, 0, 5);
+        D("boxStyle", &config::boxStyle, 0, 3); D("boxColor", &config::boxColor, 0, 5);
         F("boxThickness", &config::boxThickness, 1, 10);
         F("overlayOpacity", &config::overlayOpacity, 0.2, 1); F("menuOpacity", &config::menuOpacity, 0.5, 1);
         D("trackerHz", &config::trackerHz, 30, 240);
