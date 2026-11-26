@@ -1304,34 +1304,36 @@ inline std::string DrawCloseEnemyWarning(const std::vector<RenderEntity>& entiti
     //top stays 18 px or more below the crosshair
     const float F = WarnFloor();
     cy = std::min(cy, std::max(F - extraBelow - hy - 2, (float)v.cy + hy + 20));
-    //The nearest enemy's box, bars and labels when DrawESP shows him: the card keeps off them (below), and so does
-    //LOW HEALTH. His box is the standing one (90 cm up and down from him), not his animated pose, so the card does not
-    //shake with every step he takes.
-    float bx, by, bw, bh;
-    RenderEntity standing = *nearest;
-    standing.pose = nullptr;
-    const bool showsHim = config::showPlayers && best <= config::maxPlayerDist && PlayerScreenBox(v, standing, bx, by, bw, bh);
-    LabelRect him{};
-    if (showsHim) {
+    //An enemy's box, bars and labels when DrawESP shows him (false when it does not). His box is the standing one (90 cm
+    //up and down from him), not his animated pose, so the card does not shake with every step he takes.
+    auto shownRect = [&](const RenderEntity& e, double dist, LabelRect& out) {
+        float bx, by, bw, bh;
+        RenderEntity standing = e;
+        standing.pose = nullptr;
+        if (!(config::showPlayers && dist <= config::maxPlayerDist && PlayerScreenBox(v, standing, bx, by, bw, bh))) return false;
         const float ls = config::labelSize, ls2 = SmallTextSize(0.9f);
         const float m = std::max(3.0f, std::min(10.0f, std::max(1.0f, config::boxThickness)) / 2 + 1); //as in DrawESP
         const float nameH = LineSlot(ls), linesH = 2 * LineSlot(ls2); //name above; distance and guns below (or above)
         float half = bw / 2 + 2 * m + BarsReach(); //the health and shield bars on the right, as wide as Text size makes them
         const float nh = config::showBars && config::barNumbers ? ls + 1 + std::max(2.0f, LabelReach(ls).y) : 0; //half the height of the bar numbers
         if (nh > 0) half += LabelSize("HP 100", ls).x + 8; //beside the bars, on either side
-        for (const std::string& s : {nearest->label, nearest->sub, std::string("999m")}) half = std::max(half, LabelSize(s.c_str(), ls).x / 2 + 4);
+        for (const std::string& s : {e.label, e.sub, std::string("999m")}) half = std::max(half, LabelSize(s.c_str(), ls).x / 2 + 4);
         //the bar numbers sit at his box's middle, under the name at the screen's top (DrawPlayerBars' minTop)
         const float numMid = nh > 0 ? std::max(by + bh / 2, nameH + 2 + nh) : by + bh / 2;
-        him = {bx - half, std::min(by - m, numMid - nh) - nameH - linesH, bx + half, std::max(by + bh + m, numMid + nh) + linesH};
-    }
+        out = {bx - half, std::min(by - m, numMid - nh) - nameH - linesH, bx + half, std::max(by + bh + m, numMid + nh) + linesH};
+        return true;
+    };
+    //The nearest enemy's: the card keeps off them (below), and so does LOW HEALTH
+    LabelRect him{};
+    const bool showsHim = shownRect(*nearest, best, him);
     //Under the crosshair, but kept on the screen (Shift X moves the crosshair sideways; FitSize made the card fit the
     //width; + the 3 px frame and its soft edge) and off the big HP/SH readout (its nearly black fill hid the shield
     //number): moved right just past it, as LOW HEALTH is. The widest readout counts, so the card does not move as the
     //numbers change. On a screen too narrow for both side by side, the card goes just under the readout (LOW HEALTH's
     //room under it still above the floor), or else just above it (its top still 18 px or more below the crosshair), or
     //else just under it without LOW HEALTH's room (LOW HEALTH then goes above the crosshair, but not when it would lie
-    //over the nearest enemy or the messages at the top there while it still fits under the card at the card's own place:
-    //drawn solid red over them, it hid his head or a message). Where none of these fits (a short screen and a long player
+    //over an enemy or the messages at the top there while it still fits under the card at the card's own place: drawn
+    //solid red over them, it hid his head or a message). Where none of these fits (a short screen and a long player
     //list: 1280x800 at Text size 40 with 5 or more players listed) the readout gives way: the card stays under the
     //crosshair, moved right as far as the screen allows, and covers part of the readout. It never goes over the
     //crosshair or the player list instead.
@@ -1350,11 +1352,21 @@ inline std::string DrawCloseEnemyWarning(const std::vector<RenderEntity>& entiti
         //is WARN_STICK_PX clear of them)
         const LabelRect up = LowHealthRect(LowHealthY(under + hy + 2, under - hy - 2));
         const float st = wasKept ? WARN_STICK_PX : 0;
-        const bool keepLow = cy + hy + 2 + extraBelow <= F && //at its own place, LOW HEALTH fits under the card
-                             (up.y0 - st < g_msgEnd || (showsHim && RectsOverlap(him, {up.x0 - st, up.y0 - st, up.x1 + st, up.y1 + st})));
+        const LabelRect upGrown{up.x0 - st, up.y0 - st, up.x1 + st, up.y1 + st};
+        //The card stays at its own place when LOW HEALTH fits under it there, and up there it would lie over the messages
+        //or over an enemy DrawESP shows: any of them, not only the nearest (one straight ahead, the nearest behind you)
+        auto keepLow = [&] {
+            if (cy + hy + 2 + extraBelow > F) return false;
+            if (up.y0 - st < g_msgEnd) return true;
+            for (const RenderEntity& e : entities) {
+                LabelRect r;
+                if (IsWarnedEnemy(e, localPlayerTeam) && shownRect(e, e.pos.Dist(vm.Location) / 100.0, r) && RectsOverlap(r, upGrown)) return true;
+            }
+            return false;
+        };
         if (under + hy + 2 + extraBelow <= F) cy = under;
         else if (over - hy - 2 >= (float)v.cy + 18) cy = over;
-        else if (under + hy + 2 <= F && keepLow) { movedOff = false; g_warnLowKept = true; }
+        else if (under + hy + 2 <= F && keepLow()) { movedOff = false; g_warnLowKept = true; }
         else if (under + hy + 2 <= F) cy = under;
         else movedOff = false;
     }

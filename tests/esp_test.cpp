@@ -1509,6 +1509,19 @@ int main() {
                               c.h, c.list, ahead / 100, box.y0, box.y1, low.y0, low.y1);
                 CHECK(shown && low.y1 > low.y0 && !RectsOverlap(low, box) && low.y1 <= c.list && !RectsOverlap(low, g_warnRect), msg);
             }
+            //...nor over an enemy straight ahead while the nearest is 9 m behind you (only the nearest was looked at)
+            for (const double ahead : {1000.0, 1200.0, 1500.0}) {
+                const std::vector<RenderEntity> two = {ent(Object::PLAYER, -900, 0, 0), ent(Object::PLAYER, ahead, 0, 0)};
+                g_warnSide = 0; g_warnBeside = false; g_warnLowKept = false; g_msgEnd = 0;
+                for (int f = 0; f < 3; f++) draw([&] { DrawWarnings(two, cam, 3, 20, 50, false); });
+                float bx, by, bw, bh;
+                RenderEntity standing = two[1];
+                const bool shown = PlayerScreenBox(View(cam, MakeProjection()), standing, bx, by, bw, bh);
+                const LabelRect box{bx - bw / 2, by, bx + bw / 2, by + bh}, low = g_lowHealthRect;
+                std::snprintf(msg, sizeof msg, "1280x%d, list from y %.0f, health 20, an enemy 9 m behind and one %.0f m ahead (box y %.0f-%.0f): LOW HEALTH (y %.0f-%.0f) is not over the one ahead",
+                              c.h, c.list, ahead / 100, box.y0, box.y1, low.y0, low.y1);
+                CHECK(shown && low.y1 > low.y0 && !RectsOverlap(low, box) && low.y1 <= c.list && !RectsOverlap(low, g_warnRect), msg);
+            }
             const std::vector<RenderEntity> behind = {ent(Object::PLAYER, -900, 0, 0)};
             g_toasts.clear();
             for (const char* t : {"Health 20, shield 50. 1 enemy within 40 meters. Nearest behind, 9 meters.", "Teammate marked: cooked", "F7 again to clear 2 marks"})
