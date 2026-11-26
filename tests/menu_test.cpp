@@ -59,9 +59,19 @@ int main() {
     for (int i = 0; i < 3; i++) frame([] { DrawMenu(); });
     CHECK(true, "menu draws the Settings page");
     auto yellow = [] { for (const ImDrawVert& v : ImGui::GetBackgroundDrawList()->VtxBuffer) if (v.col == GUIDE_YELLOW) return true; return false; };
-    CHECK(yellow(), "the Settings page draws the yellow game picture frame and centre cross");
+    ImGuiWindow* pageWin = nullptr;
+    for (ImGuiWindow* win : ImGui::GetCurrentContext()->Windows) if (std::strstr(win->Name, "##page")) pageWin = win;
+    bool guide = false; //scrolled down to the game view part
+    for (float at = 0; pageWin && !guide && at <= pageWin->ScrollMax.y + 100; at += 100) {
+        ImGui::SetScrollY(pageWin, at);
+        frame([] { DrawMenu(); }); frame([] { DrawMenu(); });
+        guide = yellow();
+    }
+    CHECK(guide, "the Settings page draws the yellow game picture frame and centre cross while its game view part is on screen");
+    const float settingsScroll = pageWin ? pageWin->Scroll.y : 0;
     g_MenuTab = 0; frame([] { DrawMenu(); });
     CHECK(!yellow(), "other pages do not draw the calibration guide");
+    CHECK(settingsScroll > 0 && pageWin->Scroll.y == 0, "another tab opens at the top of its page, not part way down the last one");
     g_OverlayNote.clear();
 
     //typing: Ctrl+click turns a menu slider into a number box, then keys arrive through the same queue the keyboard thread fills
