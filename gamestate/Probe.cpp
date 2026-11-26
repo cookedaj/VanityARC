@@ -505,8 +505,10 @@ void meshProbe(ptr pawn, FILE* out) {
 }
 
 //Bones: looks inside the skeletal mesh for lists (TArrays) of transforms: a unit quaternion at the start of each
-//record, then a position. The record size is tried as 0x30 (float), 0x50 and 0x60 (double). The height (z) of
-//every bone is printed too: the head is the highest, the feet the lowest, which labels the bone numbers.
+//record, then a position. The record size is tried as 0x30 (float), 0x50 and 0x60 (double). Each record is relative to
+//its parent bone, so for the player skeleton the bones are also chained (cm above the mesh origin): standing still, the
+//head is the highest and the feet the lowest, which labels the bone numbers (is the head bone 7 or 32?). The length of
+//each read bone's offset from its parent is printed too: it stays the same while animating, and skeleton.h checks it.
 void bonesProbeOne(ptr pawn, const char* who, FILE* out) {
     const ptr mesh = ReadMemory<ptr>(pawn + off::MESH);
     std::fprintf(out, "\n=== BONES PROBE: %s (pawn 0x%lx, mesh 0x%lx) ===\n", who, (unsigned long)pawn, (unsigned long)mesh);
@@ -544,13 +546,37 @@ void bonesProbeOne(ptr pawn, const char* who, FILE* out) {
             if (good * 10 < num * 9) continue;
             std::fprintf(out, "  mesh+0x%zx  TArray num %u max %u  record 0x%x (%s)  data 0x%lx\n", o, num, mx, stride, isDouble ? "double" : "float", (unsigned long)data);
             for (uint32_t i = 0; i < std::min<uint32_t>(num, 3); i++) { double t[3]; pos(i, t); std::fprintf(out, "    bone[%u] position %.1f %.1f %.1f\n", i, t[0], t[1], t[2]); }
-            std::fprintf(out, "    height of each bone (index:z):");
+            std::fprintf(out, "    z of each bone relative to its parent (index:z):");
             for (uint32_t i = 0; i < num; i++) { double t[3]; pos(i, t); std::fprintf(out, " %u:%.0f", i, t[2]); }
             std::fprintf(out, "\n");
             if (stride == 0x60 && num == (uint32_t)skeleton::BONES) { //the stick figure the overlay would draw, to check the bone numbers
                 skeleton::Xform local[skeleton::BONES], comp[skeleton::BONES];
+                bool ok[skeleton::BONES];
                 skeleton::decode(el.data(), local);
-                if (skeleton::chain(local, comp)) {
+                const bool all = skeleton::chain(local, comp, ok);
+                std::fprintf(out, "    chained height of each bone, cm above the mesh origin (index:z, ? = not a believable transform):");
+                for (int i = 0; i < skeleton::BONES; i++) {
+                    if (ok[i]) std::fprintf(out, " %d:%.0f", i, comp[i].t.z);
+                    else std::fprintf(out, " %d:?", i);
+                }
+                std::fprintf(out, "\n");
+                int top[3] = {-1, -1, -1}; //the three highest believable bones
+                for (int i = 0; i < skeleton::BONES; i++) {
+                    if (!ok[i]) continue;
+                    for (int k = 0; k < 3; k++) {
+                        if (top[k] >= 0 && comp[top[k]].t.z >= comp[i].t.z) continue;
+                        for (int m = 2; m > k; m--) top[m] = top[m - 1];
+                        top[k] = i;
+                        break;
+                    }
+                }
+                std::fprintf(out, "    highest bones (stand still for this; the head should be first, now drawn as bone %d):", skeleton::JOINT_BONE[skeleton::HEAD]);
+                for (int k : top) if (k >= 0) std::fprintf(out, "  %d at %.0f cm", k, comp[k].t.z);
+                std::fprintf(out, "\n    length of each read bone's offset from its parent (index:cm; the same in every report):");
+                for (const auto& rg : skeleton::READ_RANGES)
+                    for (int b = rg[0]; b <= rg[1]; b++) std::fprintf(out, " %d:%.1f", b, std::sqrt(local[b].t.Dot(local[b].t)));
+                std::fprintf(out, "\n");
+                if (all) {
                     static const struct { const char* name; int bone; } show[] = {{"pelvis", 1}, {"head", 7}, {"upper arm A", 9}, {"hand A", 11}, {"upper arm B", 43}, {"hand B", 45}, {"ankle A", 67}, {"ankle B", 71}};
                     std::fprintf(out, "    stick figure, cm from the mesh origin (x y z):");
                     for (const auto& s : show) std::fprintf(out, "  %s(%.0f %.0f %.0f)", s.name, comp[s.bone].t.x, comp[s.bone].t.y, comp[s.bone].t.z);
