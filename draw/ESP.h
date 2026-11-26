@@ -950,7 +950,11 @@ inline void DrawESP(const std::vector<RenderEntity>& entities, FminimalViewInfo 
                 DrawCross((float)sp.x, (float)sp.y, (float)rad, COLOR::deadPlayer());
                 snprintf(buf, sizeof buf, "%s  %.0fm", DOWN_WORD, dist);
                 QueueMarkerLabel((float)sp.x, (float)sp.y, (float)rad, buf, ls2, 2, dist);
-                if (config::showPlayerNames) QueueLabel((float)sp.x, (float)(sp.y - rad - 3 - LinePad(ls) - ls / 2), ent.label, ls, 1, dist);
+                //the name line as on a live player: TEAM or MARKED in the teammate colour, also with Player names off,
+                //so a down squad mate is told from a down enemy
+                if (config::showPlayerNames || mate)
+                    QueueLabel((float)sp.x, (float)(sp.y - rad - 3 - LinePad(ls) - ls / 2), PlayerNameText(config::showPlayerNames ? ent.label : std::string(), squad, marked),
+                               ls, 1, dist, false, 0, mate && !COLOR::mono() ? COLOR::mate() : COLOR::white);
                 continue;
             }
 

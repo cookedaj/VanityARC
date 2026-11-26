@@ -1651,6 +1651,15 @@ int main() {
         //two labels whose cards would touch-overlap side by side (6 px between their texts): only the first is drawn
         const int one = textOf([&] { QueueLabel(500, 500, "Trash can", 15, 3, 10); FlushLabels(); });
         const int two = textOf([&] { QueueLabel(500, 500, "Trash can", 15, 3, 10); QueueLabel(500 + ts.x + 6, 500, "Trash can", 15, 3, 11); FlushLabels(); });
+        //a down squad mate too: his cross and DOWN label look like a down enemy's, the name line tells them apart
+        RenderEntity downMate = mateP, downEnemy = enemyP;
+        downMate.isDead = downEnemy.isDead = true;
+        CHECK(textIn(downMate, COLOR::mate()) > 0 && textIn(downEnemy, COLOR::mate()) == 0 && textVerts({downMate}) > textVerts({downEnemy}),
+              "a down squad mate: TEAM before his name, in the teammate colour (a down enemy: neither)");
+        config::showPlayerNames = false;
+        const int downOffMate = textVerts({downMate}), downOffEnemy = textVerts({downEnemy});
+        config::showPlayerNames = true;
+        CHECK(downOffMate > downOffEnemy, "Player names off: a down squad mate still has TEAM by his cross");
         config::labelCards = false;
         CHECK(one > 0 && two == one, "label cards 6 px apart would overlap: the second one is left out");
         CHECK(std::abs(plain.x0 - (500 - ts.x / 2 - 2)) < 0.01f && std::abs(plain.y0 - (500 - 7.5f - 1)) < 0.01f &&
