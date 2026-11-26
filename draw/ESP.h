@@ -169,6 +169,10 @@ inline void Toast(const std::string& text, double seconds = 3.0) {
     g_toasts.push_back({text, until});
 }
 
+//Where a card of text at size, wanted with its middle at y, goes so that all of it (its top padding and light border too)
+//is on the screen: y, or just low enough to keep 2 px under the screen's top
+inline float OnScreenCardY(float y, const char* text, float size) { return std::max(y, LabelSize(text, size).y / 2 + CARD_PAD_Y + 2); }
+
 //Status card at the top, in the middle: its lines a little smaller than Text size, or in the full Text size with
 //Full-size small text. Never off the screen's top. Returns where the next thing can go.
 inline float DrawStatusCard(const std::string& line1, const std::string& line2, float y = 20) {
@@ -197,6 +201,7 @@ inline void DrawToast(float y, ImDrawList* dl = nullptr) {
     for (const ToastMsg& m : g_toasts) {
         const float half = LabelSize(m.text.c_str(), ls).y / 2 + CARD_PAD_Y;
         if (lastHalf >= 0) y += lastHalf + TOAST_GAP + half;
+        else y = OnScreenCardY(y, m.text.c_str(), ls); //the first one never off the screen's top
         DrawLabelCentered((float)config::SCREEN_W * 0.5f, y, m.text.c_str(), ls, COLOR::white, true, dl);
         lastHalf = half;
     }

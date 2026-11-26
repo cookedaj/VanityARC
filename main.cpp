@@ -320,7 +320,7 @@ int main() {
             const FullStrength solid; //whatever Overlay opacity says
             const float x = (float)config::SCREEN_W * 0.5f, ls = config::labelSize, big = ls * 1.3f;
             const std::string title = std::string("INSERT AND F-KEYS OFF: ") + kh.why;
-            float y = below + (big - ls) / 2;
+            float y = OnScreenCardY(below + (big - ls) / 2, title.c_str(), big); //never off the screen's top
             DrawLabelCentered(x, y, title.c_str(), big, COLOR::white, true);
             y += big / 2 + 8 + ls / 2;
             DrawLabelCentered(x, y, kh.fix, ls, COLOR::white, true);

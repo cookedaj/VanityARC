@@ -1429,6 +1429,15 @@ int main() {
             CHECK(health, msg);
             std::snprintf(msg, sizeof msg, "Text size 40 on %.0fx%.0f: the status card and a toast are drawn fully on the screen", scr.x, scr.y);
             CHECK(onScreen(), msg);
+            //nothing above them (main.cpp: the next free line at y 12 + 8): a toast, and the INSERT AND F-KEYS OFF card at
+            //1.3 x Text size, with their cards' top padding and light border on the screen too
+            draw([&] { DrawToast(12 + 8); });
+            const float toastTop = g_minY;
+            const std::string title = "INSERT AND F-KEYS OFF: no permission to read the keyboard";
+            draw([&] { DrawLabelCentered(scr.x * 0.5f, OnScreenCardY(20 + (52 - 40) / 2, title.c_str(), 52), title.c_str(), 52, COLOR::white, true); });
+            std::snprintf(msg, sizeof msg, "Text size 40 on %.0fx%.0f: a toast and the INSERT AND F-KEYS OFF card with nothing above them start on the screen (y %.1f, %.1f)",
+                          scr.x, scr.y, toastTop, g_minY);
+            CHECK(toastTop >= 0 && onScreen(), msg);
             //the close-enemy card for three enemies behind you, and the longest banner (GAME UPDATED at 1.6 x Text size)
             const std::vector<RenderEntity> three = {ent(Object::PLAYER, -900, 0, 0), ent(Object::PLAYER, -1100, 300, 0), ent(Object::PLAYER, -1300, -300, 0)};
             std::string said;
