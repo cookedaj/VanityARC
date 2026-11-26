@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include "ESP.h" //PlayerScreenBox
 #include "W2S.h"
 #include "../utils/localUtil.h"
 #include "../utils/marks.h"
@@ -36,14 +37,14 @@ inline MarkResult MarkNearestAtCrosshair(const std::vector<RenderEntity>& ents, 
     double d1 = 1e18, d2 = 1e18, dOut = 1e18; //dOut: the nearest player past the Players range
     for (const RenderEntity& e : ents) {
         if (e.type != Object::PLAYER) continue; //down players and your squad still count, so aiming at one never marks someone else
-        //The figure on screen: head (90 cm up) to feet (90 cm down); just the middle when one end is behind the camera
-        Vector3 top = e.pos, bot = e.pos;
-        top.z += 90; bot.z -= 90;
+        //The figure on screen: his box as the ESP draws it, top to bottom along its middle. It follows the pose, so a
+        //crouching player ends at his head, not 90 cm up where the player behind him may be. Just his middle when the box
+        //is not on the screen (or one end is behind the camera).
+        float cx, y0, w, h;
         Vector2 a, b;
-        if (!v.project(top, a) || !v.project(bot, b)) {
-            if (!v.project(e.pos, a)) continue;
-            b = a;
-        }
+        if (PlayerScreenBox(v, e, cx, y0, w, h)) { a = Vector2(cx, y0); b = Vector2(cx, y0 + h); }
+        else if (v.project(e.pos, a)) b = a;
+        else continue;
         const double ex = b.x - a.x, ey = b.y - a.y, len2 = ex * ex + ey * ey;
         const double t = len2 > 0 ? std::clamp(((v.cx - a.x) * ex + (v.cy - a.y) * ey) / len2, 0.0, 1.0) : 0.0;
         const double d = std::hypot(a.x + ex * t - v.cx, a.y + ey * t - v.cy);

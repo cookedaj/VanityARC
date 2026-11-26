@@ -222,6 +222,23 @@ int main() {
         std::vector<RenderEntity> aimFar = {player(2000, 40, "pppp"), player(60000, 0, "qqqq")}; //crosshair on the 600 m player
         CHECK(MarkNearestAtCrosshair(aimFar, v4, 7).kind == MarkResult::NoneNearby && !marks::isMarked("pppp") && !marks::isMarked("qqqq"),
               "aiming at a player past the players range never marks the nearer player beside him");
+        //A crouching player 5 m away: his figure (a pose 85 cm tall) ends about 130 px under the crosshair, though a
+        //standing-sized figure would reach 30 cm over it. Aiming over his head at the player 30 m behind marks that one.
+        auto crouched = [&](double x, double z, const char* account) {
+            RenderEntity e = player(x, 0, account);
+            e.pos.z = z;
+            auto pose = std::make_shared<skeleton::Pose>();
+            for (int k = 0; k < skeleton::JOINT_COUNT; k++) pose->j[k] = Vector3(x, 0, z - 90 + k * 85.0 / 22.0);
+            e.pose = pose;
+            return e;
+        };
+        std::vector<RenderEntity> overHead = {crouched(500, -60, "rrrr"), player(3000, 0, "ssss")};
+        overHead[1].pos.z = -60;
+        auto r5 = MarkNearestAtCrosshair(overHead, v4, 7);
+        CHECK(r5.kind == MarkResult::Marked && marks::isMarked("ssss") && !marks::isMarked("rrrr"),
+              "aiming just over a crouching player's head marks the player behind him (the figure follows the pose)");
+        std::vector<RenderEntity> chest = {crouched(500, 30, "tttt")};
+        CHECK(MarkNearestAtCrosshair(chest, v4, 7).kind == MarkResult::Marked && marks::isMarked("tttt"), "aiming at a crouching player marks him");
         marks::clear();
     }
 
