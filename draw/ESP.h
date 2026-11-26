@@ -40,6 +40,12 @@ inline Projection MakeProjection() {
     return p;
 }
 
+//How far down the screen the crosshair is: the middle of the game's picture, moved by Shift Y (as View's cy)
+inline float CrosshairY() {
+    const Projection p = MakeProjection();
+    return (float)(p.dy + (p.dh > 0 ? p.dh : p.height) / 2.0 + p.offY);
+}
+
 namespace COLOR {
     inline ImU32 red = IM_COL32(207, 56, 56, 255);
     inline ImU32 deadRed = IM_COL32(210, 120, 120, 255);   //a down player's cross: a light, greyish red, not the enemy red
@@ -215,10 +221,11 @@ inline bool ToastShowing() {
 }
 
 //The messages from y down (y: the middle of the first one's line), their cards TOAST_GAP px apart. dl: where to draw
-//(null: the background list; main.cpp passes the foreground list while the menu is open)
+//(null: the background list; main.cpp passes the foreground list while the menu is open). Returns the bottom of the last
+//one's card (y when none shows).
 constexpr float TOAST_GAP = 6;
-inline void DrawToast(float y, ImDrawList* dl = nullptr) {
-    if (!ToastShowing()) return;
+inline float DrawToast(float y, ImDrawList* dl = nullptr) {
+    if (!ToastShowing()) return y;
     const float ls = config::labelSize;
     float lastHalf = -1; //half the card height of the message above (-1: none yet)
     for (const ToastMsg& m : g_toasts) {
@@ -228,6 +235,7 @@ inline void DrawToast(float y, ImDrawList* dl = nullptr) {
         DrawLabelCentered((float)config::SCREEN_W * 0.5f, y, m.text.c_str(), ls, COLOR::white, true, dl);
         lastHalf = half;
     }
+    return y + lastHalf;
 }
 
 //Where a point is from the camera, flat (the camera's yaw only, so looking up or down changes nothing): f ahead and r to
@@ -371,6 +379,22 @@ inline float WarnFloor() {
 //arrows and labels keep off it: drawn later and solid red, it hid an enemy's red arrow under it.
 inline LabelRect g_lowHealthRect;
 
+//Where the messages and cards at the top of the screen start (main.cpp): at top, or 8 px under LOW HEALTH when it
+//reaches into where they went last frame and sits nearer the screen's top than the crosshair (a tall player list pushes
+//it up there), so its red card, drawn after them, never covers one. end: how far down they reached last frame, measured
+//as if they had started at top. under: they went under it last frame; they stay there until LOW HEALTH is a Text size
+//clear of them, so the few px the screen's top edge moves them by never make them jump back and forth.
+inline float MessagesTop(float top, float end, bool& under) {
+    const LabelRect& r = g_lowHealthRect; //one frame old
+    under = config::showSelfHealth && r.y1 > r.y0 && r.y0 < end + (under ? config::labelSize : 0) && r.y0 < CrosshairY() - r.y1;
+    return under ? std::max(top, r.y1 + 8) : top;
+}
+
+//Where the close-enemy card was drawn (set by DrawCloseEnemyWarning, one frame old; all zero when it is not shown). The
+//edge arrows keep off it: moved right beside the HP/SH readout it reaches to the screen's right edge, and drawn later
+//over every window it hid an enemy's arrow and distance there.
+inline LabelRect g_warnRect;
+
 //"Low health from" (ESP tab, YOUR HEALTH) as the menu shows it: a slider drag can stop between whole numbers (35.4 is
 //shown as 35), and %.0f rounds a half to even, as lrint does
 inline long LowHealthLine() { return std::lrint(config::lowHealthFrom); }
@@ -411,7 +435,8 @@ inline float LowHealthX(float y) {
 }
 
 //How far LOW HEALTH's bottom stays above the close-enemy card's top when it has to go above the card: the crosshair
-//(18 px or more above that card) stays free between them
+//(18 px or more above that card) stays free between them. A card further down (just under the HP/SH readout on a short,
+//narrow screen) counts as if its top were 18 px under the crosshair, so LOW HEALTH never goes over the crosshair.
 constexpr float LOW_HEALTH_ABOVE = 40;
 
 //Your own health and shield in big white text on a dark card, at the bottom left just above the game's health bar.
@@ -430,7 +455,8 @@ inline void DrawSelfReadout(double hp, double shield, ImDrawList* dl = nullptr) 
 
 //A big red LOW HEALTH card below the crosshair under Low health from. below / above: the bottom and top of the
 //close-enemy card (0: none); LOW HEALTH then goes right under it instead of on top of it (the card leaves LowHealthRoom
-//for it), or above it when the screen has no room left under it (a short screen, big text and a tall player list).
+//for it), or above it when the screen has no room left under it (a short screen, big text and a tall player list), and
+//then also above the crosshair (LOW_HEALTH_ABOVE).
 //Never under the player list (WarnFloor, also above the card) and never off the screen: when the list reaches almost
 //to the screen's top, at the top. Overlay opacity never fades it. dl: where it goes (null: the background list;
 //DrawWarnings passes the foreground list while the menu is closed, so it is drawn over the readout and the player list).
@@ -443,7 +469,7 @@ inline void DrawLowHealth(double hp, float below = 0, float above = 0, ImDrawLis
     const ImVec2 ts = LabelSize(warn, huge);
     const float half = ts.y / 2 + 6;
     float y = below > 0 ? below + 10 + half : (float)config::SCREEN_H * 0.62f;
-    if (below > 0 && above > 0 && y + half > WarnFloor()) y = above - LOW_HEALTH_ABOVE - half; //no room under the card
+    if (below > 0 && above > 0 && y + half > WarnFloor()) y = std::min(above, CrosshairY() + 18) - LOW_HEALTH_ABOVE - half; //no room under the card
     y = std::max(half, std::min(y, WarnFloor() - half));
     const float x = LowHealthX(y); //off the HP/SH readout
     if (!COLOR::mono()) //white on solid red; monochrome: white on the dark card
@@ -817,6 +843,7 @@ inline std::vector<LabelRect> DrawEdgeArrows(const View& v, std::vector<EdgeArro
     char buf[32];
     const LabelRect hpCard = config::showSelfHealth ? SelfHealthRect() : LabelRect{};
     const LabelRect lowCard = config::showSelfHealth ? g_lowHealthRect : LabelRect{};
+    const bool lowFirst = lowCard.y0 > g_warnRect.y0; //LOW HEALTH under the close-enemy card: checked before it
     for (const auto& e : edge) {
         const float grow = e.close ? CLOSE_ARROW_GROW : 1.0f;
         const float as = 15.0f * k * grow, half = 14.0f * k * grow; //arrow length, half its reserved square
@@ -835,12 +862,13 @@ inline std::vector<LabelRect> DrawEdgeArrows(const View& v, std::vector<EdgeArro
         const float y0 = (float)v.ry + half + 2, y1 = std::max(y0, (float)(v.ry + v.rh) - half - 2);
         float px = std::clamp((float)v.cx + (float)ux * t, x0, x1);
         float py = std::clamp((float)v.cy + (float)uy * t, y0, y1);
-        //Not under the player list, the HP readout or LOW HEALTH: just above it. When that would leave the picture (it
-        //reaches up to the screen's top: a tall player list, or LOW HEALTH put at the top over it), beside it instead,
-        //the nearer side first; with no room beside it either (a list as wide as the screen), as high as the picture
-        //allows, where the most of the arrow shows. In this order: LOW HEALTH is above the list or at the screen's top,
-        //so an arrow moved for one never lands under one checked before it.
-        for (const LabelRect& L : {g_listRect, hpCard, lowCard}) {
+        //Not under the player list, the HP readout, LOW HEALTH or the close-enemy card: just above it. When that would
+        //leave the picture (it reaches up to the screen's top: a tall player list, or LOW HEALTH put at the top over it),
+        //beside it instead, the nearer side first; with no room beside it either (a list as wide as the screen), as high
+        //as the picture allows, where the most of the arrow shows. In this order: LOW HEALTH and the card are above the
+        //list or at the screen's top, and of those two the lower one goes first, so an arrow moved for one never lands
+        //under one checked before it.
+        for (const LabelRect& L : {g_listRect, hpCard, lowFirst ? lowCard : g_warnRect, lowFirst ? g_warnRect : lowCard}) {
             if (!(L.x1 > L.x0 && px > L.x0 - m && px < L.x1 + m && py > L.y0 - m && py < L.y1 + m)) continue;
             const bool leftNearer = px - L.x0 < L.x1 - px;
             const float sideA = leftNearer ? L.x0 - m : L.x1 + m, sideB = leftNearer ? L.x1 + m : L.x0 - m;
@@ -1200,6 +1228,7 @@ inline std::string DrawCloseEnemyWarning(const std::vector<RenderEntity>& entiti
     const bool wasBeside = g_warnBeside;
     g_warnSide = 0;
     g_warnBeside = false;
+    g_warnRect = {};
     if (!config::closeWarning) return {};
     const View v(vm, MakeProjection());
     if (!v.ok) return {};
@@ -1244,7 +1273,11 @@ inline std::string DrawCloseEnemyWarning(const std::vector<RenderEntity>& entiti
     //width; + the 3 px frame and its soft edge) and off the big HP/SH readout (its nearly black fill hid the shield
     //number): moved right just past it, as LOW HEALTH is. The widest readout counts, so the card does not move as the
     //numbers change. On a screen too narrow for both side by side, the card goes just under the readout (LOW HEALTH's
-    //room under it still above the floor), or else just above it (its top still 18 px or more below the crosshair).
+    //room under it still above the floor), or else just above it (its top still 18 px or more below the crosshair), or
+    //else just under it without LOW HEALTH's room (LOW HEALTH then goes above the crosshair). Where none of these fits
+    //(a short screen and a long player list: 1280x800 at Text size 40 with 5 or more players listed) the readout gives
+    //way: the card stays under the crosshair, moved right as far as the screen allows, and covers part of the readout.
+    //It never goes over the crosshair or the player list instead.
     //ponytail: once moved below or above the nearest enemy on such a narrow screen, it can still reach over the readout.
     const LabelRect hpCard = config::showSelfHealth ? SelfHealthRect() : LabelRect{};
     const float gap = 8, xLo = hx + 3, xHi = std::max(xLo, (float)config::SCREEN_W - hx - 3);
@@ -1252,12 +1285,17 @@ inline std::string DrawCloseEnemyWarning(const std::vector<RenderEntity>& entiti
         return hpCard.x1 > hpCard.x0 && RectsOverlap({x - hx - 3 - g, y - hy - 2 - g, x + hx + 3 + g, y + hy + 2 + g}, hpCard);
     };
     const float centre = std::clamp((float)v.cx, xLo, xHi), beside = std::min(std::max(centre, hpCard.x1 + gap + hx + 3), xHi);
+    bool movedOff = false; //moved under or over the readout: clear of it, so no reason to be beside it
     if (onReadout(centre, cy, gap) && onReadout(beside, cy, gap)) {
         const float under = hpCard.y1 + gap + hy + 2, over = hpCard.y0 - gap - hy - 2;
+        movedOff = true;
         if (under + hy + 2 + extraBelow <= F) cy = under;
         else if (over - hy - 2 >= (float)v.cy + 18) cy = over;
+        else if (under + hy + 2 <= F) cy = under;
+        else movedOff = false;
     }
-    const float stickGap = wasBeside ? gap + WARN_STICK_PX : gap; //moved beside it last frame: it stays there a little longer
+    //moved beside it last frame: it stays there a little longer (not once moved under or over it)
+    const float stickGap = wasBeside && !movedOff ? gap + WARN_STICK_PX : gap;
     const bool besideHere = onReadout(centre, cy, stickGap);       //beside it at its own place: also once moved for him
     float cx = besideHere ? beside : centre;
     //Never over the nearest enemy when DrawESP shows him: below his box, bars and labels, above them when there is no
@@ -1314,6 +1352,7 @@ inline std::string DrawCloseEnemyWarning(const std::vector<RenderEntity>& entiti
     DrawLabelCentered(cx + aw / 2, cy, buf, size, COLOR::white, false, dl);
     if (bottom) *bottom = cy + hy + 2; //+ half the 3 px frame
     if (top) *top = cy - hy - 2;
+    g_warnRect = {cx - hx - 2, cy - hy - 2, cx + hx + 2, cy + hy + 2};
     return buf;
 }
 
@@ -1327,6 +1366,7 @@ inline void DrawWarnings(const std::vector<RenderEntity>& ents, FminimalViewInfo
     ImDrawList* const fg = ImGui::GetForegroundDrawList();
     ImDrawList* const self = menuOpen ? nullptr : fg;
     float warnBottom = 0, warnTop = 0;
+    g_lowHealthRect = g_warnRect = {}; //nothing left over from an earlier frame when one is switched off
     if (config::showSelfHealth) DrawSelfReadout(hp, shield, self); //old data: never called, never an old number
     if (config::espEnabled) DrawCloseEnemyWarning(ents, vm, localTeam, &warnBottom, LowHealthRoom(hp), fg, &warnTop);
     if (config::showSelfHealth) DrawLowHealth(hp, warnBottom, warnTop, self);

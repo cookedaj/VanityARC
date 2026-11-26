@@ -645,6 +645,45 @@ int main() {
         std::snprintf(msg, sizeof msg, "menu closed: the status card and the INSERT AND F-KEYS OFF card are drawn over a player list reaching the screen's top (y %.0f-%.0f)", list.y0, list.y1);
         CHECK(list.y0 < 40 && fgClosed > 0 && bgClosed == 0, msg);
         CHECK(fgOpen == 0 && bgOpen > 0, "menu open: the status card and the INSERT AND F-KEYS OFF card stay under the menu");
+        //...and at low health (High visibility's Text size 28, 14 or 16 List rows), where LOW HEALTH is pushed up to the
+        //screen's top and drawn after them: the messages and cards go under it (main.cpp's order), so its red card never
+        //covers the F9 message or a card. It covered the middle of both.
+        const float keepLs = config::labelSize;
+        const bool keepSelf = config::showSelfHealth;
+        config::labelSize = 28; config::showSelfHealth = true;
+        FminimalViewInfo cam{};
+        cam.FOV = 70.0f;
+        for (const int rows : {14, 16}) {
+            config::listRows = rows;
+            g_toasts.clear();
+            Toast("Health 20, shield 0. No enemies within 40 meters.", 60);
+            g_lowHealthRect = {};
+            float end = 0;
+            bool under = false;
+            int covered = 0, red = -1;
+            for (int i = 0; i < 4; i++)
+                frame([&] {
+                    DrawPlayerListWindow(false);
+                    ImDrawList* const msgs = TopMessageList(false);
+                    const float shift = MessagesTop(12, end, under) - 12;
+                    const float below = DrawHotkeyCard(DrawStatusCard("live", "60 fps", 12 + shift + 8, msgs), "no permission to read the keyboard", "Add yourself to the input group", msgs);
+                    end = DrawToast(below, ImGui::GetForegroundDrawList()) - shift;
+                    DrawWarnings(crowd, cam, 3, 20, 0, false);
+                    const auto& fv = ImGui::GetForegroundDrawList()->VtxBuffer;
+                    const LabelRect& lr = g_lowHealthRect;
+                    covered = 0; red = -1;
+                    for (int k = 0; k < fv.Size; k++) { //drawn before LOW HEALTH's red card, inside it: covered by it
+                        if (red < 0 && fv[k].col == COLOR::red) red = k;
+                        if (red < 0) covered += fv[k].pos.x > lr.x0 && fv[k].pos.x < lr.x1 && fv[k].pos.y > lr.y0 && fv[k].pos.y < lr.y1;
+                    }
+                });
+            std::snprintf(msg, sizeof msg, "%d List rows (list from y %.0f), health 20: LOW HEALTH (y %.0f-%.0f) covers none of the messages and cards at the top (%d vertices)",
+                          rows, g_listRect.y0, g_lowHealthRect.y0, g_lowHealthRect.y1, covered);
+            CHECK(red >= 0 && g_lowHealthRect.y0 < 40 && covered == 0, msg);
+        }
+        g_toasts.clear();
+        g_lowHealthRect = {};
+        config::labelSize = keepLs; config::showSelfHealth = keepSelf;
         config::menuTextSize = keepText; config::listRows = keepRows; config::listMode = keepMode;
         config::SCREEN_W = 2560; config::SCREEN_H = 1440; io.DisplaySize = ImVec2(1280, 1700);
         g_ui.ents = &fake;
