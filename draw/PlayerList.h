@@ -186,7 +186,7 @@ inline void DrawPlayerListWindow(bool menuOpen) {
                          ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing |
                          ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoBringToFrontOnFocus;
     if (!menuOpen) f |= ImGuiWindowFlags_NoInputs;
-    if (ImGui::Begin("##playerlist", nullptr, f)) DrawPlayerRows(std::max(1, (int)config::listRows));
+    if (ImGui::Begin("##playerlist", nullptr, f)) DrawPlayerRows(std::max(1, (int)std::lrint(config::listRows))); //as the menu shows it (%.0f), also a fraction saved before
     const ImVec2 wp = ImGui::GetWindowPos(), ws = ImGui::GetWindowSize();
     g_listRect = {wp.x, wp.y, wp.x + ws.x, wp.y + ws.y}; //the edge arrows and labels keep off it (see ESP.h)
     ImGui::End();

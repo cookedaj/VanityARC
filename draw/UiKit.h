@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <initializer_list>
 
@@ -138,11 +139,19 @@ inline bool SliderRow(const char* label, ImGuiDataType type, void* v, const void
     ImGui::TextUnformatted(label, LabelEnd(label));
     ImGui::SameLine(S(LABEL_W));
     ImGui::SetNextItemWidth(ControlW(S(70)));
-    //The track has no text on it (the handle would cover the number); the value is shown to the right
-    const bool changed = ImGui::SliderScalar("##v", type, v, lo, hi, "", ImGuiSliderFlags_AlwaysClamp);
+    //The track has no text on it (the handle would cover the number; ImGui draws nothing before "##"); the value is
+    //shown to the right. ImGui still rounds to fmt, so a drag or the arrow keys stop on the numbers shown (with "" a
+    //drag kept 7.63 for a List rows shown as 8). The arrow keys move a whole-number slider of up to 100 by 1.
+    char track[48];
+    std::snprintf(track, sizeof track, "##%s", fmt);
+    const bool changed = ImGui::SliderScalar("##v", type, v, lo, hi, track, ImGuiSliderFlags_AlwaysClamp);
     char text[48];
     if (type == ImGuiDataType_Float) std::snprintf(text, sizeof text, fmt, (double)*(float*)v);
     else std::snprintf(text, sizeof text, fmt, *(double*)v);
+    if (changed) { //a typed number too is kept as shown (35.4 typed into a whole-number slider is 35)
+        if (type == ImGuiDataType_Float) *(float*)v = (float)std::strtod(text, nullptr);
+        else *(double*)v = std::strtod(text, nullptr);
+    }
     ImGui::SameLine(0, S(12));
     ImGui::TextUnformatted(text);
     ImGui::PopID();

@@ -6,6 +6,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <set>
 //A throw-away folder under the system temp directory (tests never touch your real ~/.config/kwin-helper)
 static std::string testDir(const char* name) {
     return (std::filesystem::temp_directory_path() / (std::string("kwinhelper_test_") + name)).string();
@@ -140,6 +141,51 @@ int main() {
     press(KEY_A);
     MenuFeedKeys();
     { std::lock_guard<std::mutex> lk(g_KeyMutex); CHECK(g_KeyQueue.empty(), "key queue is drained when nobody is typing"); }
+
+    //---- a slider keeps the number it shows: a click or drag anywhere on it, or the arrow keys, leave no hidden fraction
+    //(List rows 7.63 was shown as 8 and drew 7 rows; Low health from 35.04 was shown as 35 and counted 35 as low)
+    {
+        double rows = 8;
+        auto rowsBox = [&] { ImGui::SetNextWindowSize(ImVec2(900, 120), ImGuiCond_Always); ImGui::Begin("rowsbox"); ui::SliderD("List rows", &rows, 3, 16, "%.0f"); ImGui::End(); };
+        for (int i = 0; i < 3; i++) frame(rowsBox);
+        ImGuiWindow* rw = ImGui::FindWindowByName("rowsbox");
+        const ImGuiID rid = ImGui::GetIDWithSeed("##v", nullptr, ImGui::GetIDWithSeed("List rows", nullptr, rw->ID));
+        float yy = -1, x0 = -1, x1 = -1;
+        for (float y = rw->Pos.y; y < rw->Pos.y + rw->Size.y && yy < 0; y += 2) {
+            io.AddMousePosEvent(rw->Pos.x + ui::LABEL_W + 40, y); frame(rowsBox); frame(rowsBox);
+            if (ImGui::GetCurrentContext()->HoveredId == rid) yy = y;
+        }
+        for (float x = rw->Pos.x; yy >= 0 && x < rw->Pos.x + rw->Size.x; x += 2) {
+            io.AddMousePosEvent(x, yy); frame(rowsBox);
+            if (ImGui::GetCurrentContext()->HoveredId == rid) { if (x0 < 0) x0 = x; x1 = x; }
+        }
+        int clicks = 0, fractions = 0;
+        std::set<double> seen;
+        for (int i = 0; x1 > x0 && i <= 60; i++) {
+            io.AddMousePosEvent(x0 + (x1 - x0) * i / 60.0f, yy); frame(rowsBox);
+            io.AddMouseButtonEvent(ImGuiMouseButton_Left, true); frame(rowsBox);
+            io.AddMouseButtonEvent(ImGuiMouseButton_Left, false); frame(rowsBox);
+            clicks++;
+            if (rows != std::round(rows)) { if (!fractions++) std::printf("      clicked to %.4f (shown as %.0f)\n", rows, rows); }
+            seen.insert(rows);
+        }
+        io.AddMousePosEvent(-1000, -1000); frame(rowsBox);
+        std::printf("      List rows: track %.0f..%.0f at y %.0f, %d clicks, %zu values\n", x0, x1, yy, clicks, seen.size());
+        CHECK(clicks > 0 && fractions == 0 && seen.size() >= 10, "a click anywhere on a slider leaves the number it shows (List rows 7.63 drew 7 rows under an 8)");
+        //the arrow keys, after Space on the focused slider: steps of 1, still whole numbers
+        rows = 8;
+        io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+        frame([&] { rowsBox(); ImGui::SetFocusID(rid, rw); ImGui::SetNavCursorVisible(true); }); //as Tab or the arrows leave it
+        frame(rowsBox);
+        auto key = [&](ImGuiKey k) { io.AddKeyEvent(k, true); frame(rowsBox); io.AddKeyEvent(k, false); frame(rowsBox); };
+        key(ImGuiKey_Space);
+        for (int i = 0; i < 3; i++) key(ImGuiKey_RightArrow);
+        std::printf("      List rows after Space and three right arrows: %.4f\n", rows);
+        key(ImGuiKey_Escape);
+        io.ConfigFlags &= ~ImGuiConfigFlags_NavEnableKeyboard;
+        frame(rowsBox);
+        CHECK(rows == 11, "the arrow keys move a whole-number slider by 1 (8 and three presses is 11)");
+    }
 
     //---- "Keyboard controls the menu": while the menu is open the keyboard is the menu's (Tab, Space, typed slider values, Esc)
     {
@@ -490,6 +536,15 @@ int main() {
               "player list: WHERE shows the distance and the side (ahead, left)");
         CHECK(shown.find("30 LOW") != std::string::npos && shown.find("60 LOW") == std::string::npos && shown.find("90 LOW") == std::string::npos,
               "player list: a health under Low health from is followed by LOW, others are not");
+        { //List rows as the menu shows it: 3.6 (a fraction saved by an older build) is shown as 4, so all four rows show
+            const double keepRows = config::listRows;
+            config::listRows = 3.6;
+            for (int i = 0; i < 3; i++) frame(logged);
+            int cooked = 0;
+            for (size_t at = shown.find("cooked"); at != std::string::npos; at = shown.find("cooked", at + 1)) cooked++;
+            config::listRows = keepRows;
+            CHECK(cooked == 2, "player list: List rows 3.6, shown in the menu as 4, lists 4 players (cooked and his body last)");
+        }
         auto list = [] { DrawPlayerListWindow(true); };
         int hits = 0;
         if (ImGuiWindow* pw = ImGui::FindWindowByName("##playerlist"))

@@ -785,6 +785,8 @@ int main() {
         config::showItemNames = true;
         config::valuableFrom = 20000;
         CHECK(!colours(far30).count(rgb(COLOR::gold)), "Valuable from 20000: a 14000 item is not highlighted");
+        config::valuableFrom = 14000.4; //saved by an older build: the menu shows 14000
+        CHECK(colours(far30).count(rgb(COLOR::gold)), "Valuable from 14000.4, shown as 14000: a 14000 item is highlighted");
         config::valuableFrom = 10000;
         //renamed in labels.txt ("Snap Hook = Hook"): its price is still found by the game's own name, and a price listed
         //by the internal name counts too, as in the inventory window

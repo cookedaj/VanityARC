@@ -1073,7 +1073,7 @@ inline void DrawESP(const std::vector<RenderEntity>& entities, FminimalViewInfo 
                 if (!KindShown(LootSwitches(), labels::KIND_COUNT, ent.itemKind)) continue; //Loot tab, GROUND ITEMS
                 if (config::highlightValuable && !ent.label.empty()) {
                     const long p = ItemPrice(ent.itemKey, ent.label, ent.gameName);
-                    if (p >= 0 && p >= config::valuableFrom) price = p;
+                    if (p >= 0 && p >= std::lrint(config::valuableFrom)) price = p; //the price the menu shows (%.0f)
                 }
                 color = price >= 0 ? COLOR::valuable() : COLOR::pickup(ent.itemKind);
                 radius = getProportionalRadius(dist, config::maxLootDist) * 1.25 * k; //the same for the triangle
