@@ -173,15 +173,38 @@ inline void Toast(const std::string& text, double seconds = 3.0) {
 //is on the screen: y, or just low enough to keep 2 px under the screen's top
 inline float OnScreenCardY(float y, const char* text, float size) { return std::max(y, LabelSize(text, size).y / 2 + CARD_PAD_Y + 2); }
 
+//Where the cards at the top of the screen go (main.cpp: GAME UPDATED, NO LIVE GAME DATA, the status card, the card
+//about Insert and the F-keys, the overlay window problem): while the menu is closed over every window, as the warnings
+//are (a player list with a big Menu text size and many List rows reaches the screen's top and hid them); while it is
+//open under the menu (on top they would block menu rows for long). The short messages always go over every window.
+inline ImDrawList* TopMessageList(bool menuOpen) { return menuOpen ? nullptr : ImGui::GetForegroundDrawList(); }
+
 //Status card at the top, in the middle: its lines a little smaller than Text size, or in the full Text size with
-//Full-size small text. Never off the screen's top. Returns where the next thing can go.
-inline float DrawStatusCard(const std::string& line1, const std::string& line2, float y = 20) {
+//Full-size small text. Never off the screen's top. Returns where the next thing can go. dl: where it goes (null: the
+//background list).
+inline float DrawStatusCard(const std::string& line1, const std::string& line2, float y = 20, ImDrawList* dl = nullptr) {
     const float x = (float)config::SCREEN_W * 0.5f, ls = config::labelSize, s1 = SmallTextSize(0.9f), s2 = SmallTextSize(0.8f);
     y = std::max(y, s1 / 2 + CARD_PAD_Y + 2);
-    DrawLabelCentered(x, y, line1.c_str(), s1, COLOR::white, true);
+    DrawLabelCentered(x, y, line1.c_str(), s1, COLOR::white, true, dl);
     y += (s1 + s2) / 2 + 0.15f * ls + 10; //Text size + 10 between their middles when they are 0.9 and 0.8 times it
-    if (!line2.empty()) { DrawLabelCentered(x, y, line2.c_str(), s2, COLOR::grey, true); y += s2 + 10; }
+    if (!line2.empty()) { DrawLabelCentered(x, y, line2.c_str(), s2, COLOR::grey, true, dl); y += s2 + 10; }
     return y;
+}
+
+//Insert cannot open the menu: the INSERT AND F-KEYS OFF card with why (1.3 x Text size), how to fix it and how to open
+//the menu meanwhile, fully solid whatever Overlay opacity says, its top never off the screen. y: the next free line at
+//the top. Returns where the next thing can go. dl: where it goes (null: the background list).
+inline float DrawHotkeyCard(float y, const char* why, const char* fix, ImDrawList* dl = nullptr) {
+    const FullStrength solid;
+    const float x = (float)config::SCREEN_W * 0.5f, ls = config::labelSize, big = ls * 1.3f;
+    const std::string title = std::string("INSERT AND F-KEYS OFF: ") + why;
+    y = OnScreenCardY(y + (big - ls) / 2, title.c_str(), big);
+    DrawLabelCentered(x, y, title.c_str(), big, COLOR::white, true, dl);
+    y += big / 2 + 8 + ls / 2;
+    DrawLabelCentered(x, y, fix, ls, COLOR::white, true, dl);
+    y += ls + 8;
+    DrawLabelCentered(x, y, "Open the menu meanwhile with:  pkill -USR1 -x kwin-helper", ls, COLOR::white, true, dl);
+    return y + ls + 10;
 }
 
 //Lets go of the messages whose time is up; true while any is left to show

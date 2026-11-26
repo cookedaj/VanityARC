@@ -616,6 +616,41 @@ int main() {
         frame([] { DrawUi(); });
     }
 
+    //while the menu is closed the cards at the top (the status card, the INSERT AND F-KEYS OFF card) are drawn over the
+    //player list: with High visibility's Menu text size 24 and 16 List rows, the list on a 1280x720 screen reaches the
+    //screen's top, and drawn over them with its 90 % black it hid them. With the menu open they stay under the menu.
+    {
+        static std::vector<RenderEntity> crowd(17, fake[0]);
+        for (int i = 0; i < 17; i++) { crowd[i].actor = 0x9000 + (ptr)i * 0x100; crowd[i].account = ""; crowd[i].pos = Vector3(3000.0 + 300 * i, 0, 0); }
+        const float keepText = config::menuTextSize;
+        const auto keepRows = config::listRows, keepMode = config::listMode;
+        config::menuTextSize = 24; config::listRows = 16; config::listMode = 1;
+        config::SCREEN_W = 1280; config::SCREEN_H = 720; io.DisplaySize = ImVec2(1280, 720);
+        g_ui.ents = &crowd;
+        auto cards = [&](bool menuOpen, int& bg, int& fg) {
+            for (int i = 0; i < 4; i++)
+                frame([&] {
+                    DrawPlayerListWindow(menuOpen);
+                    ImDrawList* const msgs = TopMessageList(menuOpen);
+                    DrawHotkeyCard(DrawStatusCard("live", "60 fps", 20, msgs), "no permission to read the keyboard", "Add yourself to the input group", msgs);
+                    bg = ImGui::GetBackgroundDrawList()->VtxBuffer.Size;
+                    fg = ImGui::GetForegroundDrawList()->VtxBuffer.Size;
+                });
+        };
+        int bgClosed = 0, fgClosed = 0, bgOpen = 0, fgOpen = 0;
+        cards(false, bgClosed, fgClosed);
+        const LabelRect list = g_listRect;
+        cards(true, bgOpen, fgOpen);
+        char msg[200];
+        std::snprintf(msg, sizeof msg, "menu closed: the status card and the INSERT AND F-KEYS OFF card are drawn over a player list reaching the screen's top (y %.0f-%.0f)", list.y0, list.y1);
+        CHECK(list.y0 < 40 && fgClosed > 0 && bgClosed == 0, msg);
+        CHECK(fgOpen == 0 && bgOpen > 0, "menu open: the status card and the INSERT AND F-KEYS OFF card stay under the menu");
+        config::menuTextSize = keepText; config::listRows = keepRows; config::listMode = keepMode;
+        config::SCREEN_W = 2560; config::SCREEN_H = 1440; io.DisplaySize = ImVec2(1280, 1700);
+        g_ui.ents = &fake;
+        g_listRect = {};
+    }
+
     //the High visibility preset: every value it sets is inside its saved range, and it is written to settings.txt
     {
         std::error_code ec;

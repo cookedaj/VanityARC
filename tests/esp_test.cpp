@@ -1498,8 +1498,7 @@ int main() {
             //1.3 x Text size, with their cards' top padding and light border on the screen too
             draw([&] { DrawToast(12 + 8); });
             const float toastTop = g_minY;
-            const std::string title = "INSERT AND F-KEYS OFF: no permission to read the keyboard";
-            draw([&] { DrawLabelCentered(scr.x * 0.5f, OnScreenCardY(20 + (52 - 40) / 2, title.c_str(), 52), title.c_str(), 52, COLOR::white, true); });
+            draw([&] { DrawHotkeyCard(12 + 8, "no permission to read the keyboard", "Add yourself to the input group, then log in again"); });
             std::snprintf(msg, sizeof msg, "Text size 40 on %.0fx%.0f: a toast and the INSERT AND F-KEYS OFF card with nothing above them start on the screen (y %.1f, %.1f)",
                           scr.x, scr.y, toastTop, g_minY);
             CHECK(toastTop >= 0 && onScreen(), msg);

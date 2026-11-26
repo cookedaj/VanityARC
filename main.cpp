@@ -278,17 +278,18 @@ int main() {
         if (live && config::espEnabled && !config::streamHide) DrawESP(ents, vm, snap->localPlayerTeam);
 
         float top = 12; //the next free line at the top middle of the screen
+        ImDrawList* const msgs = TopMessageList(g_MenuOpen); //over the player list while the menu is closed
         if (snap->gameUpdated) {
             //The game's build differs from the one config.h is for: shown all the time, big, whatever the debug switch says
             const float big = config::labelSize * 1.6f;
-            DrawLabelCentered((float)config::SCREEN_W * 0.5f, top + big / 2, "GAME UPDATED: MARKERS MAY BE WRONG", big, COLOR::white, true);
+            DrawLabelCentered((float)config::SCREEN_W * 0.5f, top + big / 2, "GAME UPDATED: MARKERS MAY BE WRONG", big, COLOR::white, true, msgs);
             top += big + 8;
         }
         float below = top + 8;
         if (!snap->gameFound) {
             //A card at top centre in the Text size (never under the old 14 px), the toast goes under it
             const float ws = std::max(14.0f, config::labelSize), y = top + ws / 2;
-            DrawLabelCentered((float)config::SCREEN_W * 0.5f, y, OBF("Waiting for ARC Raiders...").c_str(), ws, COLOR::white, true);
+            DrawLabelCentered((float)config::SCREEN_W * 0.5f, y, OBF("Waiting for ARC Raiders...").c_str(), ws, COLOR::white, true, msgs);
             below = y + ws / 2 + 10 + config::labelSize / 2;
         } else if (lost) {
             //The game runs but nothing has been live for a while: say so and why, big, whatever the debug switch says,
@@ -299,9 +300,9 @@ int main() {
             else std::snprintf(why, sizeof why, "%s", snap->fault ? snap->fault : "waiting for a raid");
             const float x = (float)config::SCREEN_W * 0.5f, ls = config::labelSize, big = ls * 1.6f;
             float y = top + big / 2;
-            DrawLabelCentered(x, y, "NO LIVE GAME DATA", big, COLOR::white, true);
+            DrawLabelCentered(x, y, "NO LIVE GAME DATA", big, COLOR::white, true, msgs);
             y += big / 2 + 8 + ls / 2;
-            DrawLabelCentered(x, y, why, ls, COLOR::white, true);
+            DrawLabelCentered(x, y, why, ls, COLOR::white, true, msgs);
             below = y + ls + 10;
         } else if (snap->gameFound && config::showDebugInfo) {
             const Tracker::Stats st = tracker.stats();
@@ -313,21 +314,10 @@ int main() {
             else std::snprintf(l1, sizeof l1, "live  -  %.0f Hz  -  data %.0f ms  -  %zu players", st.updatesPerSec, ageMs, players);
             std::snprintf(l2, sizeof l2, "%.0f fps   step %.2f ms   scan %.1f ms   %zu moving, %zu fixed",
                           (double)ImGui::GetIO().Framerate, st.stepMs, st.scanMs, st.dynamics, st.statics);
-            below = DrawStatusCard(l1, l2, below);
+            below = DrawStatusCard(l1, l2, below, msgs);
         }
         //Insert cannot open the menu: say why and how to fix it, big, for as long as it lasts (from the start, too)
-        if (const HotkeyHelp kh = HotkeyProblem(keyboards, g_KeyboardDenied, hadKeyboard); kh.why) {
-            const FullStrength solid; //whatever Overlay opacity says
-            const float x = (float)config::SCREEN_W * 0.5f, ls = config::labelSize, big = ls * 1.3f;
-            const std::string title = std::string("INSERT AND F-KEYS OFF: ") + kh.why;
-            float y = OnScreenCardY(below + (big - ls) / 2, title.c_str(), big); //never off the screen's top
-            DrawLabelCentered(x, y, title.c_str(), big, COLOR::white, true);
-            y += big / 2 + 8 + ls / 2;
-            DrawLabelCentered(x, y, kh.fix, ls, COLOR::white, true);
-            y += ls + 8;
-            DrawLabelCentered(x, y, "Open the menu meanwhile with:  pkill -USR1 -x kwin-helper", ls, COLOR::white, true);
-            below = y + ls + 10;
-        }
+        if (const HotkeyHelp kh = HotkeyProblem(keyboards, g_KeyboardDenied, hadKeyboard); kh.why) below = DrawHotkeyCard(below, kh.why, kh.fix, msgs);
         //A window setup problem (monitor name not found, no layer-shell): big on the overlay, not only in the terminal,
         //until the menu is opened. A different problem later (the surface made again) shows again.
         if (g_MenuOpen) noteSeen = g_OverlayNote;
@@ -335,14 +325,14 @@ int main() {
             const std::string body = g_OverlayNote + "\nOpen the menu (Insert) to hide this message";
             const float x = (float)config::SCREEN_W * 0.5f, ls = config::labelSize, big = ls * 1.6f, bh = LabelSize(body.c_str(), ls).y;
             float y = below + big / 2;
-            DrawLabelCentered(x, y, "OVERLAY WINDOW PROBLEM", big, COLOR::white, true);
+            DrawLabelCentered(x, y, "OVERLAY WINDOW PROBLEM", big, COLOR::white, true, msgs);
             y += big / 2 + 8 + bh / 2;
-            DrawLabelCentered(x, y, body.c_str(), ls, COLOR::white, true);
+            DrawLabelCentered(x, y, body.c_str(), ls, COLOR::white, true, msgs);
             below = y + bh / 2 + 10 + ls / 2;
         }
-        //The menu is the only thing drawn over the warnings; while it is open, the toast is drawn over it (the
-        //foreground list). LOW HEALTH stays under it: on top it would block menu rows for long.
-        DrawToast(below, g_MenuOpen ? ImGui::GetForegroundDrawList() : nullptr);
+        //The short messages go over every window (the foreground list): over the player list while the menu is closed,
+        //over the menu while it is open. LOW HEALTH stays under the menu: on top it would block menu rows for long.
+        DrawToast(below, ImGui::GetForegroundDrawList());
 
         //The close-enemy warning goes last, over every window (DrawWarnings); LOW HEALTH moves below it when both show
         //(above it when there is no room below). Old data: nothing, never an old number.
