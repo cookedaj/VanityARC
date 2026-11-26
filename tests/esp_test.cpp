@@ -1551,6 +1551,33 @@ int main() {
         ImGui::GetIO().DisplaySize = ImVec2((float)keepW, (float)keepH);
     }
 
+    //---- the HP/SH readout on a short scaled screen at Text size 36-40 (1920x1080 at 175% scaling is 1097x617, 1600x900
+    //at 150% is 1067x600, 1366x768 at 125% is 1093x614): 300 px above the screen's bottom it reached over the crosshair,
+    //and its nearly black card hid an enemy standing there. It now goes under the crosshair, still on the screen; where
+    //it was clear of the crosshair (1280x720 at Text size 40, 1097x617 at Text size 28) it stays where it was.
+    {
+        const float keepLs = config::labelSize;
+        const int keepW = config::SCREEN_W, keepH = config::SCREEN_H;
+        struct Case { int w, h; float ls; bool moves; };
+        for (const Case c : {Case{1097, 617, 40, true}, Case{1097, 617, 36, true}, Case{1067, 600, 36, true}, Case{1067, 600, 40, true},
+                             Case{1093, 614, 36, true}, Case{1280, 720, 40, false}, Case{1097, 617, 28, false}}) {
+            config::SCREEN_W = c.w; config::SCREEN_H = c.h; config::labelSize = c.ls;
+            ImGui::GetIO().DisplaySize = ImVec2((float)c.w, (float)c.h);
+            const float X = CrosshairX(), Y = CrosshairY();
+            const LabelRect wide = SelfHealthRect();
+            for (const char* text : {"HP 100   SH 100", "HP 100   SH 40", "HP 20"}) {
+                const LabelRect r = SelfHealthRect(text);
+                char msg[240];
+                std::snprintf(msg, sizeof msg, "%dx%d, Text size %.0f: the readout \"%s\" (x %.0f-%.0f y %.0f-%.0f) keeps 20 px off the crosshair (%.0f, %.0f), on the screen, %s",
+                              c.w, c.h, c.ls, text, r.x0, r.x1, r.y0, r.y1, X, Y, c.moves ? "moved down" : "where it was");
+                CHECK(!RectsOverlap(r, {X - 20, Y - 20, X + 20, Y + 20}) && r.y0 >= 0 && r.y1 <= c.h && r.y0 == wide.y0 &&
+                      (std::abs((r.y0 + r.y1) / 2 - (c.h - 300)) < 0.5f) != c.moves, msg);
+            }
+        }
+        config::labelSize = keepLs; config::SCREEN_W = keepW; config::SCREEN_H = keepH;
+        ImGui::GetIO().DisplaySize = ImVec2((float)keepW, (float)keepH);
+    }
+
     //---- an enemy's edge arrow at the close-enemy card's height: with the card moved right beside the readout (1366x768 at
     //Text size 36, the nearest enemy 9 m behind) it reaches to the screen's right edge, and drawn over everything it hid
     //the arrow and distance of a second enemy 40 m away to your right and a little behind. The arrow now steps above it.

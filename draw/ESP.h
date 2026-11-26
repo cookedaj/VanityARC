@@ -45,6 +45,11 @@ inline float CrosshairY() {
     const Projection p = MakeProjection();
     return (float)(p.dy + (p.dh > 0 ? p.dh : p.height) / 2.0 + p.offY);
 }
+//...and across: moved by Shift X (as View's cx)
+inline float CrosshairX() {
+    const Projection p = MakeProjection();
+    return (float)(p.dx + (p.dw > 0 ? p.dw : p.width) / 2.0 + p.offX);
+}
 
 namespace COLOR {
     inline ImU32 red = IM_COL32(207, 56, 56, 255);
@@ -417,10 +422,17 @@ inline float LowHealthRoom(double hp) {
 }
 
 //Where the big HP/SH readout's card is (4 px past the text's sides, 2 px past top and bottom). DrawESP keeps labels and
-//edge arrows off it; with no text, the widest readout.
+//edge arrows off it; with no text, the widest readout. Its middle is 300 px above the screen's bottom, or lower when the
+//widest readout would come within 20 px of the crosshair there (a short screen with a big Text size: 1920x1080 at 175%
+//scaling is 1097x617, where at Text size 40 its nearly black card hid the crosshair and an enemy standing there): then
+//its top goes 20 px under the crosshair, but never past the screen's bottom. The widest readout counts, so it does not
+//move as the numbers change.
 inline LabelRect SelfHealthRect(const char* text = "HP 100   SH 100") {
-    const ImVec2 ts = LabelSize(text, config::labelSize * 1.8f);
-    const float y = (float)config::SCREEN_H - 300;
+    const float size = config::labelSize * 1.8f, H = (float)config::SCREEN_H, gap = 20, cy = CrosshairY();
+    const ImVec2 ts = LabelSize(text, size), wide = LabelSize("HP 100   SH 100", size);
+    const float half = wide.y / 2 + 2;
+    float y = H - 300;
+    if (44 + wide.x + gap > CrosshairX() && y - half - gap < cy && y + half + gap > cy) y = std::max(y, std::min(cy + gap + half, H - half));
     return {36, y - ts.y / 2 - 2, 44 + ts.x, y + ts.y / 2 + 2};
 }
 
