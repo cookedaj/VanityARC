@@ -19,7 +19,7 @@ void refine(RenderEntity& e);
 //container or ground item, NONE otherwise. nullopt: names could not be read, so this actor tells nothing.
 std::optional<Object> kindByName(uintptr_t actor);
 
-//Sets e.label (and e.sub for players: "Rattler (held) + Stitcher", with a level when the gun's name has one: "AMP Canto (held)")
+//Sets e.label (and e.sub for players: "Rattler (held) + Stitcher 2": a stowed gun's level from its slot, "AMP Canto" from the name)
 void fill(RenderEntity& e);
 
 //An item's shown name from its key (labels::itemToken). A gun gets its level from the key: "Stitcher 4", "AMP Il Toro".
