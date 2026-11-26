@@ -380,6 +380,8 @@ int main() {
                       hovered.count(in("Shift Y steps", "+10")) && hovered.count(in("Reset calibration", "###arm")) && hovered.count(ImGui::GetIDWithSeed("Quit overlay", nullptr, pageId)), msg);
                 std::snprintf(msg, sizeof msg, "Settings tab (menu text %.0f px): the mouse reaches Speech speed and the Hotkeys (F6, F7, F9, F10) switch", text);
                 CHECK(hovered.count(slider("Speech speed")) && hovered.count(sw("Hotkeys (F6, F7, F9, F10)")), msg);
+                std::snprintf(msg, sizeof msg, "Settings tab (menu text %.0f px): the mouse reaches the Full-size small text switch", text);
+                CHECK(hovered.count(sw("Full-size small text")), msg);
             }
         }
         ImGuiWindow* mw = ImGui::FindWindowByName("kwin-helper");
@@ -465,9 +467,18 @@ int main() {
     {
         std::error_code ec;
         std::filesystem::remove(settings::path(), ec); //$HOME is the test folder (set above)
+        config::fullSizeText = false;
         ApplyHighVisibility();
         CHECK(config::labelSize == 28.0f && config::menuTextSize == 24.0f && config::boxThickness >= 4.0f && config::labelCards && config::boxStyle == 1 &&
               config::overlayOpacity == 1.0f && config::menuOpacity == 1.0f && config::hiddenAlpha >= 200, "High visibility sets the readable values");
+        CHECK(config::fullSizeText, "High visibility turns Full-size small text on (distances, guns and marker labels in the full text size)");
+        {   //its note says so
+            std::string shown;
+            g_MenuOpen = true; g_MenuTab = 0;
+            for (int i = 0; i < 3; i++) frame([&] { ImGui::LogToBuffer(); DrawMenu(); shown = G->LogBuffer.c_str(); ImGui::LogFinish(); });
+            g_MenuOpen = false;
+            CHECK(shown.find("Full-size small text on") != std::string::npos, "the High visibility note names Full-size small text");
+        }
         settings::clampAll();
         CHECK(config::labelSize == 28.0f && config::menuTextSize == 24.0f && config::boxThickness >= 4.0f && config::hiddenAlpha >= 200,
               "High visibility values are inside their safe ranges");
@@ -480,8 +491,10 @@ int main() {
         ApplyHighVisibility();
         ResetToHighVisibility();
         CHECK(config::showItemValues && config::labelSize == 28.0f, "High visibility and Reset to high visibility keep Show item values");
+        CHECK(config::fullSizeText, "Reset to high visibility: Full-size small text on");
         settings::resetAll();
         CHECK(!config::showItemValues, "Reset all settings turns Show item values off");
+        CHECK(!config::fullSizeText, "Reset all settings turns Full-size small text off");
     }
 
     //"Show item values": off, the inventory window shows no prices and does not read values.txt; on, it shows the total

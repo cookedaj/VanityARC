@@ -119,8 +119,16 @@ inline float FitSize(float size, float w, float room) {
     return w > room && room > 0 ? std::max(std::min(size, 15.0f), size * room / w) : size;
 }
 
-//Text centred on x. Plain: white with a black outline, readable over any background. Card: on a dark rectangle.
-//Never wider than the screen (see FitSize). dl: where to draw (null: the background list, under the menu)
+//How far a card reaches past its text: to the sides, and up and down
+constexpr float CARD_PAD_X = 4, CARD_PAD_Y = 2;
+//How far the black outline of plain text reaches past it: 1 px up to 17 px text, 2 px from 18 px, 3 px from 30 px
+inline float OutlineWidth(float size) { return std::max(1.0f, std::round(size / 12.0f)); }
+//The light border round a card: 1 px, 2 px from 18 px text
+inline float CardBorder(float size) { return size >= 18.0f ? 2.0f : 1.0f; }
+
+//Text centred on x. Plain: white with a black outline, readable over any background. Card: on a nearly solid dark
+//rectangle with a light border. Never wider than the screen (see FitSize). dl: where to draw (null: the background
+//list, under the menu)
 inline void DrawLabelCentered(float x, float y, const char* text, float size = 15.0f, ImU32 color = IM_COL32(255, 255, 255, 255), bool card = false,
                               ImDrawList* dl = nullptr) {
     ImFont* font = OverlayFont();
@@ -132,14 +140,19 @@ inline void DrawLabelCentered(float x, float y, const char* text, float size = 1
     ImVec2 p(x - ts.x / 2.0f, y - ts.y / 2.0f);
     if (!dl) dl = ImGui::GetBackgroundDrawList();
     if (card) {
-        dl->AddRectFilled(ImVec2(p.x - 4, p.y - 2), ImVec2(p.x + ts.x + 4, p.y + ts.y + 2), Fade(IM_COL32(0, 0, 0, 185)));
+        const ImVec2 a(p.x - CARD_PAD_X, p.y - CARD_PAD_Y), b(p.x + ts.x + CARD_PAD_X, p.y + ts.y + CARD_PAD_Y);
+        dl->AddRectFilled(a, b, Fade(IM_COL32(0, 0, 0, 230)));
+        //the border lies 1 px inside the card's edge (its soft edge reaches no further out than the card), so the card
+        //takes no more room than before and keeps a thin dark line round the light one
+        const float t = CardBorder(size), in = t / 2 + 0.5f;
+        dl->AddRect(ImVec2(a.x + in, a.y + in), ImVec2(b.x - in, b.y - in), Fade(IM_COL32(210, 210, 210, 255)), 0.0f, 0, t);
         dl->AddText(font, size, p, Fade(color), text);
         return;
     }
-    //The outline: the text in black on all 8 sides, 1 px out up to 17 px text and 2 px from 18 px, so big text keeps a
-    //solid edge against a bright sky or snow
+    //The outline: the text in black on all 8 sides (OutlineWidth), so big text keeps a solid edge against a bright sky
+    //or snow
     const ImU32 black = Fade(IM_COL32(0, 0, 0, 255));
-    const float o = std::max(1.0f, std::round(size / 12.0f));
+    const float o = OutlineWidth(size);
     for (int dx = -1; dx <= 1; dx++)
         for (int dy = -1; dy <= 1; dy++)
             if (dx || dy) dl->AddText(font, size, ImVec2(p.x + dx * o, p.y + dy * o), black, text);

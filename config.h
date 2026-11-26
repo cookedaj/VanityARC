@@ -42,6 +42,7 @@ namespace config {
     inline bool showItemNames = true;
     inline double nameMaxLootDist = 25 /*<-Dist in m. Loot names further away stay hidden so the screen is not cluttered*/;
     inline float labelSize = 15.0f;        //text size in px (10 to 40); Insert menu: Settings tab, LOOK, "Text size"
+    inline bool fullSizeText = false;      //Settings tab, LOOK, "Full-size small text": distances, guns, marker labels, the radar's ring ranges and the status card in the full Text size (off: 0.8 to 0.9 times it)
     inline bool showDebugInfo = false;     //"Status card": stats at the top middle of the screen (fps, update rate, counts), only while the game is found; Insert menu: Settings > Other > Status card
 
     //How things look (Insert menu: spread over the ESP, Players and Settings tabs)

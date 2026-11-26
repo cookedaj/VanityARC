@@ -25,6 +25,7 @@ int main() {
     settings::load(dir); //no file: the defaults, and they are captured now
     CHECK(settings::table().size() > 40, "the settings table is filled");
     CHECK(!config::showItemValues, "Show item values starts off");
+    CHECK(!config::fullSizeText, "Full-size small text starts off (distances and guns a little smaller, as before)");
     CHECK(config::showLootGuns && config::showLootMeds && config::showLootOther && config::showContainerMedical && config::showContainerOther &&
           !config::colorLootKinds && !config::highlightValuable && config::valuableFrom == 10000,
           "Loot tab: every kind and group starts on, colours by kind and the valuable highlight start off, valuable from 10000");
@@ -63,7 +64,7 @@ int main() {
     config::showLootGuns = false; config::showLootValuables = false; config::showContainerTrash = false;
     config::colorLootKinds = true; config::highlightValuable = true; config::valuableFrom = 25000;
     config::headMarker = 0; config::skeletonColor = 2; config::boxStyle = 3;
-    config::menuTextSize = 27; config::labelSize = 38;
+    config::menuTextSize = 27; config::labelSize = 38; config::fullSizeText = true;
     config::lowHealthFrom = 50; config::arcArrowDist = 120; config::speechRate = -20;
     settings::save(dir);
     config::maxArcDist = 50; config::boxColor = 0; config::monochrome = false; config::labelCards = false; config::overlayOpacity = 1.0f; config::trackerHz = 240;
@@ -72,11 +73,12 @@ int main() {
     config::showLootGuns = true; config::showLootValuables = true; config::showContainerTrash = true;
     config::colorLootKinds = false; config::highlightValuable = false; config::valuableFrom = 10000;
     config::headMarker = 1; config::skeletonColor = 0; config::boxStyle = 0;
-    config::menuTextSize = 15; config::labelSize = 15;
+    config::menuTextSize = 15; config::labelSize = 15; config::fullSizeText = false;
     config::lowHealthFrom = 35; config::arcArrowDist = 50; config::speechRate = 0;
     CHECK(settings::load(dir) == 0, "a file the overlay saved has no ignored lines");
     CHECK(config::lowHealthFrom == 50 && config::arcArrowDist == 120 && config::speechRate == -20, "Low health from, ARC arrow range and Speech speed are saved");
     CHECK(config::menuTextSize == 27.0f && config::labelSize == 38.0f, "Menu text size and a Text size above the old 28 are saved");
+    CHECK(config::fullSizeText, "Full-size small text is saved");
     CHECK(config::headMarker == 0 && config::skeletonColor == 2 && config::boxStyle == 3, "head marker, skeleton colour and the Skeleton only box style are saved");
     CHECK(config::maxArcDist == 222 && config::boxColor == 4 && config::monochrome && config::labelCards && std::abs(config::overlayOpacity - 0.7f) < 1e-6 && config::trackerHz == 90,
           "saved values come back after loading");
@@ -98,6 +100,7 @@ int main() {
           !config::highlightValuable && config::valuableFrom == 10000, "Reset: every kind and group on, no kind colours, no valuable highlight");
     CHECK(config::headMarker == 1 && config::skeletonColor == 0 && config::boxStyle == 0, "Reset: a filled head marker, the skeleton in the box colour, corner boxes");
     CHECK(config::menuTextSize == 15.0f && config::labelSize == 15.0f, "Reset: menu text and text size back to 15 px");
+    CHECK(!config::fullSizeText, "Reset: Full-size small text off");
     CHECK(config::lowHealthFrom == 35 && config::arcArrowDist == 50 && config::speechRate == 0,
           "Reset: LOW HEALTH under 35, ARC arrows within 50 m, your own speech speed");
 

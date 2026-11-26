@@ -156,12 +156,14 @@ inline bool ConfirmButton(const char* label, const char* confirm, double* armedA
     return yes;
 }
 
-//The readable setup in one go: text size at least 28, menu text size at least 24, box and skeleton lines at least 4 px
-//(the skeleton is never thinner than the box), full boxes, label cards, overlay and menu fully solid, hidden players at
-//least 200 (Hidden player opacity). Sizes only ever grow: bigger values the user picked stay. Saved at once.
+//The readable setup in one go: text size at least 28, menu text size at least 24, Full-size small text, box and skeleton
+//lines at least 4 px (the skeleton is never thinner than the box), full boxes, label cards, overlay and menu fully solid,
+//hidden players at least 200 (Hidden player opacity). Sizes only ever grow: bigger values the user picked stay. Saved
+//at once.
 inline void ApplyHighVisibility() {
     config::labelSize = std::max(config::labelSize, 28.0f);
     config::menuTextSize = std::max(config::menuTextSize, 24.0f);
+    config::fullSizeText = true; //distances, guns and marker labels in the full text size
     config::boxThickness = std::max(config::boxThickness, 4.0f); //only ever thicker
     config::labelCards = true;
     config::boxStyle = 1; //full rectangle
@@ -184,7 +186,7 @@ inline void HighVisibilityButton() {
     ImGui::PushFont(OverlayFont(), ui::S(22));
     if (ImGui::Button("High visibility", ImVec2(ui::S(320), ui::S(46)))) { ApplyHighVisibility(); Toast("High visibility on"); }
     ImGui::PopFont();
-    ui::Note("One click: text size at least 28, menu text size at least 24, box and skeleton lines at least 4 px, full boxes, label cards, overlay and menu fully solid, hidden players at least 200 (Hidden player opacity).");
+    ui::Note("One click: text size at least 28, menu text size at least 24, Full-size small text on, box and skeleton lines at least 4 px, full boxes, label cards, overlay and menu fully solid, hidden players at least 200 (Hidden player opacity).");
 }
 
 //--- the pages
@@ -471,9 +473,12 @@ inline void PageSettings() {
     Slider("Overlay opacity", &config::overlayOpacity, 0.2f, 1.0f, "%.2f");
     Slider("Menu opacity", &config::menuOpacity, 0.5f, 1.0f, "%.2f");
     Slider("Text size", &config::labelSize, 10.0f, 40.0f, "%.0f px");
+    Switch("Full-size small text", &config::fullSizeText);
     Slider("Menu text size", &config::menuTextSize, 15.0f, 30.0f, "%.0f px");
-    Note("Text size is for everything on the game picture. Menu text size is for this menu, the player list and the "
-         "inventory windows; it changes when you let go of the slider. Overlay opacity never fades the warnings: the "
+    Note("Text size is for everything on the game picture; markers, health bars, edge arrows and the radar grow with it "
+         "too. Full-size small text draws distances, guns, the names by markers, the radar's ring ranges and the status "
+         "card in the full Text size instead of a little smaller. Menu text size is for this menu, the player list and "
+         "the inventory windows; it changes when you let go of the slider. Overlay opacity never fades the warnings: the "
          "close enemy card, your health, LOW HEALTH, NO LIVE GAME DATA and the hotkey problem card stay fully solid.");
     Section("SPOKEN CUES");
     if (Switch("Say hotkey results and near enemies out loud", &config::soundCues) && config::soundCues) cue::say("Spoken cues on");

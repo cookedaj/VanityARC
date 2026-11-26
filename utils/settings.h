@@ -75,7 +75,7 @@ inline std::vector<Entry>& table() {
         F("centerOffsetX", &config::centerOffsetX, -300, 300); F("centerOffsetY", &config::centerOffsetY, -300, 300);
         B("gameViewAuto", &config::gameViewAuto); D("gameRenderW", &config::gameRenderW, 320, 8192);
         D("gameRenderH", &config::gameRenderH, 240, 8192); B("gameStretch", &config::gameStretch);
-        F("labelSize", &config::labelSize, 10, 40);
+        F("labelSize", &config::labelSize, 10, 40); B("fullSizeText", &config::fullSizeText);
         F("radarCenterX", &config::radarCenterX, 0, 8192); F("radarCenterY", &config::radarCenterY, 0, 8192);
         F("radarRadius", &config::radarRadius, 50, 300); F("scale", &config::scale, 10, 2000);
         return v;

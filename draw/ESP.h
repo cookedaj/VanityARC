@@ -42,9 +42,9 @@ inline Projection MakeProjection() {
 
 namespace COLOR {
     inline ImU32 red = IM_COL32(207, 56, 56, 255);
-    inline ImU32 darkred = IM_COL32(147, 36, 36, 255);
+    inline ImU32 deadRed = IM_COL32(210, 120, 120, 255);   //a down player's cross: a light, greyish red, not the enemy red
     inline ImU32 orange = IM_COL32(240, 168, 43, 255);
-    inline ImU32 darkorange = IM_COL32(120, 85, 21, 255);
+    inline ImU32 deadOrange = IM_COL32(190, 150, 100, 255); //destroyed ARC: a light, greyish orange, not the live ARC orange
     inline ImU32 green = IM_COL32(34, 189, 39, 255);
     inline ImU32 cyan = IM_COL32(39, 219, 217, 255);
     inline ImU32 white = IM_COL32(255, 255, 255, 255);
@@ -67,7 +67,10 @@ namespace COLOR {
         }
     }
     inline ImU32 mate() { return mono() ? grey : green; }
-    inline ImU32 arc(bool dead) { return mono() ? (dead ? IM_COL32(110, 110, 110, 150) : white) : (dead ? darkorange : orange); }
+    //Down players and destroyed ARC: solid, never faint; told apart from the living by their shape and the word on their
+    //label (DOWN, DEAD), and in monochrome by a mid grey instead of white
+    inline ImU32 deadGrey = IM_COL32(150, 150, 150, 255);
+    inline ImU32 arc(bool dead) { return mono() ? (dead ? deadGrey : white) : (dead ? deadOrange : orange); }
     inline ImU32 container() { return mono() ? IM_COL32(150, 150, 150, 170) : green; }
     //Ground items: cyan. With "Colour items by kind" (Loot tab) guns are magenta, ammo white, meds green and shields blue;
     //the rest stay cyan. Monochrome: light grey for all of them.
@@ -84,7 +87,7 @@ namespace COLOR {
     }
     inline ImU32 gold = IM_COL32(255, 215, 0, 255);
     inline ImU32 valuable() { return mono() ? white : gold; } //"Highlight valuable items" (Loot tab)
-    inline ImU32 deadPlayer() { return mono() ? IM_COL32(110, 110, 110, 150) : darkred; }
+    inline ImU32 deadPlayer() { return mono() ? deadGrey : deadRed; }
     inline ImU32 shieldBar() { return mono() ? IM_COL32(170, 170, 170, 255) : shield; }
 
     inline ImU32 withAlpha(ImU32 color, int alpha) {
@@ -105,9 +108,17 @@ inline void ESPInit() {
         COLOR::green = COLOR::withAlpha(COLOR::green, 128);
         COLOR::cyan = COLOR::withAlpha(COLOR::cyan, 128);
     }
-    if (config::makeDeadBotESPTranslucent) COLOR::darkorange = COLOR::withAlpha(COLOR::darkorange, 128);
-    if (config::makeDeadPlayerESPTranslucent) COLOR::darkred = COLOR::withAlpha(COLOR::darkred, 128);
+    if (config::makeDeadBotESPTranslucent) COLOR::deadOrange = COLOR::withAlpha(COLOR::deadOrange, 128);
+    if (config::makeDeadPlayerESPTranslucent) COLOR::deadRed = COLOR::withAlpha(COLOR::deadRed, 128);
 }
+
+//How much bigger markers, bars, edge arrows and the radar's lines and dots are drawn: they grow with Text size, and are
+//never smaller than at the 15 px default (1)
+inline float SizeScale() { return std::max(1.0f, config::labelSize / 15.0f); }
+
+//The size of the smaller text (distances, guns, the labels by markers, the radar's ring ranges, the status card): f times
+//Text size, or the full Text size with "Full-size small text" (Settings tab, LOOK)
+inline float SmallTextSize(float f) { return config::labelSize * (config::fullSizeText ? 1.0f : f); }
 
 //The Loot tab's switch for each kind of ground item (labels::Kind order) and each group of containers (labels::Group order)
 inline bool* const* LootSwitches() {
@@ -152,12 +163,14 @@ inline void Toast(const std::string& text, double seconds = 3.0) {
     g_toastUntil = ImGui::GetTime() + seconds;
 }
 
-//Status card at the top, in the middle. Returns where the next thing can go.
+//Status card at the top, in the middle: its lines a little smaller than Text size, or in the full Text size with
+//Full-size small text. Never off the screen's top. Returns where the next thing can go.
 inline float DrawStatusCard(const std::string& line1, const std::string& line2, float y = 20) {
-    const float x = (float)config::SCREEN_W * 0.5f, ls = config::labelSize;
-    DrawLabelCentered(x, y, line1.c_str(), ls * 0.9f, COLOR::white, true);
-    y += ls + 10;
-    if (!line2.empty()) { DrawLabelCentered(x, y, line2.c_str(), ls * 0.8f, COLOR::grey, true); y += ls * 0.8f + 10; }
+    const float x = (float)config::SCREEN_W * 0.5f, ls = config::labelSize, s1 = SmallTextSize(0.9f), s2 = SmallTextSize(0.8f);
+    y = std::max(y, s1 / 2 + CARD_PAD_Y + 2);
+    DrawLabelCentered(x, y, line1.c_str(), s1, COLOR::white, true);
+    y += (s1 + s2) / 2 + 0.15f * ls + 10; //Text size + 10 between their middles when they are 0.9 and 0.8 times it
+    if (!line2.empty()) { DrawLabelCentered(x, y, line2.c_str(), s2, COLOR::grey, true); y += s2 + 10; }
     return y;
 }
 
@@ -395,16 +408,36 @@ inline std::vector<PendingLabel>& PendingLabels() {
     return v;
 }
 
+//How far a label's card or outline reaches past its text (DrawLabelCentered): a card CARD_PAD_X to the sides and
+//CARD_PAD_Y up and down; plain text its outline, but never less than 2 px to the sides and 1 px up and down
+inline ImVec2 LabelReach(float size) {
+    if (config::labelCards) return ImVec2(CARD_PAD_X, CARD_PAD_Y);
+    const float o = OutlineWidth(size);
+    return ImVec2(std::max(2.0f, o), std::max(1.0f, o));
+}
+//How far apart lines of text stacked under each other are (a player's name, distance and guns; a marker label and the
+//one under it): pad above and below each line, then a 2 px gap. With cards the cards are 2 px apart; plain lines'
+//outlines just touch (pad 0 up to 17 px text)
+inline float LinePad(float size) { return config::labelCards ? CARD_PAD_Y : LabelReach(size).y - 1; }
+inline float LineSlot(float size) { return size + 2 * LinePad(size) + 2; }
+
+//The area a label covers on screen, its card or outline included, so neighbouring labels never overlap. ts: the text's
+//size (its height is the text size)
 inline LabelRect LabelAt(float x, float y, const ImVec2& ts) {
-    return {x - ts.x / 2 - 2, y - ts.y / 2 - 1, x + ts.x / 2 + 2, y + ts.y / 2 + 1};
+    const ImVec2 r = LabelReach(ts.y);
+    return {x - ts.x / 2 - r.x, y - ts.y / 2 - r.y, x + ts.x / 2 + r.x, y + ts.y / 2 + r.y};
 }
 
-//step: when the place is taken, try one and two steps further (in y), as long as that stays on the screen
-inline void QueueLabel(float x, float y, const std::string& text, float size, int prio, double dist, bool force = false, float step = 0) {
+//step: when the place is taken, try one and two steps further (in y), as long as that stays on the screen. The label
+//stays inside the screen's width: near the left or right edge it slides in (smoothly, never cut off). color: the text's.
+inline void QueueLabel(float x, float y, const std::string& text, float size, int prio, double dist, bool force = false, float step = 0,
+                       ImU32 color = IM_COL32(255, 255, 255, 255)) {
     if (text.empty()) return;
     const ImVec2 ts = LabelSize(text.c_str(), size);
+    const float edge = ts.x / 2 + LabelReach(size).x;
+    x = std::clamp(x, edge, std::max(edge, (float)config::SCREEN_W - edge));
     PendingLabel p;
-    p.x = x; p.y = y; p.size = size; p.text = text;
+    p.x = x; p.y = y; p.size = size; p.text = text; p.color = color;
     const LabelRect r = LabelAt(x, y, ts);
     p.box.x0 = r.x0; p.box.x1 = r.x1; p.box.y0 = r.y0; p.box.y1 = r.y1;
     p.box.prio = prio; p.box.dist = dist; p.box.force = force;
@@ -417,19 +450,27 @@ inline void QueueLabel(float x, float y, const std::string& text, float size, in
 }
 
 //A label for a round marker at (cx, cy): below it if that is free, else above, to the right, to the left, or lower.
-//At the bottom edge of the screen it goes above first. It stays 3 px clear of the marker, card included.
+//At the bottom edge of the screen it goes above first. It stays 3 px clear of the marker, card included. A place that
+//is not fully on the screen is not offered (the label moves to the next one, or is left out, instead of being cut off).
 inline void QueueMarkerLabel(float cx, float cy, float radius, const std::string& text, float size, int prio, double dist) {
     if (text.empty()) return;
     const ImVec2 ts = LabelSize(text.c_str(), size);
-    const float pad = config::labelCards ? 2.0f : 0.0f; //a card reaches 2 px past its text, top and bottom
-    const float gap = radius + 3 + pad + ts.y / 2, step = ts.y + 2 + 2 * pad;
+    const float W = (float)config::SCREEN_W, H = (float)config::SCREEN_H;
+    const float pad = LinePad(size);
+    const float gap = radius + 3 + pad + ts.y / 2, step = LineSlot(size);
     float first = cy + gap, second = cy - gap, out = step;
-    if (first + ts.y / 2 + pad > (float)config::SCREEN_H) { std::swap(first, second); out = -step; }
+    if (first + ts.y / 2 + pad > H) { std::swap(first, second); out = -step; }
     QueueLabel(cx, first, text, size, prio, dist);
     PendingLabel& p = PendingLabels().back();
-    const ImVec2 alts[4] = {ImVec2(cx, second), ImVec2(cx + radius + 8 + ts.x / 2, cy),
-                            ImVec2(cx - radius - 8 - ts.x / 2, cy), ImVec2(cx, first + out)};
-    for (const ImVec2& c : alts) { p.centers.push_back(c); p.box.alts.push_back(LabelAt(c.x, c.y, ts)); }
+    const float x = p.x; //above and below the marker: slid in from the screen's edge as QueueLabel did
+    const ImVec2 alts[4] = {ImVec2(x, second), ImVec2(cx + radius + 8 + ts.x / 2, cy),
+                            ImVec2(cx - radius - 8 - ts.x / 2, cy), ImVec2(x, first + out)};
+    constexpr float SLACK = 0.5f; //a place slid in to just touch the edge counts as on the screen, whatever the rounding
+    for (const ImVec2& c : alts) {
+        const LabelRect r = LabelAt(c.x, c.y, ts);
+        if (r.x0 < -SLACK || r.y0 < -SLACK || r.x1 > W + SLACK || r.y1 > H + SLACK) continue;
+        p.centers.push_back(c); p.box.alts.push_back(r);
+    }
 }
 
 //Keeps labels away from this area (an arrow, a panel) without drawing anything. body: an enemy's box, which only
@@ -577,15 +618,21 @@ inline bool PlayerScreenBox(const View& v, const RenderEntity& ent, float& cx, f
     return true;
 }
 
+//How wide one bar is beside a box h px tall: 2 to BAR_MAX_W px, times SizeScale() (wider with a bigger Text size). Both
+//bars side by side, their 3 px gap and dark edges reach BarsReach() past the box's outline.
+constexpr float BAR_MAX_W = 5;
+inline float BarWidth(float h) { return std::min(BAR_MAX_W, std::max(2.0f, h * 0.05f)) * SizeScale(); }
+inline float BarsReach() { return 2 * BAR_MAX_W * SizeScale() + 6; }
+
 //The bars on the right of a player box, as config::barStyle says: health (red to green) with the shield next to it;
 //health only; or one bar with the shield stacked on the health. The side shield bar is gone when the shield is used up
 //(or cannot be read). With config::barNumbers, "HP 85" and "SH 40" beside them in the text size, left of the box when the
 //screen's right edge is in the way, and never above minTop (the name's place at the screen's top). Returns the right
-//edge of the bars; text (if given) gets where the numbers went, and is left alone when there are none. gap: how far the
-//box's outline reaches past its edge; the bars' dark edge starts there.
+//edge of the bars; text (if given) gets where the numbers went (cards or outlines included), and is left alone when
+//there are none. gap: how far the box's outline reaches past its edge; the bars' dark edge starts there.
 inline float DrawPlayerBars(float x0, float y0, float w, float h, const RenderEntity& ent, float gap, LabelRect* text = nullptr,
                             float minTop = 0) {
-    const float bw = std::min(5.0f, std::max(2.0f, h * 0.05f));
+    const float bw = BarWidth(h);
     auto bar = [&](float bx, float frac, ImU32 col) {
         DrawRectFilled(bx - 1, y0 - 1, bx + bw + 1, y0 + h + 1, IM_COL32(0, 0, 0, 200));
         DrawRectFilled(bx, y0 + h - h * frac, bx + bw, y0 + h, col);
@@ -617,10 +664,11 @@ inline float DrawPlayerBars(float x0, float y0, float w, float h, const RenderEn
         if (style != 1 && hasShield) std::snprintf(shText, sizeof shText, "SH %.0f", std::clamp(ent.shield, 0.0, 99999.0));
         const float tw = std::max(LabelSize(hpText, ls).x, shText[0] ? LabelSize(shText, ls).x : 0.0f);
         const float W = (float)config::SCREEN_W, H = (float)config::SCREEN_H;
-        const float half = (shText[0] ? ls + 1 : ls / 2) + 2; //half the height of the lines, cards included
+        const ImVec2 reach = LabelReach(ls);
+        const float half = (shText[0] ? ls + 1 : ls / 2) + std::max(2.0f, reach.y); //half the height of the lines, cards included
         float nx = right + 4 + tw / 2;
-        if (nx + tw / 2 + 2 > W) nx = x0 - gap - 4 - tw / 2; //no room on the right: left of the box
-        nx = std::clamp(nx, tw / 2 + 2, std::max(tw / 2 + 2, W - tw / 2 - 2));
+        if (nx + tw / 2 + reach.x > W) nx = x0 - gap - 4 - tw / 2; //no room on the right: left of the box
+        nx = std::clamp(nx, tw / 2 + reach.x, std::max(tw / 2 + reach.x, W - tw / 2 - reach.x));
         //At the box's middle, on the screen. At the screen's top the name stays on the screen: the numbers go under it
         //(they slide down smoothly as the box rises, never jump)
         const float mid = std::clamp(y0 + h / 2, minTop + half, std::max(minTop + half, H - half));
@@ -630,7 +678,7 @@ inline float DrawPlayerBars(float x0, float y0, float w, float h, const RenderEn
         } else {
             DrawLabelCentered(nx, mid, hpText, ls, COLOR::white, config::labelCards);
         }
-        if (text) *text = {nx - tw / 2 - 2, mid - half, nx + tw / 2 + 2, mid + half};
+        if (text) *text = {nx - tw / 2 - reach.x, mid - half, nx + tw / 2 + reach.x, mid + half};
     }
     return right;
 }
@@ -666,7 +714,7 @@ inline std::vector<LabelRect> DrawEdgeArrows(const View& v, std::vector<EdgeArro
     std::sort(edge.begin(), edge.end(), [](const EdgeArrow& a, const EdgeArrow& b) { return a.dist < b.dist; });
     if (edge.size() > cap) edge.resize(cap);
     const float hx = std::max(20.0f, (float)v.rw / 2 - 46), hy = std::max(20.0f, (float)v.rh / 2 - 46); //edges of the game's picture
-    const float k = std::max(1.0f, config::labelSize / 15.0f); //grows with the text size, never below the 15 px default
+    const float k = SizeScale(); //grows with the text size
     char buf[32];
     const LabelRect hpCard = config::showSelfHealth ? SelfHealthRect() : LabelRect{};
     for (const auto& e : edge) {
@@ -695,13 +743,13 @@ inline std::vector<LabelRect> DrawEdgeArrows(const View& v, std::vector<EdgeArro
         const LabelRect tsq{sq.x0 - (float)ux * tail, sq.y0 - (float)uy * tail, sq.x1 - (float)ux * tail, sq.y1 - (float)uy * tail};
         if (avoid && std::any_of(avoid->begin(), avoid->end(), [&](const LabelRect& r) { return RectsOverlap(sq, r) || RectsOverlap(tsq, r); })) continue;
         std::snprintf(buf, sizeof buf, "%.0fm", e.dist);
-        //Far enough back to clear the arrow's own reserved square (half + LabelAt's 2 px x pad / 1 px y pad), or a
-        //wide or tall label would always be dropped; never closer than two arrow lengths (the old 30 px at k = 1). The
+        //Far enough back to clear the arrow's own reserved square (half + the label's card or outline, LabelReach), or
+        //a wide or tall label would always be dropped; never closer than two arrow lengths (the old 30 px at k = 1). The
         //distance is in the full Text size.
         const float ls = config::labelSize;
-        const ImVec2 ts = LabelSize(buf, ls);
+        const ImVec2 ts = LabelSize(buf, ls), reach = LabelReach(ls);
         const float ax = std::max(std::abs((float)ux), 1e-3f), ay = std::max(std::abs((float)uy), 1e-3f);
-        const float back = std::max(2.0f * as, tail + 1.0f + std::min((half + 2.0f + ts.x / 2) / ax, (half + 1.0f + ts.y / 2) / ay));
+        const float back = std::max(2.0f * as, tail + 1.0f + std::min((half + reach.x + ts.x / 2) / ax, (half + reach.y + ts.y / 2) / ay));
         const float lx = px - (float)ux * back, ly = py - (float)uy * back;
         if (e.arc) DrawKiteArrow(px, py, (float)ux, (float)uy, as, e.color);
         else DrawArrow(px, py, (float)ux, (float)uy, as, e.color);
@@ -794,14 +842,28 @@ inline LabelRect RadarPanel() {
     return {c.x - hw, c.y - top, c.x + hw, c.y + R + 14};
 }
 
+//A live player's name line: "TEAM  name" for your squad, "MARKED  name" for a player you marked as a teammate by hand
+//(F6 or the player list), so a teammate is told apart by a word and not only by colour (also in monochrome). Just the
+//word when there is no name to show.
+inline std::string PlayerNameText(const std::string& name, bool squad, bool marked) {
+    const char* tag = squad ? "TEAM" : marked ? "MARKED" : nullptr;
+    if (!tag) return name;
+    return name.empty() ? std::string(tag) : std::string(tag) + "  " + name;
+}
+
+//The label by a down player's cross ("DOWN  12m": a player at 0 health, as the player list says) and a destroyed ARC's
+//word ("DEAD  Tick  12m")
+constexpr const char* DOWN_WORD = "DOWN";
+constexpr const char* DEAD_WORD = "DEAD";
+
 inline void DrawESP(const std::vector<RenderEntity>& entities, FminimalViewInfo vm, int localPlayerTeam) {
     const View v(vm, MakeProjection());
     if (!v.ok) return;
     if (config::enableRadar) QueueReserve(RadarPanel()); //markers are drawn over the radar; labels move off it
     if (config::showSelfHealth) QueueReserve(SelfHealthRect()); //the HP readout is drawn later, over this spot
     const float W = (float)config::SCREEN_W, H = (float)config::SCREEN_H;
-    const float ls = config::labelSize, ls2 = config::labelSize * 0.9f;
-    const float pad = config::labelCards ? 2.0f : 0.0f; //a card reaches 2 px past its text, top and bottom
+    const float ls = config::labelSize, ls2 = SmallTextSize(0.9f);
+    const float k = SizeScale(); //markers grow with the text size
     auto onScreen = [&](double x, double y) { return x > -60 && x < W + 60 && y > -60 && y < H + 60; };
     std::vector<EdgeArrow> edge, arcEdge;
     char buf[64];
@@ -825,18 +887,19 @@ inline void DrawESP(const std::vector<RenderEntity>& entities, FminimalViewInfo 
         //To consider. 1) Dist, 2) dead?, 3) visible, 4) team
         if (ent.type == Object::PLAYER) {
             const bool squad = localPlayerTeam >= 0 && ent.teamID == localPlayerTeam;
-            const bool mate = squad || marks::isMarked(ent.account); //your squad, or marked by hand
+            const bool marked = marks::isMarked(ent.account);
+            const bool mate = squad || marked; //your squad, or marked by hand
             if (!config::showPlayers) continue;
             if (dist > config::maxPlayerDist) continue;
             if (squad && !config::showTeammates) continue; //a hand mark is always drawn (in the teammate colour): it may be stale
             if (!mate && config::hideUnknownTeams && localPlayerTeam < 0) continue; //no team to compare with
             if (ent.isDead) {
                 if (!config::showDeadPlayers || !front || !onScreen(sp.x, sp.y)) continue;
-                const double rad = getProportionalRadius(dist, config::maxPlayerDist);
+                const double rad = getProportionalRadius(dist, config::maxPlayerDist) * k;
                 DrawCross((float)sp.x, (float)sp.y, (float)rad, COLOR::deadPlayer());
-                snprintf(buf, sizeof buf, "%.0fm", dist);
+                snprintf(buf, sizeof buf, "%s  %.0fm", DOWN_WORD, dist);
                 QueueMarkerLabel((float)sp.x, (float)sp.y, (float)rad, buf, ls2, 2, dist);
-                if (config::showPlayerNames) QueueLabel((float)sp.x, (float)(sp.y - rad - 3 - pad - ls / 2), ent.label, ls, 1, dist);
+                if (config::showPlayerNames) QueueLabel((float)sp.x, (float)(sp.y - rad - 3 - LinePad(ls) - ls / 2), ent.label, ls, 1, dist);
                 continue;
             }
 
@@ -887,8 +950,13 @@ inline void DrawESP(const std::vector<RenderEntity>& entities, FminimalViewInfo 
 
             //name above, distance and guns below, clear of the box and its bar numbers and 2 px apart (cards included). With no room
             //below the box the distance and guns go above the name; the lines are kept on the screen. Players are always
-            //drawn: when crowded they move a line further out, and only over other labels when nothing is free.
-            const float nameH = config::showPlayerNames ? ls + 2 * pad + 2 : 0, lineH = ls2 + 2 * pad + 2; //a line and its gap
+            //drawn: when crowded they move a line further out, and only over other labels when nothing is free. A teammate's
+            //name line starts with TEAM or MARKED (PlayerNameText) and is in the teammate colour (white in monochrome, where
+            //the word tells them apart); it shows even with Player names off.
+            const std::string nameText = PlayerNameText(config::showPlayerNames ? ent.label : std::string(), squad, marked);
+            const bool nameLine = config::showPlayerNames || mate;
+            const float padN = LinePad(ls), padL = LinePad(ls2);
+            const float nameH = nameLine ? LineSlot(ls) : 0, lineH = LineSlot(ls2); //a line and its gap
             const float linesH = config::showPlayerGuns ? 2 * lineH : lineH;
             float right = x0 + w;
             LabelRect nums{x0, y0, x0, y0}; //where the bar numbers went (none: a point inside the box)
@@ -907,9 +975,9 @@ inline void DrawESP(const std::vector<RenderEntity>& entities, FminimalViewInfo 
                 nameTop = lineTop + linesH;
                 lineStep = -lineH;
             }
-            if (config::showPlayerNames) QueueLabel(bx, nameTop + pad + ls / 2, ent.label, ls, 0, dist, true, -nameH);
+            if (nameLine) QueueLabel(bx, nameTop + padN + ls / 2, nameText, ls, 0, dist, true, -nameH, mate && !COLOR::mono() ? COLOR::mate() : COLOR::white);
             snprintf(buf, sizeof buf, "%.0fm", dist);
-            const float below = lineTop + pad + ls2 / 2;
+            const float below = lineTop + padL + ls2 / 2;
             QueueLabel(bx, below, buf, ls2, 0, dist, true, lineStep);
             if (config::showPlayerGuns) QueueLabel(bx, below + lineH, ent.sub, ls2, 0, dist, true, lineStep);
         } else {
@@ -931,7 +999,7 @@ inline void DrawESP(const std::vector<RenderEntity>& entities, FminimalViewInfo 
                 if (ent.isTurret && !config::showTurrets) continue;
                 if (dist > config::maxArcDist) continue;
                 color = COLOR::arc(ent.isDead);
-                radius = getProportionalRadius(dist, config::maxArcDist) * 1.25; //a diamond covers 2 r^2: about the circle (pi r^2) it replaced
+                radius = getProportionalRadius(dist, config::maxArcDist) * 1.25 * k; //a diamond covers 2 r^2: about the circle (pi r^2) it replaced
                 prio = 1;
                 nameOn = config::showArcNames;
                 shape = DrawDiamondFilled;
@@ -939,7 +1007,7 @@ inline void DrawESP(const std::vector<RenderEntity>& entities, FminimalViewInfo 
                 if (!config::showContainers || dist > config::maxLootDist) continue;
                 if (!KindShown(ContainerSwitches(), labels::GROUP_COUNT, ent.itemKind)) continue; //Loot tab, CONTAINERS
                 color = COLOR::container();
-                radius = getProportionalRadius(dist, config::maxLootDist);
+                radius = getProportionalRadius(dist, config::maxLootDist) * k;
                 prio = 3;
                 nameOn = config::showContainerNames && dist <= config::nameMaxLootDist;
                 shape = DrawSquareFilled;
@@ -951,7 +1019,7 @@ inline void DrawESP(const std::vector<RenderEntity>& entities, FminimalViewInfo 
                     if (p >= 0 && p >= config::valuableFrom) price = p;
                 }
                 color = price >= 0 ? COLOR::valuable() : COLOR::pickup(ent.itemKind);
-                radius = getProportionalRadius(dist, config::maxLootDist) * 1.25; //the same for the triangle
+                radius = getProportionalRadius(dist, config::maxLootDist) * 1.25 * k; //the same for the triangle
                 if (price >= 0) radius *= 1.5; //a valuable item: bigger, and named anywhere within Loot range
                 prio = 2;
                 nameOn = price >= 0 || (config::showItemNames && dist <= config::nameMaxLootDist);
@@ -961,8 +1029,8 @@ inline void DrawESP(const std::vector<RenderEntity>& entities, FminimalViewInfo 
             }
 
             shape((float)sp.x, (float)sp.y, (float)radius, color);
-            std::string text;
-            if (nameOn && !ent.label.empty()) text = ent.label + "  ";
+            std::string text = ent.type == Object::ARC && ent.isDead ? std::string(DEAD_WORD) + "  " : std::string();
+            if (nameOn && !ent.label.empty()) text += ent.label + "  ";
             if (price >= 0) text += ShortPrice(price) + "  ";
             snprintf(buf, sizeof buf, "%.0fm", dist);
             text += buf;
@@ -1049,11 +1117,11 @@ inline std::string DrawCloseEnemyWarning(const std::vector<RenderEntity>& entiti
     standing.pose = nullptr;
     int newSide = 0;
     if (config::showPlayers && best <= config::maxPlayerDist && PlayerScreenBox(v, standing, bx, by, bw, bh)) {
-        const float ls = config::labelSize, ls2 = ls * 0.9f, pad = config::labelCards ? 2.0f : 0.0f;
+        const float ls = config::labelSize, ls2 = SmallTextSize(0.9f);
         const float m = std::max(3.0f, std::min(10.0f, std::max(1.0f, config::boxThickness)) / 2 + 1); //as in DrawESP
-        const float nameH = ls + 2 * pad + 2, linesH = 2 * (ls2 + 2 * pad + 2); //name above; distance and guns below (or above)
-        float half = bw / 2 + 2 * m + 16; //the health and shield bars on the right
-        const float nh = config::showBars && config::barNumbers ? ls + 3 : 0; //half the height of the bar numbers
+        const float nameH = LineSlot(ls), linesH = 2 * LineSlot(ls2); //name above; distance and guns below (or above)
+        float half = bw / 2 + 2 * m + BarsReach(); //the health and shield bars on the right, as wide as Text size makes them
+        const float nh = config::showBars && config::barNumbers ? ls + 1 + std::max(2.0f, LabelReach(ls).y) : 0; //half the height of the bar numbers
         if (nh > 0) half += LabelSize("HP 100", ls).x + 8; //beside the bars, on either side
         for (const std::string& s : {nearest->label, nearest->sub, std::string("999m")}) half = std::max(half, LabelSize(s.c_str(), ls).x / 2 + 4);
         //the bar numbers sit at his box's middle, under the name at the screen's top (DrawPlayerBars' minTop)
@@ -1095,21 +1163,37 @@ inline std::string DrawCloseEnemyWarning(const std::vector<RenderEntity>& entiti
     return buf;
 }
 
-//The radar: a panel with three rings, your own arrow, and the edges of your view
+//The radar: a panel with three rings (each with its range), your own arrow, and the edges of your view. Its lines grow
+//with the text size and are at least half solid (RADAR_LINE_ALPHA), so they show over a bright map.
+constexpr int RADAR_LINE_ALPHA = 120;
 inline void DrawRadar(const std::vector<RenderEntity>& entities, FminimalViewInfo cameraInfo, int localPlayerTeam) {
     const float R = config::radarRadius, ts = RadarTitleSize();
     const ImVec2 rc = RadarCenter();
     const float cx = rc.x, cy = rc.y;
     const double rangeM = R * config::scale / 100.0; //metres from the centre to the edge
+    const float k = SizeScale(); //lines and blips grow with the text size
+    const ImU32 line = IM_COL32(255, 255, 255, RADAR_LINE_ALPHA);
 
     //Panel, rings, crosshairs
     const LabelRect P = RadarPanel(); //wider and taller with the title, which follows Text size
     DrawRectFilled(P.x0, P.y0, P.x1, P.y1, IM_COL32(0, 0, 0, 150));
-    DrawRectOutline(P.x0, P.y0, P.x1, P.y1, IM_COL32(255, 255, 255, 70), 1.0f);
+    DrawRectOutline(P.x0, P.y0, P.x1, P.y1, line, 1.0f);
     DrawCircleFilled(cx, cy, R, IM_COL32(0, 0, 0, 110));
-    for (int i = 1; i <= 3; i++) DrawCircleRing(cx, cy, R * i / 3.0f, IM_COL32(255, 255, 255, i == 3 ? 90 : 35), 1.0f);
-    DrawLine(cx - R, cy, cx + R, cy, IM_COL32(255, 255, 255, 40), 1);
-    DrawLine(cx, cy - R, cx, cy + R, IM_COL32(255, 255, 255, 40), 1);
+    const float ringT = 1.5f * k, edgeT = 2.0f * k; //the inner rings and the cross; the outer ring
+    for (int i = 1; i <= 3; i++) DrawCircleRing(cx, cy, R * i / 3.0f, i == 3 ? IM_COL32(255, 255, 255, 200) : line, i == 3 ? edgeT : ringT);
+    DrawLine(cx - R, cy, cx + R, cy, line, ringT);
+    DrawLine(cx, cy - R, cx, cy + R, line, ringT);
+    //Each ring's range ("67m") just right of the line down the middle, inside the ring behind you. The inner two only
+    //when they fit between the rings (a big Text size on a small radar: the outer one alone)
+    const float rs = std::max(12.0f, SmallTextSize(0.8f));
+    for (int i = 3; i >= 1; i--) {
+        char t[24];
+        std::snprintf(t, sizeof t, "%.0fm", rangeM * i / 3.0);
+        const ImVec2 sz = LabelSize(t, rs);
+        if (i < 3 && sz.y + 2 * (ringT / 2 + OutlineWidth(rs)) + 2 > R / 3.0f) break;
+        const float lift = (i == 3 ? edgeT : ringT) / 2 + OutlineWidth(rs) + 2; //clear of its ring, outline included
+        DrawLabelCentered(cx + ringT / 2 + OutlineWidth(rs) + 2 + sz.x / 2, cy + R * i / 3.0f - lift - sz.y / 2, t, rs, COLOR::white);
+    }
 
     //What you can see: the edges of the view, drawn as two lines
     if (viewUsable(cameraInfo)) {
@@ -1118,15 +1202,15 @@ inline void DrawRadar(const std::vector<RenderEntity>& entities, FminimalViewInf
         if (!config::fovIsHorizontal) tanH *= (double)pr.width / std::max(1, pr.height);
         tanH /= std::max(0.01, pr.scale); //the Zoom calibration narrows or widens the view, as in View
         const float a = (float)std::atan(tanH);
-        DrawLine(cx, cy, cx - R * std::sin(a), cy - R * std::cos(a), IM_COL32(255, 255, 255, 70), 1);
-        DrawLine(cx, cy, cx + R * std::sin(a), cy - R * std::cos(a), IM_COL32(255, 255, 255, 70), 1);
+        const ImU32 view = IM_COL32(255, 255, 255, 170);
+        DrawLine(cx, cy, cx - R * std::sin(a), cy - R * std::cos(a), view, 2.0f * k);
+        DrawLine(cx, cy, cx + R * std::sin(a), cy - R * std::cos(a), view, 2.0f * k);
     }
 
     // Convert yaw from degrees to radians
     float yawRad = (cameraInfo.Rotation.y + 90.0f) * 3.14159265358979323846f / 180.0f;
     float cosA = cos(yawRad);
     float sinA = sin(yawRad);
-    const float k = std::max(1.0f, config::labelSize / 15.0f); //blips grow with the text size, never below the 15 px default
 
     for (const auto& ent : entities) {
         if (ent.type != Object::PLAYER && ent.type != Object::ARC) continue;
@@ -1134,6 +1218,10 @@ inline void DrawRadar(const std::vector<RenderEntity>& entities, FminimalViewInf
         if (ent.type == Object::ARC && !config::showArc) continue;
         if (std::hypot(ent.pos.x - cameraInfo.Location.x, ent.pos.y - cameraInfo.Location.y) / 100.0 > rangeM) continue; //beyond the radar range (flat: the radar is a 2D disk)
         if (ent.isDead) continue;
+        //the same switches as the main view: Teammates (a hand mark always shows), Turrets, Hide players with unknown team
+        if (ent.type == Object::PLAYER && localPlayerTeam >= 0 && ent.teamID == localPlayerTeam && !config::showTeammates) continue;
+        if (ent.type == Object::PLAYER && !IsTeammate(ent, localPlayerTeam) && config::hideUnknownTeams && localPlayerTeam < 0) continue;
+        if (ent.isTurret && !config::showTurrets) continue;
 
         float deltaX = ent.pos.x - cameraInfo.Location.x;
         float deltaY = ent.pos.y - cameraInfo.Location.y;
@@ -1165,11 +1253,16 @@ inline void DrawRadar(const std::vector<RenderEntity>& entities, FminimalViewInf
         if (ent.type == Object::ARC) DrawDiamondFilled(screenX, screenY, 5 * k, col);
         else if (mate) DrawCircleRing(screenX, screenY, 4.5f * k, col, 2.0f * k);
         else DrawCircleFilled(screenX, screenY, 5 * k, col);
+        //more than 3 m above or below you (HeightDir): a small caret over or under the dot, pointing up or down
+        if (const int up = HeightDir(cameraInfo, ent.pos)) {
+            const float cs = 5 * k;
+            DrawArrow(screenX, screenY - (float)up * (5 * k + 2 + cs), 0, -(float)up, cs, col);
+        }
     }
 
     DrawArrow(cx, cy - 7 * k, 0, -1, 10 * k, COLOR::white); //you, looking up
-    //In the middle of the title strip, drawn last so a facing line reaching up into the strip never covers it
-    DrawLabelCentered(cx, cy - R - 7 - ts / 2, RadarTitle().c_str(), ts, IM_COL32(190, 190, 190, 255));
+    //In the middle of the title strip, in white, drawn last so a facing line reaching up into the strip never covers it
+    DrawLabelCentered(cx, cy - R - 7 - ts / 2, RadarTitle().c_str(), ts, COLOR::white);
 }
 
 #endif //KWINHELPER_ESP_H

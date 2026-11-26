@@ -1219,6 +1219,299 @@ int main() {
         ImGui::GetStyle().AntiAliasedLinesUseTex = true;
     }
 
+    auto rgbOf = [](ImU32 c) { return c | IM_COL32_A_MASK; }; //anti-aliased edges share the colour at alpha 0
+    auto isText = [](const ImDrawVert& q) {
+        const ImVec2 wp = ImGui::GetDrawListSharedData()->TexUvWhitePixel;
+        return std::abs(q.uv.x - wp.x) > 1e-6f || std::abs(q.uv.y - wp.y) > 1e-6f;
+    };
+    //how many text vertices a drawing makes, and the area they cover
+    LabelRect textBox{};
+    auto textOf = [&](auto fn) {
+        int n = 0;
+        textBox = {1e9f, 1e9f, -1e9f, -1e9f};
+        draw([&] {
+            fn();
+            for (const ImDrawVert& q : ImGui::GetBackgroundDrawList()->VtxBuffer)
+                if (isText(q)) {
+                    n++;
+                    textBox = {std::min(textBox.x0, q.pos.x), std::min(textBox.y0, q.pos.y), std::max(textBox.x1, q.pos.x), std::max(textBox.y1, q.pos.y)};
+                }
+        });
+        return n;
+    };
+
+    //---- markers and bars grow with Text size: at 28 px about 28/15 times as big as at the 15 px default
+    {
+        auto widthOf = [&](const RenderEntity& e, ImU32 col) {
+            float x0 = 1e9f, x1 = -1e9f;
+            draw([&] {
+                DrawESP({e}, cam, 3);
+                for (const ImDrawVert& q : ImGui::GetBackgroundDrawList()->VtxBuffer)
+                    if (rgbOf(q.col) == rgbOf(col)) { x0 = std::min(x0, q.pos.x); x1 = std::max(x1, q.pos.x); }
+            });
+            return x1 - x0;
+        };
+        RenderEntity down = ent(Object::PLAYER, 1500, 300, 0);
+        down.isDead = true;
+        struct Marker { const char* what; RenderEntity e; ImU32 col; };
+        const Marker markers[] = {{"ARC diamond", ent(Object::ARC, 2000, 100, 0), COLOR::arc(false)},
+                                  {"container square", ent(Object::SEARCH, 1500, 100, 0), COLOR::container()},
+                                  {"item triangle", ent(Object::PICKUP, 1500, -200, 0), COLOR::pickup()},
+                                  {"down player's cross", down, COLOR::deadPlayer()}};
+        bool all = true;
+        for (const Marker& mk : markers) {
+            config::labelSize = 15; const float w15 = widthOf(mk.e, mk.col);
+            config::labelSize = 28; const float w28 = widthOf(mk.e, mk.col);
+            config::labelSize = 15;
+            std::printf("      %s: %.1f px wide at Text size 15, %.1f px at 28\n", mk.what, w15, w28);
+            all &= w15 > 0 && w28 > 1.7f * w15 && w28 < 1.95f * w15;
+        }
+        CHECK(all, "Text size 28: ARC diamonds, containers, items and down players' crosses are about 28/15 times as big as at 15");
+        RenderEntity p = ent(Object::PLAYER, 3000, 200, 0);
+        auto barWidth = [&] {
+            float x0 = 1e9f, x1 = -1e9f;
+            draw([&] {
+                DrawPlayerBars(1000, 500, 40, 100, p, 3);
+                for (const ImDrawVert& q : ImGui::GetBackgroundDrawList()->VtxBuffer)
+                    if (q.col == COLOR::health(1.0f)) { x0 = std::min(x0, q.pos.x); x1 = std::max(x1, q.pos.x); }
+            });
+            return x1 - x0;
+        };
+        const float bar15 = barWidth();
+        config::labelSize = 28;
+        const float bar28 = barWidth();
+        config::labelSize = 15;
+        std::printf("      health bar %.2f px wide at Text size 15, %.2f px at 28\n", bar15, bar28);
+        CHECK(std::abs(bar15 - BAR_MAX_W) < 0.01f && std::abs(bar28 - BAR_MAX_W * 28 / 15) < 0.01f, "the health bar is 5 px wide at Text size 15 and 28/15 times that at 28");
+        CHECK(BarsReach() == 16.0f, "at Text size 15 the close-enemy card keeps the same room for the bars as before (16 px)");
+        p.hasShield = true; p.shield = 50; p.shieldMax = 100;
+        config::labelSize = 40;
+        float right = 0;
+        draw([&] { right = DrawPlayerBars(1000, 500, 40, 100, p, 3); });
+        const float reach = BarsReach();
+        config::labelSize = 15;
+        std::printf("      bars reach %.2f px past the box at Text size 40, room %.2f\n", right - 1040, 3 + reach);
+        CHECK(right - 1040 > 30 && right - 1040 <= 3 + reach, "Text size 40: both wide bars fit in the room the close-enemy card keeps for them");
+    }
+
+    //---- Full-size small text: distances, guns, marker labels and the status card in the full Text size
+    {
+        config::labelSize = 20; config::showPlayerNames = false; config::showPlayerGuns = false;
+        std::vector<RenderEntity> box = {ent(Object::SEARCH, 1500, 100, 0)}, player = {ent(Object::PLAYER, 3000, 200, 0)};
+        box[0].label = "Trash can";
+        auto height = [&](auto fn) { textOf(fn); return textBox.y1 - textBox.y0; };
+        const float boxSmall = height([&] { DrawLabelCentered(500, 500, "Trash can  15m", 18); });
+        const float boxFull = height([&] { DrawLabelCentered(500, 500, "Trash can  15m", 20); });
+        const float distSmall = height([&] { DrawLabelCentered(500, 500, "30m", 18); });
+        const float distFull = height([&] { DrawLabelCentered(500, 500, "30m", 20); });
+        const float cardSmall = height([&] { DrawLabelCentered(500, 500, "live", 18, COLOR::white, true); });
+        const float cardFull = height([&] { DrawLabelCentered(500, 500, "live", 20, COLOR::white, true); });
+        const float boxOff = height([&] { DrawESP(box, cam, 3); }), distOff = height([&] { DrawESP(player, cam, 3); });
+        const float cardOff = height([&] { DrawStatusCard("live", ""); });
+        config::fullSizeText = true;
+        const float boxOn = height([&] { DrawESP(box, cam, 3); }), distOn = height([&] { DrawESP(player, cam, 3); });
+        const float cardOn = height([&] { DrawStatusCard("live", ""); });
+        config::fullSizeText = false;
+        config::labelSize = 15; config::showPlayerNames = true; config::showPlayerGuns = true;
+        std::printf("      text heights off/on: marker label %.1f/%.1f, distance %.1f/%.1f, status card %.1f/%.1f\n", boxOff, boxOn, distOff, distOn, cardOff, cardOn);
+        CHECK(std::abs(boxOff - boxSmall) < 0.5f && std::abs(distOff - distSmall) < 0.5f && std::abs(cardOff - cardSmall) < 0.5f,
+              "Full-size small text off: a marker label, a player's distance and the status card are 0.9 times Text size, as before");
+        CHECK(boxFull > boxSmall + 1 && std::abs(boxOn - boxFull) < 0.5f && std::abs(distOn - distFull) < 0.5f && std::abs(cardOn - cardFull) < 0.5f,
+              "Full-size small text on: they are in the full Text size");
+        config::labelSize = 40; config::fullSizeText = true;
+        draw([&] { DrawStatusCard("live", "60 fps"); });
+        config::labelSize = 15; config::fullSizeText = false;
+        CHECK(g_verts > 0 && g_minY >= 0, "Text size 40 with Full-size small text: the status card stays on the screen's top");
+    }
+
+    //---- the radar: solid, thicker lines, a white title, ring ranges, height carets, and the main view's switches
+    {
+        auto radar = [&](const std::vector<RenderEntity>& l, int team = 3) { return draw([&] { DrawRadar(l, cam, team); }); };
+        const int empty = radar({});
+        RenderEntity squad = ent(Object::PLAYER, 2000, 300, 0, 3), turret = ent(Object::ARC, 2500, -300, 0), enemy = ent(Object::PLAYER, 2000, -500, 0, 5);
+        turret.isTurret = true;
+        config::showTeammates = false;
+        const int squadOff = radar({squad});
+        config::showTeammates = true;
+        const int squadOn = radar({squad});
+        config::showTeammates = false;
+        marks::setMarked("radar-mark", true);
+        RenderEntity marked = enemy; marked.account = "radar-mark";
+        const int markedOff = radar({marked});
+        marks::setMarked("radar-mark", false);
+        CHECK(squadOff == empty && squadOn > empty && markedOff > empty, "radar: a squad mate only with Teammates on (as on screen); a hand mark always");
+        config::showTurrets = false;
+        const int turretOff = radar({turret});
+        config::showTurrets = true;
+        CHECK(turretOff == empty && radar({turret}) > empty, "radar: no turrets with Turrets off");
+        config::hideUnknownTeams = true;
+        const int unknown = radar({enemy}, -1), known = radar({enemy}, 3);
+        config::hideUnknownTeams = false;
+        CHECK(unknown == empty && known > empty, "radar: Hide players with unknown team hides them on the radar too");
+        RenderEntity high = enemy, low = enemy;
+        high.pos.z = 500; low.pos.z = -500;
+        const int level = radar({enemy});
+        CHECK(radar({high}) > level && radar({low}) > level, "radar: a caret on a dot more than 3 m above or below you");
+        int faint = 0;
+        bool greyTitle = false;
+        draw([&] {
+            DrawRadar({}, cam, 3);
+            for (const ImDrawVert& q : ImGui::GetBackgroundDrawList()->VtxBuffer) {
+                const int a = (int)(q.col >> 24);
+                if (rgbOf(q.col) == rgbOf(COLOR::white) && a > 0 && a < RADAR_LINE_ALPHA) faint++;
+                if (isText(q) && rgbOf(q.col) == IM_COL32(190, 190, 190, 255)) greyTitle = true;
+            }
+        });
+        CHECK(faint == 0 && !greyTitle, "radar: every line is at least half solid and the title is white");
+        ImGui::GetStyle().AntiAliasedLinesUseTex = false; //lines then use the white pixel too, so only letters count as text
+        const int radarText = textOf([&] { DrawRadar({}, cam, 3); });
+        ImGui::GetStyle().AntiAliasedLinesUseTex = true;
+        int ringsText = textOf([&] { DrawLabelCentered(500, 500, RadarTitle().c_str(), RadarTitleSize(), COLOR::white); });
+        for (const char* t : {"67m", "133m", "200m"}) ringsText += textOf([&] { DrawLabelCentered(500, 500, t, 12); });
+        std::printf("      radar text vertices %d, title and three ranges %d\n", radarText, ringsText);
+        CHECK(config::radarRadius * config::scale / 100 == 200 && radarText == ringsText, "radar: each of the three rings is labelled with its range (67m, 133m, 200m)");
+        config::labelSize = 40;
+        draw([&] { DrawRadar({}, cam, 3); });
+        const LabelRect panel = RadarPanel();
+        config::labelSize = 15;
+        CHECK(g_finite && g_minX >= panel.x0 - 1 && g_maxX <= panel.x1 + 1 && g_maxY <= panel.y1 + 1, "radar at Text size 40: rings, ranges and title stay in the panel");
+    }
+
+    //---- teammates are told apart by a word, not only by colour: TEAM or MARKED before the name, in the teammate colour
+    {
+        CHECK(PlayerNameText("Someone", true, false) == "TEAM  Someone" && PlayerNameText("Someone", false, true) == "MARKED  Someone" &&
+              PlayerNameText("Someone", true, true) == "TEAM  Someone" && PlayerNameText("Someone", false, false) == "Someone" &&
+              PlayerNameText("", false, true) == "MARKED", "name line: TEAM for your squad, MARKED for a hand mark, the name alone for anyone else");
+        config::showTeammates = true;
+        RenderEntity mateP = ent(Object::PLAYER, 3000, 200, 0, 3), enemyP = ent(Object::PLAYER, 3000, 200, 0, 5);
+        mateP.label = enemyP.label = "Someone"; mateP.sub = enemyP.sub = "Ferro";
+        auto textIn = [&](const RenderEntity& e, ImU32 col) {
+            int n = 0;
+            draw([&] { DrawESP({e}, cam, 3); for (const ImDrawVert& q : ImGui::GetBackgroundDrawList()->VtxBuffer) n += isText(q) && q.col == col; });
+            return n;
+        };
+        CHECK(textIn(mateP, COLOR::mate()) > 0 && textIn(enemyP, COLOR::mate()) == 0, "a teammate's name is drawn in the teammate colour, an enemy's is not");
+        const int mateText = textVerts({mateP}), enemyText = textVerts({enemyP});
+        config::monochrome = true;
+        const int monoMate = textVerts({mateP}), monoEnemy = textVerts({enemyP});
+        config::monochrome = false;
+        CHECK(mateText > enemyText && monoMate > monoEnemy, "a teammate's name line has the word TEAM, also in monochrome");
+        marks::setMarked("esp-mark", true);
+        RenderEntity markedP = enemyP; markedP.account = "esp-mark";
+        const int markedText = textVerts({markedP});
+        const bool markedGreen = textIn(markedP, COLOR::mate()) > 0;
+        marks::setMarked("esp-mark", false);
+        CHECK(markedText > mateText && markedGreen, "a player marked by hand: MARKED before his name, in the teammate colour");
+        config::showPlayerNames = false;
+        const int namesOffMate = textVerts({mateP}), namesOffEnemy = textVerts({enemyP});
+        config::showPlayerNames = true;
+        CHECK(namesOffMate > namesOffEnemy, "Player names off: a teammate still has TEAM over his box");
+        config::showTeammates = false;
+    }
+
+    //---- labels stay on the screen at its left and right edges; marker labels never take a place off the screen
+    {
+        const View v(cam, MakeProjection());
+        const double d = 2000;
+        const float SW = (float)config::SCREEN_W;
+        auto at = [&](float sx, float sy) { return Vector3(d, (sx - v.cx) * d / (v.focal * v.sx), (v.cy - sy) * d / (v.focal * v.sy)); };
+        bool inside = true;
+        for (const float sx : {-30.0f, SW + 30}) {
+            RenderEntity p = ent(Object::PLAYER, 0, 0, 0);
+            p.pos = at(sx, 700); p.label = "Somebody with a long name"; p.sub = "Ferro (held) + Stitcher";
+            const int n = textOf([&] { DrawESP({p}, cam, 3); });
+            std::printf("      player at x %.0f: text from %.1f to %.1f\n", sx, textBox.x0, textBox.x1);
+            inside &= n > 0 && textBox.x0 >= 0 && textBox.x1 <= SW;
+        }
+        CHECK(inside, "a player at the left or right screen edge: his name, distance and guns stay fully on the screen");
+        std::vector<RenderEntity> edgeBoxes;
+        for (int i = 0; i < 12; i++) {
+            RenderEntity e = ent(Object::SEARCH, 0, 0, 0);
+            e.pos = at(SW - 6, 400 + i * 4.0f); e.actor += i; e.label = "Trash can"; //so close that above and below fill up
+            edgeBoxes.push_back(e);
+        }
+        const int n = textOf([&] { DrawESP(edgeBoxes, cam, 3); });
+        CHECK(n > 0 && textBox.x0 >= 0 && textBox.x1 <= SW, "containers at the right screen edge: every label drawn is fully on the screen");
+        //(text wholly off the screen makes no vertices at all: a label put right of a marker at the right edge would
+        //vanish unseen, so the places offered are checked themselves)
+        bool offered = true;
+        size_t places = 0;
+        for (const ImVec2 m : {ImVec2(SW - 6, 500), ImVec2(6, 500), ImVec2(1200, 4), ImVec2(1200, (float)config::SCREEN_H - 4)}) {
+            QueueMarkerLabel(m.x, m.y, 8, "Trash can  20m", 13.5f, 3, 20);
+            const PendingLabel& p = PendingLabels().back();
+            places += p.box.alts.size();
+            for (const LabelRect& r : p.box.alts) offered &= r.x0 >= -0.5f && r.y0 >= -0.5f && r.x1 <= SW + 0.5f && r.y1 <= config::SCREEN_H + 0.5f;
+            PendingLabels().clear();
+        }
+        CHECK(offered && places >= 8, "a marker at a screen edge: its label is offered other places only where they are fully on the screen");
+    }
+
+    //---- two lines stacked as a player's distance and guns: wherever float rounding puts them, the lower one keeps its
+    //place (it used to flip a line further down and back as he moved, when rounding made them overlap by a hair)
+    {
+        const float s = config::labelSize * 0.9f, lineH = LineSlot(s);
+        const ImVec2 ts = LabelSize("30m", s);
+        float found = -1;
+        for (int i = 0; i < 200000 && found < 0; i++) {
+            const float b = 300.0f + (float)i * 0.0137f;
+            if (LabelAt(1000, b + lineH, ts).y0 < LabelAt(1000, b, ts).y1) found = b;
+        }
+        std::printf("      stacked lines overlap by a hair at y %.4f\n", found);
+        CHECK(found > 0, "(setup) a height where rounding makes the two lines' areas overlap by a hair");
+        textOf([&] {
+            QueueLabel(1000, found, "30m", s, 0, 30, true, lineH);
+            QueueLabel(1000, found + lineH, "Ferro", s, 0, 30, true, lineH);
+            FlushLabels();
+        });
+        CHECK(textBox.y1 < found + lineH + s / 2 + 4, "the guns line stays right under the distance line, not a line further down");
+    }
+
+    //---- label cards: nearly solid with a light border, and the room a label keeps free is all of its card or outline
+    {
+        const ImVec2 ts = LabelSize("Trash can", 15);
+        const LabelRect plain = LabelAt(500, 500, ts), big = LabelAt(500, 500, LabelSize("Trash can", 28));
+        config::labelCards = true;
+        const LabelRect card = LabelAt(500, 500, ts);
+        bool solid = false, border = false;
+        draw([&] {
+            DrawLabelCentered(500, 500, "Trash can", 15, COLOR::white, true);
+            for (const ImDrawVert& q : ImGui::GetBackgroundDrawList()->VtxBuffer) {
+                solid |= q.col == IM_COL32(0, 0, 0, 230);
+                border |= rgbOf(q.col) == IM_COL32(210, 210, 210, 255);
+            }
+        });
+        CHECK(solid && border, "label cards: a nearly solid dark card (alpha 230) with a light border");
+        CHECK(std::abs(g_minX - card.x0) < 0.01f && std::abs(g_maxX - card.x1) < 0.01f && std::abs(g_minY - card.y0) < 0.01f &&
+              std::abs(g_maxY - card.y1) < 0.01f, "label cards: the room a label keeps free is exactly its card as drawn, border included");
+        //two labels whose cards would touch-overlap side by side (6 px between their texts): only the first is drawn
+        const int one = textOf([&] { QueueLabel(500, 500, "Trash can", 15, 3, 10); FlushLabels(); });
+        const int two = textOf([&] { QueueLabel(500, 500, "Trash can", 15, 3, 10); QueueLabel(500 + ts.x + 6, 500, "Trash can", 15, 3, 11); FlushLabels(); });
+        config::labelCards = false;
+        CHECK(one > 0 && two == one, "label cards 6 px apart would overlap: the second one is left out");
+        CHECK(std::abs(plain.x0 - (500 - ts.x / 2 - 2)) < 0.01f && std::abs(plain.y0 - (500 - 7.5f - 1)) < 0.01f &&
+              std::abs(big.y0 - (500 - 14.0f - 2)) < 0.01f, "outlined text keeps 2 px to the sides free, and its outline up and down (1 px at 15 px, 2 px at 28)");
+    }
+
+    //---- down players and destroyed ARC: solid, in their own colours, with a word on their label
+    {
+        bool solidColours = (COLOR::deadPlayer() >> 24) == 255 && (COLOR::arc(true) >> 24) == 255 && COLOR::deadPlayer() != COLOR::enemy() &&
+                            COLOR::arc(true) != COLOR::arc(false);
+        config::monochrome = true;
+        solidColours &= (COLOR::deadPlayer() >> 24) == 255 && (COLOR::arc(true) >> 24) == 255 && COLOR::deadPlayer() != COLOR::enemy() &&
+                        COLOR::arc(true) != COLOR::arc(false);
+        config::monochrome = false;
+        CHECK(solidColours, "down players and destroyed ARC are fully solid (also in monochrome) and not in the living ones' colours");
+        config::showPlayerNames = false;
+        RenderEntity down = ent(Object::PLAYER, 1500, 100, 0), wreck = ent(Object::ARC, 2000, 100, 0);
+        down.isDead = true; wreck.isDead = true; wreck.label = "Tick";
+        const float s = config::labelSize * 0.9f;
+        const int downText = textVerts({down}), downLabel = textOf([&] { DrawLabelCentered(500, 500, "DOWN  15m", s); });
+        const int wreckText = textVerts({wreck}), wreckLabel = textOf([&] { DrawLabelCentered(500, 500, "DEAD  Tick  20m", s); });
+        config::showPlayerNames = true;
+        CHECK(downText > 0 && downText == downLabel, "a down player's label: DOWN and his distance");
+        CHECK(wreckText > 0 && wreckText == wreckLabel, "a destroyed ARC's label: DEAD, its name and distance");
+    }
+
     //garbage in: NaN, infinity, zero-size camera, on the camera, FOV 0
     std::mt19937_64 rng(5);
     auto U = [&](double a, double b) { return std::uniform_real_distribution<double>(a, b)(rng); };
