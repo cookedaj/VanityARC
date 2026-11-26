@@ -806,12 +806,22 @@ inline std::vector<LabelRect> DrawEdgeArrows(const View& v, std::vector<EdgeArro
         //The ring is round the shifted middle (Shift X / Y), the picture is not: its square kept fully inside the picture
         const float x0 = (float)v.rx + half + 2, x1 = std::max(x0, (float)(v.rx + v.rw) - half - 2);
         const float y0 = (float)v.ry + half + 2, y1 = std::max(y0, (float)(v.ry + v.rh) - half - 2);
-        const float px = std::clamp((float)v.cx + (float)ux * t, x0, x1);
+        float px = std::clamp((float)v.cx + (float)ux * t, x0, x1);
         float py = std::clamp((float)v.cy + (float)uy * t, y0, y1);
-        //not under the player list, the HP readout or LOW HEALTH: just above it (in this order: LOW HEALTH is always
-        //above the list, so an arrow moved above one never lands under one checked before it)
-        for (const LabelRect& L : {g_listRect, hpCard, lowCard})
-            if (L.x1 > L.x0 && px > L.x0 - m && px < L.x1 + m && py > L.y0 - m && py < L.y1 + m) py = L.y0 - m;
+        //Not under the player list, the HP readout or LOW HEALTH: just above it. When that would leave the picture (it
+        //reaches up to the screen's top: a tall player list, or LOW HEALTH put at the top over it), beside it instead,
+        //the nearer side first; with no room beside it either (a list as wide as the screen), as high as the picture
+        //allows, where the most of the arrow shows. In this order: LOW HEALTH is above the list or at the screen's top,
+        //so an arrow moved for one never lands under one checked before it.
+        for (const LabelRect& L : {g_listRect, hpCard, lowCard}) {
+            if (!(L.x1 > L.x0 && px > L.x0 - m && px < L.x1 + m && py > L.y0 - m && py < L.y1 + m)) continue;
+            const bool leftNearer = px - L.x0 < L.x1 - px;
+            const float sideA = leftNearer ? L.x0 - m : L.x1 + m, sideB = leftNearer ? L.x1 + m : L.x0 - m;
+            if (L.y0 - m >= y0) py = L.y0 - m;
+            else if (sideA >= x0 && sideA <= x1) px = sideA;
+            else if (sideB >= x0 && sideB <= x1) px = sideB;
+            else py = y0;
+        }
         const LabelRect sq{px - half, py - half, px + half, py + half};
         //The ARC kite's pointed tail reaches 1.3 * as back, past sq: a second square, tail px further back, covers it
         const float tail = e.arc ? 0.5f * as : 0.0f;
@@ -1194,12 +1204,31 @@ inline std::string DrawCloseEnemyWarning(const std::vector<RenderEntity>& entiti
     //0.75 x its length from its middle); its column is 1.5 x that long, 8 px from the text
     const float L = arrow ? std::min(0.8f * ts.y, (hy - 3) / 0.75f) : 0, aw = arrow ? 1.5f * L + 8 : 0;
     const float hx = (ts.x + aw) / 2 + 10;
-    //under the crosshair, but kept on the screen: Shift X moves the crosshair sideways (FitSize made the card fit the width)
-    const float cx = std::clamp((float)v.cx, hx + 3, std::max(hx + 3, (float)config::SCREEN_W - hx - 3)); //+ the 3 px frame and its soft edge
     //The card and LOW HEALTH under it end above the player list (or the screen's bottom): moved up if needed, but its
     //top stays 18 px or more below the crosshair
     const float F = WarnFloor();
     cy = std::min(cy, std::max(F - extraBelow - hy - 2, (float)v.cy + hy + 20));
+    //Under the crosshair, but kept on the screen (Shift X moves the crosshair sideways; FitSize made the card fit the
+    //width; + the 3 px frame and its soft edge) and off the big HP/SH readout (its nearly black fill hid the shield
+    //number): moved right just past it, as LOW HEALTH is. The widest readout counts, so the card does not move as the
+    //numbers change. On a screen too narrow for both side by side, the card goes just under the readout (LOW HEALTH's
+    //room under it still above the floor), or else just above it (its top still 18 px or more below the crosshair).
+    //ponytail: once moved below or above the nearest enemy on such a narrow screen, it can still reach over the readout.
+    const LabelRect hpCard = config::showSelfHealth ? SelfHealthRect() : LabelRect{};
+    const float gap = 8, xLo = hx + 3, xHi = std::max(xLo, (float)config::SCREEN_W - hx - 3);
+    auto onReadout = [&](float x, float y) {
+        return hpCard.x1 > hpCard.x0 && RectsOverlap({x - hx - 3 - gap, y - hy - 2 - gap, x + hx + 3 + gap, y + hy + 2 + gap}, hpCard);
+    };
+    auto cardX = [&](float y) {
+        const float x = std::clamp((float)v.cx, xLo, xHi);
+        return onReadout(x, y) ? std::min(std::max(x, hpCard.x1 + gap + hx + 3), xHi) : x;
+    };
+    if (onReadout(cardX(cy), cy)) {
+        const float under = hpCard.y1 + gap + hy + 2, over = hpCard.y0 - gap - hy - 2;
+        if (under + hy + 2 + extraBelow <= F) cy = under;
+        else if (over - hy - 2 >= (float)v.cy + 18) cy = over;
+    }
+    float cx = cardX(cy);
     //Never over the nearest enemy when DrawESP shows him: below his box, bars and labels, above them when there is no
     //room below (LOW HEALTH follows the card, and is kept off him too, but never by moving the card up to the
     //crosshair). When he fills the screen top to bottom the card stays put. His box is the standing one (90 cm up and
@@ -1220,7 +1249,6 @@ inline std::string DrawCloseEnemyWarning(const std::vector<RenderEntity>& entiti
         const float numMid = nh > 0 ? std::max(by + bh / 2, nameH + 2 + nh) : by + bh / 2;
         const LabelRect him{bx - half, std::min(by - m, numMid - nh) - nameH - linesH, bx + half,
                             std::max(by + bh + m, numMid + nh) + linesH};
-        const float gap = 8;
         //The card, and LOW HEALTH under it (extraBelow) where DrawSelfHealth draws it: the screen's middle, or beside the
         //HP/SH readout (LowHealthX at LOW HEALTH's middle: 10 px under the card plus half its height). One box round both:
         //he stays clear of the pair, and the card does not keep moving in and out of the gap between them
@@ -1244,6 +1272,7 @@ inline std::string DrawCloseEnemyWarning(const std::vector<RenderEntity>& entiti
         }
     }
     g_warnSide = newSide;
+    cx = cardX(cy); //moved below or above him: off the readout at its new height
     DrawRectFilled(cx - hx, cy - hy, cx + hx, cy + hy, IM_COL32(0, 0, 0, 220), dl);
     DrawRectOutline(cx - hx, cy - hy, cx + hx, cy + hy, COLOR::enemy(), 3.0f, dl);
     if (arrow) { //its middle in the middle of its column; screen up is ahead of you, right is your right
@@ -1256,12 +1285,12 @@ inline std::string DrawCloseEnemyWarning(const std::vector<RenderEntity>& entiti
     return buf;
 }
 
-//Last of all (main.cpp, with live data): your HP/SH readout, the close-enemy card over it (its direction arrow can reach
-//over the readout), then LOW HEALTH, which moves below or above the card. The card goes on the foreground list, over
-//every window (the menu, the player list, inventory windows), so nothing ever hides it: with a big Menu text size the
-//player list grew over the place under the crosshair it moves up to. The readout and LOW HEALTH go there too while the
-//menu is closed (that taller list reached over them), LOW HEALTH over the readout; with the menu open they stay under
-//the menu (on top they would block menu rows for long).
+//Last of all (main.cpp, with live data): your HP/SH readout, the close-enemy card (it keeps off the readout; where a
+//narrow screen leaves it no room, it is drawn over it), then LOW HEALTH, which moves below or above the card. The card
+//goes on the foreground list, over every window (the menu, the player list, inventory windows), so nothing ever hides
+//it: with a big Menu text size the player list grew over the place under the crosshair it moves up to. The readout and
+//LOW HEALTH go there too while the menu is closed (that taller list reached over them), LOW HEALTH over the readout;
+//with the menu open they stay under the menu (on top they would block menu rows for long).
 inline void DrawWarnings(const std::vector<RenderEntity>& ents, FminimalViewInfo vm, int localTeam, double hp, double shield, bool menuOpen) {
     ImDrawList* const fg = ImGui::GetForegroundDrawList();
     ImDrawList* const self = menuOpen ? nullptr : fg;

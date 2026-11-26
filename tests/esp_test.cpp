@@ -1304,9 +1304,9 @@ int main() {
 
     //---- the close-enemy card is drawn over every window, so the player list never hides it: with High visibility the
     //list (1280x720: y 305..706) grew over the place under the crosshair the card moves up to. The HP/SH readout and LOW
-    //HEALTH too while the menu is closed (that list covered them), but under the menu while it is open. The card is drawn
-    //over the readout (its direction arrow reaches over the readout's right end here), and LOW HEALTH, which has no room
-    //under the card here and goes above it, still ends above the list (it went 33 px under it)
+    //HEALTH too while the menu is closed (that list covered them), but under the menu while it is open. The card moves
+    //right off the readout (moved up beside it, it reached over the readout's right end here), and LOW HEALTH, which has
+    //no room under the card here and goes above it, still ends above the list (it went 33 px under it)
     {
         const float keepLs = config::labelSize;
         const int keepW = config::SCREEN_W, keepH = config::SCREEN_H;
@@ -1317,13 +1317,13 @@ int main() {
         const std::vector<RenderEntity> close = {ent(Object::PLAYER, -900, 0, 0)}; //9 m behind
         const LabelRect hp = SelfHealthRect("HP 80   SH 50");
         const float cy = (float)View(cam, MakeProjection()).cy;
-        struct Lists { int fgCard = 0, fgHp = 0, fgRed = 0, bgVerts = 0, bgRed = 0, cardOnHp = 0; bool hpFirst = true; LabelRect low; };
+        struct Lists { int fgCard = 0, fgHp = 0, fgRed = 0, bgVerts = 0, bgRed = 0, cardOnHp = 0; LabelRect low; };
         auto layers = [&](double health, bool menuOpen) {
             Lists l;
             g_warnSide = 0;
             draw([&] {
                 DrawWarnings(close, cam, 3, health, 50, menuOpen);
-                //the readout's left part ("HP 80"): the wide card reaches over its right end on this screen
+                //the readout's left part ("HP 80")
                 auto inHp = [&](const ImDrawVert& q) { return q.pos.x >= hp.x0 - 2 && q.pos.x <= hp.x0 + 150 && q.pos.y >= hp.y0 - 2 && q.pos.y <= hp.y1 + 2; };
                 //LOW HEALTH's red card (the close-enemy card's red frame is elsewhere)
                 const LabelRect& lr = g_lowHealthRect;
@@ -1336,7 +1336,6 @@ int main() {
                     l.fgHp += inHp(q);
                     l.fgRed += lowRed(q);
                     l.fgCard += q.pos.x > 600 && q.pos.x < 680 && q.pos.y > cy + 18 && q.pos.y > g_listRect.y0; //its text, where the list is
-                    if (cardAt >= 0 && q.col == IM_COL32(0, 0, 0, 230)) l.hpFirst = false; //the readout's card drawn after it, over it
                     l.cardOnHp += cardAt >= 0 && q.pos.x > hp.x0 && q.pos.x < hp.x1 && q.pos.y > hp.y0 && q.pos.y < hp.y1;
                 }
                 for (const ImDrawVert& q : ImGui::GetBackgroundDrawList()->VtxBuffer) {
@@ -1350,7 +1349,7 @@ int main() {
         const Lists closed = layers(80, false), open = layers(80, true), low = layers(30, false), lowOpen = layers(30, true);
         CHECK(closed.fgCard > 0 && closed.fgHp > 0 && closed.bgVerts == 0,
               "menu closed: the close-enemy card (also where the tall player list is) and the HP/SH readout are drawn over the player list");
-        CHECK(closed.cardOnHp > 0 && closed.hpFirst, "menu closed: the close-enemy card and its arrow are drawn over the HP/SH readout, not under it");
+        CHECK(closed.cardOnHp == 0 && closed.fgCard > 0, "menu closed: the close-enemy card and its arrow keep off the HP/SH readout");
         CHECK(open.fgCard > 0 && open.fgHp == 0 && open.bgVerts > 0,
               "menu open: the close-enemy card is drawn over the menu, the HP/SH readout under it");
         CHECK(low.fgRed > 0 && low.bgVerts == 0 && low.fgCard > 0 && lowOpen.bgRed > 0 && lowOpen.fgRed == 0,
@@ -1359,6 +1358,43 @@ int main() {
         std::snprintf(msg, sizeof msg, "LOW HEALTH above the card ends above the tall player list (y %.0f-%.0f, list from %.0f)", low.low.y0, low.low.y1, g_listRect.y0);
         CHECK(low.low.y1 > low.low.y0 && low.low.y0 >= 0 && !RectsOverlap(low.low, g_listRect) && !RectsOverlap(lowOpen.low, g_listRect), msg);
         g_listRect = {};
+        g_lowHealthRect = {};
+        g_warnSide = 0;
+        config::labelSize = keepLs; config::SCREEN_W = keepW; config::SCREEN_H = keepH;
+        ImGui::GetIO().DisplaySize = ImVec2((float)keepW, (float)keepH);
+    }
+
+    //---- the close-enemy card keeps off the HP/SH readout: at a big Text size on these screens its nearly black fill lay
+    //over your shield number whenever an enemy was within the Warning card range. It moves right past the readout, or
+    //just under it where the screen is too narrow for both side by side (LOW HEALTH still fits under the card)
+    {
+        const float keepLs = config::labelSize;
+        const int keepW = config::SCREEN_W, keepH = config::SCREEN_H;
+        config::showSelfHealth = true; config::closeWarning = true; config::warnDist = 25;
+        g_listRect = {};
+        const std::vector<RenderEntity> close = {ent(Object::PLAYER, -900, 0, 0)}; //9 m behind
+        struct Case { float w, h, ls; };
+        for (const Case c : {Case{1440, 900, 36}, Case{1440, 900, 40}, Case{1600, 900, 40}, Case{1280, 800, 40}, Case{1366, 768, 36}, Case{1280, 720, 40}})
+            for (const double health : {80.0, 20.0}) {
+                config::SCREEN_W = (int)c.w; config::SCREEN_H = (int)c.h; config::labelSize = c.ls;
+                ImGui::GetIO().DisplaySize = ImVec2(c.w, c.h);
+                g_warnSide = 0;
+                LabelRect card{1e9f, 1e9f, -1e9f, -1e9f};
+                draw([&] {
+                    DrawWarnings(close, cam, 3, health, 50, false);
+                    for (const ImDrawVert& q : ImGui::GetForegroundDrawList()->VtxBuffer)
+                        if (q.col == IM_COL32(0, 0, 0, 220)) { //the close-enemy card's fill
+                            card.x0 = std::min(card.x0, q.pos.x); card.x1 = std::max(card.x1, q.pos.x);
+                            card.y0 = std::min(card.y0, q.pos.y); card.y1 = std::max(card.y1, q.pos.y);
+                        }
+                });
+                const LabelRect hp = SelfHealthRect("HP 80   SH 50"), low = g_lowHealthRect;
+                const bool lowOk = health > 50 || (low.y1 > low.y0 && low.y1 <= c.h && !RectsOverlap(low, card));
+                char msg[200];
+                std::snprintf(msg, sizeof msg, "Text size %.0f on %.0fx%.0f, health %.0f: the close-enemy card (x %.0f-%.0f y %.0f-%.0f) keeps off the HP/SH readout (to x %.0f, y %.0f-%.0f)",
+                              c.ls, c.w, c.h, health, card.x0, card.x1, card.y0, card.y1, hp.x1, hp.y0, hp.y1);
+                CHECK(card.x1 > card.x0 && !RectsOverlap(card, hp) && card.x0 >= 0 && card.x1 <= c.w && card.y1 <= c.h && lowOk, msg);
+            }
         g_lowHealthRect = {};
         g_warnSide = 0;
         config::labelSize = keepLs; config::SCREEN_W = keepW; config::SCREEN_H = keepH;
@@ -1401,6 +1437,35 @@ int main() {
             std::snprintf(msg, sizeof msg, "a player list from y %.0f on 1280x720: LOW HEALTH is on the screen (y %.0f-%.0f) and drawn over the list",
                           top, g_lowHealthRect.y0, g_lowHealthRect.y1);
             CHECK(g_lowHealthRect.y1 > g_lowHealthRect.y0 && g_lowHealthRect.y0 >= 0 && g_lowHealthRect.y1 <= 720 && firstRed >= 0, msg);
+        }
+        //...where an enemy 40 m behind you gets his arrow at the bottom edge, under the list: moved above the list, then
+        //above LOW HEALTH, it went off the screen's top, so he had no arrow at all. Now it goes beside LOW HEALTH, on the
+        //screen and clear of LOW HEALTH and the list (both drawn over it). With a list leaving less room than an arrow
+        //above it, an enemy to the left gets his arrow as high as the picture allows, not partly off the screen's top.
+        config::showOffscreen = true; config::warnDist = 25;
+        struct Case { float ls, top; double x, y; };
+        for (const Case c : {Case{28, 71, -4000, 100}, Case{28, 100, -4000, 100}, Case{40, 120, -4000, 100}, Case{40, 150, -4000, 100}, Case{15, 32, -500, -3000}}) {
+            config::labelSize = c.ls;
+            g_listRect = {20, c.top, 1258, 706};
+            g_lowHealthRect = {};
+            const std::vector<RenderEntity> back = {ent(Object::PLAYER, c.x, c.y, 0)};
+            LabelRect arrow{};
+            for (int f = 0; f < 3; f++) //LOW HEALTH's place is one frame old
+                draw([&] {
+                    DrawESP(back, cam, 3);
+                    arrow = {1e9f, 1e9f, -1e9f, -1e9f};
+                    for (const ImDrawVert& q : ImGui::GetBackgroundDrawList()->VtxBuffer)
+                        if (q.col == COLOR::enemy()) {
+                            arrow.x0 = std::min(arrow.x0, q.pos.x); arrow.x1 = std::max(arrow.x1, q.pos.x);
+                            arrow.y0 = std::min(arrow.y0, q.pos.y); arrow.y1 = std::max(arrow.y1, q.pos.y);
+                        }
+                    DrawWarnings(back, cam, 3, 30, 50, false);
+                });
+            const bool clear = c.ls == 15 || (arrow.y1 <= c.top && !RectsOverlap(arrow, g_lowHealthRect));
+            char msg[200];
+            std::snprintf(msg, sizeof msg, "Text size %.0f, a player list from y %.0f on 1280x720, LOW HEALTH y %.0f-%.0f: the edge arrow (x %.0f-%.0f y %.0f-%.0f) is on the screen%s",
+                          c.ls, c.top, g_lowHealthRect.y0, g_lowHealthRect.y1, arrow.x0, arrow.x1, arrow.y0, arrow.y1, c.ls == 15 ? "" : ", clear of LOW HEALTH and the list");
+            CHECK(arrow.x1 > arrow.x0 && arrow.y0 >= 0 && arrow.x0 >= 0 && arrow.x1 <= 1280 && clear, msg);
         }
         g_listRect = {};
         g_lowHealthRect = {};
