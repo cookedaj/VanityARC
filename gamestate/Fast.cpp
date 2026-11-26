@@ -88,7 +88,7 @@ bool GameState::scan(ptr uworld) {
         return false;
     }
     if (uworld != lastWorld_) { //a new world: new camera, players and actors, your team and pawn not known yet, vtables and stances learned again
-        camActor_ = 0; shieldSeen_.clear(); lastTeamID = -1; meActor_ = 0; learned_.clear(); slots_.clear();
+        camActor_ = 0; shieldSeen_.clear(); lastTeamID = -1; meActor_ = 0; learned_.clear(); slots_.clear(); dyn_.clear();
         poseSeen_.clear(); std::fill(std::begin(haveTmpl_), std::end(haveTmpl_), false);
     }
     lastWorld_ = uworld;
@@ -159,6 +159,10 @@ bool GameState::scan(ptr uworld) {
     ReadScatter(rq.data(), rq.size());
 
     statics_.clear();
+    //What each player and ARC last read (health, shield, team, destroyed) stays across the scan: a read that fails on
+    //the step right after it keeps those, never the stand-ins of a new entry (no shield bar, 100 health, no team)
+    std::unordered_map<ptr, Tracked> before;
+    for (Tracked& t : dyn_) before.emplace(t.ent.actor, std::move(t));
     dyn_.clear();
     for (const C& c : kept) {
         slots_[c.slot].root = isValidPtr(c.root) && plausible(c.pos) ? c.root : 0; //a half-built actor: its root is read again
@@ -170,6 +174,12 @@ bool GameState::scan(ptr uworld) {
         t.ent.pos = c.pos;
         t.root = c.root;
         if (c.type == Object::PLAYER || c.type == Object::ARC) {
+            const auto old = before.find(c.actor);
+            if (old != before.end() && old->second.ent.vt == c.vt) { //the same one (not another actor at a freed address)
+                const Tracked& o = old->second;
+                t.ent.playerHealth = o.ent.playerHealth; t.hpRead = o.hpRead; t.ent.isDead = o.ent.isDead; t.ent.teamID = o.ent.teamID;
+                t.ent.shield = o.ent.shield; t.ent.shieldMax = o.ent.shieldMax; t.shieldRead = o.shieldRead;
+            }
             dyn_.push_back(std::move(t));
         } else { //named in assemble(), and only when within the loot range
             t.live = true;
@@ -466,6 +476,7 @@ void GameState::updateDynamic(FminimalViewInfo& vm) {
         t.ent.yaw = yawFromQuat(r.xf.q);
         if (t.ent.type == Object::PLAYER) {
             if (r.hpOk) { t.ent.playerHealth = r.hp; t.hpRead = true; } //otherwise the last good value: 100 (alive) for a player not read yet
+            else if (!isValidPtr(r.hc)) { t.ent.playerHealth = 100; t.hpRead = false; } //no health component: unknown again, not his last number
             t.ent.isDead = t.ent.playerHealth < 1;
             t.ent.isLocal = isValidPtr(r.ctrl);
             t.ent.isVisible = true; //no mesh read: unknown, treated as visible
@@ -500,7 +511,7 @@ void GameState::updateDynamic(FminimalViewInfo& vm) {
                 }
             }
             const ptr comp = live::shieldComponent >= 0 ? r.sc : r.hc;
-            const double lastShield = t.ent.shield; //his shield at the last step (0 right after a scan)
+            const double lastShield = t.ent.shield; //his shield at the last step (kept across a scan)
             t.ent.hasShield = shieldOn && isValidPtr(comp);
             if (t.ent.hasShield && !r.shOk) {
                 //the read failed: his last shield and full bar stay (the 0 it gives would flicker the bar off or full)

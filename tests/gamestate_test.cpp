@@ -719,6 +719,15 @@ int main() {
             mprotect((void*)c1, 0x1000, PROT_READ | PROT_WRITE);
             const RenderEntity* f1 = findIn(sf, enemy1);
             CHECK(f1 && f1->hasShield && f1->shield == 23.5 && f1->shieldMax == 103.0, "a shield read that fails keeps the last shield and full bar");
+            //also when it fails on a step that scans (one step in about ten): the scan's new entry keeps what he had
+            fast.step();
+            std::this_thread::sleep_for(std::chrono::milliseconds(150)); //the next step scans first (every 80 to 120 ms)
+            mprotect((void*)c1, 0x1000, PROT_NONE);
+            const gsRet ss = fast.step();
+            mprotect((void*)c1, 0x1000, PROT_READ | PROT_WRITE);
+            const RenderEntity* s1 = findIn(ss, enemy1);
+            std::printf("      shield read failed on a scan step: shield %.1f, bar %.1f\n", s1 ? s1->shield : -1.0, s1 ? s1->shieldMax : -1.0);
+            CHECK(s1 && s1->hasShield && s1->shield == 23.5 && s1->shieldMax == 103.0, "a shield read that fails right after a scan keeps the last shield and full bar");
         }
         //No maximum in the game: step() keeps the highest shield seen as the full bar (tick() has no such fallback: not compared)
         live::shieldComponent = -1; live::shieldIsFloat = 0; live::shieldMax = -1;

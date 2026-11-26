@@ -83,8 +83,8 @@ private:
         ptr hc = 0, sc = 0, mesh = 0; //a player's health, shield and mesh components: found once per scan (0: looked for again)
         std::chrono::steady_clock::time_point readAt{}; //when updateDynamic last read it (far ARC are read less often)
         bool live = false;  //passed this update's checks, so it is drawn
-        bool hpRead = false;     //players: playerHealth came from a read that worked since the scan (not the stand-in 100)
-        double shieldRead = -1;  //players: the shield from the last read that worked since the scan (-1: none)
+        bool hpRead = false;     //players: playerHealth came from a read that worked (not the stand-in 100); kept across scans
+        double shieldRead = -1;  //players: the shield from the last read that worked (-1: none); kept across scans
         bool named = false; //statics: refine/fill done since the last scan (done when it first comes within g_lootRange)
     };
     std::vector<Tracked> statics_; //containers and ground items: position read at each scan
