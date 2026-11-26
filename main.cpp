@@ -340,16 +340,13 @@ int main() {
             DrawLabelCentered(x, y, body.c_str(), ls, COLOR::white, true);
             below = y + bh / 2 + 10 + ls / 2;
         }
-        //The menu is the only thing drawn over the warnings; while it is open, the toast and the close-enemy card are
-        //drawn over it (the foreground list). LOW HEALTH stays under it: on top it would block menu rows for long.
-        ImDrawList* const overMenu = g_MenuOpen ? ImGui::GetForegroundDrawList() : nullptr;
-        DrawToast(below, overMenu);
+        //The menu is the only thing drawn over the warnings; while it is open, the toast is drawn over it (the
+        //foreground list). LOW HEALTH stays under it: on top it would block menu rows for long.
+        DrawToast(below, g_MenuOpen ? ImGui::GetForegroundDrawList() : nullptr);
 
-        //The close-enemy warning goes last so no other card covers it; LOW HEALTH moves below it when both show (above it
-        //when there is no room below)
-        float warnBottom = 0, warnTop = 0;
-        if (live && config::espEnabled) DrawCloseEnemyWarning(ents, vm, snap->localPlayerTeam, &warnBottom, LowHealthRoom(snap->selfHealth), overMenu, &warnTop);
-        if (live && config::showSelfHealth) DrawSelfHealth(snap->selfHealth, snap->selfShield, warnBottom, warnTop); //old data: nothing, never an old number
+        //The close-enemy warning goes last, over every window (DrawWarnings); LOW HEALTH moves below it when both show
+        //(above it when there is no room below). Old data: nothing, never an old number.
+        if (live) DrawWarnings(ents, vm, snap->localPlayerTeam, snap->selfHealth, snap->selfShield, g_MenuOpen);
 
         RenderEnd(DrawUi);
     }

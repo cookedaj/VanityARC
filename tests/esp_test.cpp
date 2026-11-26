@@ -1263,7 +1263,87 @@ int main() {
                               scr.x, scr.y, hp, red.x0, red.x1, hpCard.x1);
                 CHECK(red.x1 > red.x0 && !RectsOverlap(red, hpCard) && red.x0 >= 0 && red.x1 <= scr.x && red.y1 <= scr.y && !cross, msg);
             }
+        //...which puts it in the strip of the right-hand edge arrows: an enemy 40 m away, right and a little behind, gets
+        //an arrow there (in the enemy colour, the same red). LOW HEALTH is drawn later and solid, so the arrow and its
+        //distance moved above it (its place is one frame old, as in the game: two frames)
+        config::SCREEN_W = 1280; config::SCREEN_H = 800;
+        ImGui::GetIO().DisplaySize = ImVec2(1280, 800);
+        for (const double deg : {95.0, 100.0, 105.0}) {
+            const double a = deg * 3.14159265358979 / 180.0;
+            const std::vector<RenderEntity> e = {ent(Object::PLAYER, 4000 * std::cos(a), 4000 * std::sin(a), 0)};
+            int arrow = 0, text = 0, under = 0;
+            LabelRect red{1e9f, 1e9f, -1e9f, -1e9f};
+            for (int f = 0; f < 2; f++)
+                draw([&] {
+                    DrawESP(e, cam, 3);
+                    const int split = ImGui::GetBackgroundDrawList()->VtxBuffer.Size;
+                    DrawSelfHealth(30, 100);
+                    const auto& vb = ImGui::GetBackgroundDrawList()->VtxBuffer;
+                    red = {1e9f, 1e9f, -1e9f, -1e9f};
+                    for (int i = split; i < vb.Size; i++)
+                        if (vb[i].col == COLOR::red) {
+                            red.x0 = std::min(red.x0, vb[i].pos.x); red.x1 = std::max(red.x1, vb[i].pos.x);
+                            red.y0 = std::min(red.y0, vb[i].pos.y); red.y1 = std::max(red.y1, vb[i].pos.y);
+                        }
+                    arrow = text = under = 0;
+                    for (int i = 0; i < split; i++) {
+                        arrow += vb[i].col == COLOR::red;
+                        text += std::abs(vb[i].uv.x - ImGui::GetDrawListSharedData()->TexUvWhitePixel.x) > 1e-6f;
+                        under += vb[i].pos.x > red.x0 && vb[i].pos.x < red.x1 && vb[i].pos.y > red.y0 && vb[i].pos.y < red.y1;
+                    }
+                });
+            char msg[200];
+            std::snprintf(msg, sizeof msg, "Text size 40 on 1280x800, an enemy %.0f degrees right: his edge arrow and its distance are not under LOW HEALTH (x %.0f-%.0f y %.0f-%.0f)",
+                          deg, red.x0, red.x1, red.y0, red.y1);
+            CHECK(arrow > 0 && text > 0 && red.x1 > red.x0 && under == 0, msg);
+        }
+        g_lowHealthRect = {};
         config::labelSize = keepLs; config::SCREEN_W = keepW; config::SCREEN_H = keepH; config::lowHealthFrom = keepFrom;
+        ImGui::GetIO().DisplaySize = ImVec2((float)keepW, (float)keepH);
+    }
+
+    //---- the close-enemy card is drawn over every window, so the player list never hides it: with High visibility the
+    //list (1280x720: y 305..706) grew over the place under the crosshair the card moves up to. The HP/SH readout too while
+    //the menu is closed (that list covered it), but under the menu while it is open, like LOW HEALTH
+    {
+        const float keepLs = config::labelSize;
+        const int keepW = config::SCREEN_W, keepH = config::SCREEN_H;
+        config::labelSize = 28; config::showSelfHealth = true; config::closeWarning = true;
+        config::SCREEN_W = 1280; config::SCREEN_H = 720;
+        ImGui::GetIO().DisplaySize = ImVec2(1280, 720);
+        g_listRect = {20, 305, 1258, 706};
+        const std::vector<RenderEntity> close = {ent(Object::PLAYER, -900, 0, 0)}; //9 m behind
+        const LabelRect hp = SelfHealthRect("HP 80   SH 50");
+        const float cy = (float)View(cam, MakeProjection()).cy;
+        struct Lists { int fgCard = 0, fgHp = 0, bgVerts = 0, bgRed = 0; };
+        auto layers = [&](double health, bool menuOpen) {
+            Lists l;
+            g_warnSide = 0;
+            draw([&] {
+                DrawWarnings(close, cam, 3, health, 50, menuOpen);
+                //the readout's left part ("HP 80"): the wide card reaches over its right end on this screen
+                auto inHp = [&](const ImDrawVert& q) { return q.pos.x >= hp.x0 - 2 && q.pos.x <= hp.x0 + 150 && q.pos.y >= hp.y0 - 2 && q.pos.y <= hp.y1 + 2; };
+                for (const ImDrawVert& q : ImGui::GetForegroundDrawList()->VtxBuffer) {
+                    l.fgHp += inHp(q);
+                    l.fgCard += q.pos.x > 600 && q.pos.x < 680 && q.pos.y > cy + 18 && q.pos.y > g_listRect.y0; //its text, where the list is
+                }
+                for (const ImDrawVert& q : ImGui::GetBackgroundDrawList()->VtxBuffer) {
+                    l.bgVerts++;
+                    l.bgRed += q.col == COLOR::red;
+                }
+            });
+            return l;
+        };
+        const Lists closed = layers(80, false), open = layers(80, true), low = layers(30, false);
+        CHECK(closed.fgCard > 0 && closed.fgHp > 0 && closed.bgVerts == 0,
+              "menu closed: the close-enemy card (also where the tall player list is) and the HP/SH readout are drawn over the player list");
+        CHECK(open.fgCard > 0 && open.fgHp == 0 && open.bgVerts > 0,
+              "menu open: the close-enemy card is drawn over the menu, the HP/SH readout under it");
+        CHECK(low.bgRed > 0 && low.fgCard > 0, "LOW HEALTH stays on the background list, the card over the player list");
+        g_listRect = {};
+        g_lowHealthRect = {};
+        g_warnSide = 0;
+        config::labelSize = keepLs; config::SCREEN_W = keepW; config::SCREEN_H = keepH;
         ImGui::GetIO().DisplaySize = ImVec2((float)keepW, (float)keepH);
     }
 
@@ -1571,6 +1651,15 @@ int main() {
         const int namesOffMate = textVerts({mateP}), namesOffEnemy = textVerts({enemyP});
         config::showPlayerNames = true;
         CHECK(namesOffMate > namesOffEnemy, "Player names off: a teammate still has TEAM over his box");
+        //a down squad mate too: his cross and DOWN label look like a down enemy's, the name line tells them apart
+        RenderEntity downMate = mateP, downEnemy = enemyP;
+        downMate.isDead = downEnemy.isDead = true;
+        CHECK(textIn(downMate, COLOR::mate()) > 0 && textIn(downEnemy, COLOR::mate()) == 0 && textVerts({downMate}) > textVerts({downEnemy}),
+              "a down squad mate: TEAM before his name, in the teammate colour (a down enemy: neither)");
+        config::showPlayerNames = false;
+        const int downOffMate = textVerts({downMate}), downOffEnemy = textVerts({downEnemy});
+        config::showPlayerNames = true;
+        CHECK(downOffMate > downOffEnemy, "Player names off: a down squad mate still has TEAM by his cross");
         config::showTeammates = false;
     }
 
@@ -1651,15 +1740,6 @@ int main() {
         //two labels whose cards would touch-overlap side by side (6 px between their texts): only the first is drawn
         const int one = textOf([&] { QueueLabel(500, 500, "Trash can", 15, 3, 10); FlushLabels(); });
         const int two = textOf([&] { QueueLabel(500, 500, "Trash can", 15, 3, 10); QueueLabel(500 + ts.x + 6, 500, "Trash can", 15, 3, 11); FlushLabels(); });
-        //a down squad mate too: his cross and DOWN label look like a down enemy's, the name line tells them apart
-        RenderEntity downMate = mateP, downEnemy = enemyP;
-        downMate.isDead = downEnemy.isDead = true;
-        CHECK(textIn(downMate, COLOR::mate()) > 0 && textIn(downEnemy, COLOR::mate()) == 0 && textVerts({downMate}) > textVerts({downEnemy}),
-              "a down squad mate: TEAM before his name, in the teammate colour (a down enemy: neither)");
-        config::showPlayerNames = false;
-        const int downOffMate = textVerts({downMate}), downOffEnemy = textVerts({downEnemy});
-        config::showPlayerNames = true;
-        CHECK(downOffMate > downOffEnemy, "Player names off: a down squad mate still has TEAM by his cross");
         config::labelCards = false;
         CHECK(one > 0 && two == one, "label cards 6 px apart would overlap: the second one is left out");
         CHECK(std::abs(plain.x0 - (500 - ts.x / 2 - 2)) < 0.01f && std::abs(plain.y0 - (500 - 7.5f - 1)) < 0.01f &&
