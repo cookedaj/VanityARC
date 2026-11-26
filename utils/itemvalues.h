@@ -1,5 +1,6 @@
 #pragma once
-//Sell values for items. Read from ~/.config/kwin-helper/values.txt, one item per line: "Name | 1234".
+//Sell values for items. Read from ~/.config/kwin-helper/values.txt, one item per line: "Name | 1234". The price may also
+//be written "1,234", "1 234", "14k", "1.5k" or "2m".
 //The name is the display name the overlay shows (for example "Snap Hook") or the internal asset name without "DA_Item_".
 //Lines starting with # are ignored. Items not in the file have no value and are counted as unpriced.
 #ifndef KWINHELPER_ITEMVALUES_H
@@ -16,6 +17,9 @@ long valueOf(const std::string& name);
 
 //How many prices are loaded (0: no values.txt, or nothing usable in it)
 size_t count();
+
+//A number with thousands separators, as the inventory window shows prices: 145000 -> "145,000"
+std::string grouped(long v);
 
 int load();                              //read values.txt (at start); returns how many lines were ignored
 //Read values.txt again if it was saved, added or removed since the last read. Checks the file at most every

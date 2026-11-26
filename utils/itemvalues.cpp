@@ -1,7 +1,9 @@
 #include "itemvalues.h"
 
+#include <algorithm>
 #include <cctype>
 #include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
@@ -49,7 +51,55 @@ std::string trim(const std::string& s) {
     return s.substr(a, b - a + 1);
 }
 
+//The highest price taken: no item is worth that much, and it keeps a window's total far from overflowing
+constexpr long long MAX_PRICE = 1000000000000LL;
+
+bool allDigits(const std::string& s) {
+    return std::all_of(s.begin(), s.end(), [](unsigned char c) { return std::isdigit(c) != 0; });
+}
+
+//A price as values.txt may write it: "14000", "14,000", "14 000", "14k", "1.5k" or "2m" (k thousand, m million, either
+//case). -1 for anything else.
+long long priceOf(std::string s) {
+    if (!s.empty() && s[0] == '+') s.erase(0, 1); //"+14000" was always read
+    if (s.empty()) return -1;
+    const char last = (char)std::tolower((unsigned char)s.back());
+    if (last == 'k' || last == 'm') {
+        const long long mult = last == 'k' ? 1000 : 1000000;
+        s = trim(s.substr(0, s.size() - 1));
+        const size_t dot = s.find('.');
+        const std::string whole = s.substr(0, dot), frac = dot == std::string::npos ? "" : s.substr(dot + 1);
+        if (whole.empty() || whole.size() > 7 || !allDigits(whole) || frac.size() > 6 || !allDigits(frac) ||
+            (dot != std::string::npos && frac.empty()))
+            return -1;
+        const double part = frac.empty() ? 0.0 : (double)std::stoll(frac) / std::pow(10.0, (double)frac.size());
+        return std::stoll(whole) * mult + std::llround(part * (double)mult);
+    }
+    //whole digits, or after the first one to three digits groups of three, all split the same way: "14,000" or "14 000"
+    std::string digits;
+    size_t run = 0; //digits since the last separator
+    char sep = 0;   //the separator used (0: none yet)
+    for (const char c : s) {
+        if (std::isdigit((unsigned char)c)) { digits += c; run++; }
+        else if ((c == ',' || c == ' ') && (!sep || c == sep) && run >= 1 && (sep ? run == 3 : run <= 3)) { sep = c; run = 0; }
+        else return -1;
+    }
+    if (digits.empty() || (sep && run != 3) || digits.size() > 13) return -1;
+    return std::stoll(digits);
+}
+
 } // namespace
+
+std::string grouped(long v) {
+    const std::string d = std::to_string(v);
+    const size_t start = d[0] == '-' ? 1 : 0;
+    std::string out = d.substr(0, start);
+    for (size_t i = start; i < d.size(); i++) {
+        if (i > start && (d.size() - i) % 3 == 0) out += ',';
+        out += d[i];
+    }
+    return out;
+}
 
 long valueOf(const std::string& name) {
     auto it = table().find(norm(name));
@@ -71,15 +121,14 @@ int parse(const std::string& text) {
         size_t bar = line.rfind('|');
         std::string name = bar == std::string::npos ? "" : trim(line.substr(0, bar));
         std::string num = bar == std::string::npos ? "" : trim(line.substr(bar + 1));
-        char* end = nullptr;
-        long v = num.empty() ? -1 : std::strtol(num.c_str(), &end, 10);
-        if (name.empty() || num.empty() || end == num.c_str() || *end != '\0' || v < 0) {
+        const long long v = num.empty() ? -1 : priceOf(num);
+        if (name.empty() || v < 0 || v > MAX_PRICE) {
             if (++ignored <= 5) //a few are enough to find them; the toast gives the total
-                std::printf("[!] values.txt line %d ignored: \"%s\" (expected: name | whole number without commas, e.g. \"Snap Hook | 14000\")\n",
+                std::printf("[!] values.txt line %d ignored: \"%s\" (expected: name | price, e.g. \"Snap Hook | 14000\", \"14,000\" or \"14k\")\n",
                             lineNo, line.c_str());
             continue;
         }
-        table()[norm(name)] = v;
+        table()[norm(name)] = (long)v;
     }
     return ignored;
 }

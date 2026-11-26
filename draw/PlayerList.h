@@ -235,27 +235,47 @@ inline void DrawInspectWindows() {
                         for (const live::InvArray& a : live::invArrays) if (a.category == cat && a.qty < 0) return true;
                         return false;
                     };
+                    //Each row with what it is worth (its price times how many, -1: no price). Within each list the rows go
+                    //from the most valuable down, unpriced ones last; the lists stay in the game's order.
+                    struct Shown { const ItemRow* r; size_t list; long worth; };
+                    std::vector<Shown> shown;
+                    std::map<std::string, size_t> listAt; //where each list first came
+                    for (const ItemRow& r : *rows) {
+                        const long p = havePrices ? price(r) : -1;
+                        shown.push_back({&r, listAt.try_emplace(r.category, listAt.size()).first->second, p < 0 ? -1 : p * r.count});
+                    }
+                    std::stable_sort(shown.begin(), shown.end(), [](const Shown& a, const Shown& b) { return a.list != b.list ? a.list < b.list : a.worth > b.worth; });
                     if (values && !havePrices) ui::Note("No prices yet: add lines like 'Snap Hook | 14000' to ~/.config/kwin-helper/values.txt");
                     else if (havePrices) {
                         long total = 0;
                         int unpriced = 0;
                         bool atLeast = false;
-                        for (const ItemRow& r : *rows) {
-                            long v = price(r);
-                            if (v < 0) unpriced++;
-                            else { total += v * r.count; atLeast |= slotsOnly(r.category); }
+                        for (const Shown& s : shown) {
+                            if (s.worth < 0) unpriced++;
+                            else { total += s.worth; atLeast |= slotsOnly(s.r->category); }
                         }
+                        const std::string sum = itemvalues::grouped(total); //"145,000"
                         char tb[120];
                         const char* lower = atLeast ? "at least " : ""; //slot counts: stacks are counted as one
-                        if (unpriced) std::snprintf(tb, sizeof tb, "Value at least %ld  (%d with no price)", total, unpriced);
-                        else std::snprintf(tb, sizeof tb, "Value %s%ld", lower, total);
+                        if (unpriced) std::snprintf(tb, sizeof tb, "Value at least %s  (%d with no price)", sum.c_str(), unpriced);
+                        else std::snprintf(tb, sizeof tb, "Value %s%s", lower, sum.c_str());
                         ImGui::TextUnformatted(tb);
                     }
                     std::string lastCat;
-                    for (const ItemRow& r : *rows) {
+                    for (const Shown& s : shown) {
+                        const ItemRow& r = *s.r;
                         if (r.category != lastCat) { lastCat = r.category; ImGui::TextColored(ImColor(ui::GREY), "%s", r.category.c_str()); }
-                        const char* np = havePrices && price(r) < 0 ? "  (no price)" : "";
-                        if (r.count > 1) ImGui::Text(slotsOnly(r.category) ? "  %s  %d slots%s" : "  %s  x%d%s", r.name.c_str(), r.count, np); else ImGui::Text("  %s%s", r.name.c_str(), np);
+                        char line[160];
+                        if (r.count > 1) std::snprintf(line, sizeof line, slotsOnly(r.category) ? "  %s  %d slots" : "  %s  x%d", r.name.c_str(), r.count);
+                        else std::snprintf(line, sizeof line, "  %s", r.name.c_str());
+                        const float right = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x; //the window's right edge
+                        ImGui::TextUnformatted(line);
+                        if (!havePrices) continue;
+                        //its worth at the right edge, so the numbers line up; right after the name when the window is too narrow
+                        const std::string p = s.worth >= 0 ? itemvalues::grouped(s.worth) : "(no price)";
+                        const float nameEnd = ImGui::GetItemRectMax().x - ImGui::GetWindowPos().x + ImGui::GetScrollX();
+                        ImGui::SameLine(std::max(right - ImGui::CalcTextSize(p.c_str()).x, nameEnd + S(16)));
+                        ImGui::TextUnformatted(p.c_str());
                     }
                 } else if (!rows) {
                     ui::Note("Reading inventory..."); //the tracker has not read this player yet

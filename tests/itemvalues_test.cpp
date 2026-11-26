@@ -36,7 +36,24 @@ int main() {
     CHECK(itemvalues::parse("Snap Hook | 1") == 0, "a good file ignores nothing");
     CHECK(itemvalues::valueOf("Snap Hook") == 1, "parse replaces the table");
     CHECK(itemvalues::valueOf("Light Ammo") == -1, "old entries are gone after parse");
-    CHECK(itemvalues::parse("Light Ammo | 1,234\n| 5\nName |\n") == 3, "thousands commas, no name, no number: each line counted");
+    CHECK(itemvalues::parse("Light Ammo | 1,23\n| 5\nName |\n") == 3, "a wrong thousands group, no name, no number: each line counted");
+
+    //prices written with thousands separators or with k and m
+    CHECK(itemvalues::parse("A | 14,000\nB | 14 000\nC | 14k\nD | 1.5k\nE | 2m\nF | 2M\nG | 1,234,567\nH | +500\nI | 1.25 K\nJ | 007\n") == 0,
+          "14,000  14 000  14k  1.5k  2m  2M  1,234,567  +500  1.25 K  007: all read");
+    CHECK(itemvalues::valueOf("A") == 14000 && itemvalues::valueOf("B") == 14000 && itemvalues::valueOf("C") == 14000,
+          "14,000, 14 000 and 14k are 14000");
+    CHECK(itemvalues::valueOf("D") == 1500 && itemvalues::valueOf("E") == 2000000 && itemvalues::valueOf("F") == 2000000,
+          "1.5k is 1500, 2m and 2M are 2000000");
+    CHECK(itemvalues::valueOf("G") == 1234567 && itemvalues::valueOf("H") == 500 && itemvalues::valueOf("I") == 1250 && itemvalues::valueOf("J") == 7,
+          "1,234,567, +500, 1.25 K and 007 read as written");
+    CHECK(itemvalues::parse("A | 1,2345\nB | 12,34\nC | ,500\nD | 500,\nE | 1.5\nF | 14.000\nG | k\nH | 1.k\nI | 1x\nJ | 1,000 000\n"
+                            "K | 99999999999999\nL | 5000000m\nM | -5k\n") == 13,
+          "groups not of three, a decimal without k or m, a bare k, junk, too big and negative: each line ignored");
+    CHECK(itemvalues::count() == 0 && itemvalues::valueOf("F") == -1, "14.000 is not taken for fourteen thousand (nor 14)");
+    CHECK(itemvalues::grouped(0) == "0" && itemvalues::grouped(999) == "999" && itemvalues::grouped(1000) == "1,000" &&
+          itemvalues::grouped(145000) == "145,000" && itemvalues::grouped(1234567) == "1,234,567" && itemvalues::grouped(-1500) == "-1,500",
+          "thousands separators: 0, 999, 1,000, 145,000, 1,234,567, -1,500");
 
     itemvalues::clear();
     CHECK(itemvalues::valueOf("Snap Hook") == -1, "clear empties the table");

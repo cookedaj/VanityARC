@@ -501,10 +501,11 @@ int main() {
     {
         const std::string vdir = testDir("menuvalues");
         std::filesystem::create_directories(vdir);
-        std::ofstream(vdir + "/values.txt", std::ios::trunc) << "Snap Hook | 14000\n";
+        std::ofstream(vdir + "/values.txt", std::ios::trunc) << "Snap Hook | 14,000\nBandage | 0.1k\nFabric | 2 000\n";
         itemvalues::setDir(vdir);
         auto inv = std::make_shared<std::unordered_map<ptr, std::vector<ItemRow>>>();
-        (*inv)[fake[0].actor] = {ItemRow{"Snap Hook", "SnapHook", "Backpack", 1}, ItemRow{"Bandage", "Bandage_01", "Backpack", 2}};
+        (*inv)[fake[0].actor] = {ItemRow{"Bandage", "Bandage_01", "Backpack", 2}, ItemRow{"Rusty Gear", "RustyGear", "Backpack", 1},
+                                 ItemRow{"Snap Hook", "SnapHook", "Backpack", 1}, ItemRow{"Fabric", "Fabric", "Safe pocket", 3}};
         g_ui.inv = inv;
         g_inspect = {PlayerKey(fake[0])};
         std::string shown; //the text the inventory window wrote (ImGui's log)
@@ -516,9 +517,15 @@ int main() {
         CHECK(itemvalues::count() == 0, "Show item values off: values.txt is not read");
         config::showItemValues = true;
         for (int i = 0; i < 3; i++) frame(win);
-        CHECK(itemvalues::count() == 1, "Show item values on: values.txt is read");
-        CHECK(shown.find("Value at least 14000") != std::string::npos && shown.find("(no price)") != std::string::npos,
-              "Show item values on: the total and the unpriced items show");
+        CHECK(itemvalues::count() == 3, "Show item values on: values.txt is read (14,000, 0.1k and 2 000 are prices)");
+        CHECK(shown.find("Value at least 20,200  (1 with no price)") != std::string::npos && shown.find("(no price)") != std::string::npos,
+              "Show item values on: the total with thousands separators, and the unpriced items show");
+        CHECK(shown.find("14,000") != std::string::npos && shown.find("6,000") != std::string::npos,
+              "Show item values on: each row shows what it is worth (price times how many), with thousands separators");
+        const size_t hook = shown.find("Snap Hook"), band = shown.find("Bandage"), gear = shown.find("Rusty Gear"),
+                     pocket = shown.find("Safe pocket"), fabric = shown.find("Fabric");
+        CHECK(hook < band && band < gear && gear < pocket && pocket < fabric && fabric != std::string::npos,
+              "Show item values on: the most valuable rows first within each list, unpriced last, the lists kept apart");
         config::showItemValues = false; g_ui.inv.reset(); g_inspect.clear(); itemvalues::clear();
     }
 

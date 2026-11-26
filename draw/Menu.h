@@ -321,7 +321,7 @@ inline void PagePlayers() {
     Choice("Player list", &config::listMode, {"Off", "Always", "Only with menu"});
     SliderD("List rows", &config::listRows, 3, 16, "%.0f");
     Switch("Show item values", &config::showItemValues);
-    Note("Sell prices and a total in the inventory windows. Prices come from ~/.config/kwin-helper/values.txt.");
+    Note("Sell prices, most valuable first, and a total in the inventory windows. Prices come from ~/.config/kwin-helper/values.txt.");
     Section("TEAMMATES");
     Switch("Hide players with unknown team", &config::hideUnknownTeams);
     static double clearArmedAt = -1;
