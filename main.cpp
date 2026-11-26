@@ -118,7 +118,6 @@ int main() {
     std::string noteSeen;   //the window setup problem that was on screen when the menu was opened
     FrameKey lastKey{};
     bool lastChanged = true; //the last frame changed something: one more follows it (ImGui windows settle a frame late)
-    float msgEnd = 0;        //how far down the messages at the top reached last frame (MessagesTop)
     bool msgUnder = false;   //they went under LOW HEALTH last frame
     while (g_Running && !OverlayShouldClose()) {
         MenuPollToggle();
@@ -280,7 +279,7 @@ int main() {
         if (live && config::espEnabled && !config::streamHide) DrawESP(ents, vm, snap->localPlayerTeam);
 
         //the next free line at the top middle of the screen: under LOW HEALTH when a tall player list pushed it up there
-        const float shift = MessagesTop(12, msgEnd, msgUnder) - 12;
+        const float shift = MessagesTop(12, g_msgEnd, msgUnder) - 12;
         float top = 12 + shift;
         ImDrawList* const msgs = TopMessageList(g_MenuOpen); //over the player list while the menu is closed
         if (snap->gameUpdated) {
@@ -336,7 +335,7 @@ int main() {
         }
         //The short messages go over every window (the foreground list): over the player list while the menu is closed,
         //over the menu while it is open. LOW HEALTH stays under the menu: on top it would block menu rows for long.
-        msgEnd = DrawToast(below, ImGui::GetForegroundDrawList()) - shift; //as if they had started at the top
+        g_msgEnd = DrawToast(below, ImGui::GetForegroundDrawList()) - shift; //as if they had started at the top
 
         //The close-enemy warning goes last, over every window (DrawWarnings); LOW HEALTH moves below it when both show
         //(above it when there is no room below). Old data: nothing, never an old number.

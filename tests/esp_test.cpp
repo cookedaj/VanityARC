@@ -1483,6 +1483,74 @@ int main() {
         ImGui::GetIO().DisplaySize = ImVec2((float)keepW, (float)keepH);
     }
 
+    //---- the card just under the readout sends LOW HEALTH above the crosshair (Text size 40, health 20, 1280x720 with 1
+    //player listed, 1280x800 with 3): not when it would lie there over the nearest enemy straight ahead (its solid red
+    //card hid his head) or over the messages at the top (the status card and three messages, main.cpp's order: it hid
+    //the last message, with GAME UPDATED the last two). The card then stays at its own place, LOW HEALTH under it.
+    {
+        const float keepLs = config::labelSize;
+        const int keepW = config::SCREEN_W, keepH = config::SCREEN_H;
+        config::showSelfHealth = true; config::closeWarning = true; config::warnDist = 25; config::labelSize = 40; config::showPlayers = true;
+        struct Case { int h; float list; };
+        for (const Case c : {Case{720, 640}, Case{800, 666}}) {
+            config::SCREEN_W = 1280; config::SCREEN_H = c.h;
+            ImGui::GetIO().DisplaySize = ImVec2(1280, (float)c.h);
+            g_listRect = {227, c.list, 1053, (float)c.h - 14};
+            char msg[260];
+            for (const double ahead : {600.0, 900.0}) {
+                const std::vector<RenderEntity> front = {ent(Object::PLAYER, ahead, 0, 0)};
+                g_warnSide = 0; g_warnBeside = false; g_warnLowKept = false; g_msgEnd = 0;
+                for (int f = 0; f < 3; f++) draw([&] { DrawWarnings(front, cam, 3, 20, 50, false); });
+                float bx, by, bw, bh;
+                RenderEntity standing = front[0];
+                const bool shown = PlayerScreenBox(View(cam, MakeProjection()), standing, bx, by, bw, bh);
+                const LabelRect box{bx - bw / 2, by, bx + bw / 2, by + bh}, low = g_lowHealthRect;
+                std::snprintf(msg, sizeof msg, "1280x%d, list from y %.0f, health 20, an enemy %.0f m ahead (box y %.0f-%.0f): LOW HEALTH (y %.0f-%.0f) is not over him",
+                              c.h, c.list, ahead / 100, box.y0, box.y1, low.y0, low.y1);
+                CHECK(shown && low.y1 > low.y0 && !RectsOverlap(low, box) && low.y1 <= c.list && !RectsOverlap(low, g_warnRect), msg);
+            }
+            const std::vector<RenderEntity> behind = {ent(Object::PLAYER, -900, 0, 0)};
+            g_toasts.clear();
+            for (const char* t : {"Health 20, shield 50. 1 enemy within 40 meters. Nearest behind, 9 meters.", "Teammate marked: cooked", "F7 again to clear 2 marks"})
+                Toast(t, 60);
+            for (const bool updated : {false, true}) {
+                g_warnSide = 0; g_warnBeside = false; g_warnLowKept = false; g_msgEnd = 0; g_lowHealthRect = {};
+                bool under = false;
+                int covered = 0;
+                for (int f = 0; f < 4; f++)
+                    draw([&] {
+                        ImDrawList* const fg = ImGui::GetForegroundDrawList();
+                        const float shift = MessagesTop(12, g_msgEnd, under) - 12;
+                        float top = 12 + shift;
+                        if (updated) {
+                            const float big = config::labelSize * 1.6f;
+                            DrawLabelCentered(640, top + big / 2, "GAME UPDATED: MARKERS MAY BE WRONG", big, COLOR::white, true, fg);
+                            top += big + 8;
+                        }
+                        const float below = DrawStatusCard("live  -  120 Hz  -  data 4 ms  -  9 players", "60 fps   step 0.20 ms   scan 1.0 ms", top + 8, fg);
+                        g_msgEnd = DrawToast(below, fg) - shift;
+                        const int n = fg->VtxBuffer.Size; //the messages and cards: drawn before LOW HEALTH
+                        DrawWarnings(behind, cam, 3, 20, 50, false);
+                        const LabelRect& lr = g_lowHealthRect;
+                        covered = 0;
+                        for (int k = 0; k < n; k++) {
+                            const ImVec2 q = fg->VtxBuffer[k].pos;
+                            covered += q.x > lr.x0 && q.x < lr.x1 && q.y > lr.y0 && q.y < lr.y1;
+                        }
+                    });
+                std::snprintf(msg, sizeof msg, "1280x%d, list from y %.0f, health 20, an enemy close behind, the status card and three messages%s (down to y %.0f): LOW HEALTH (y %.0f-%.0f) covers none of them (%d vertices)",
+                              c.h, c.list, updated ? " under GAME UPDATED" : "", g_msgEnd, g_lowHealthRect.y0, g_lowHealthRect.y1, covered);
+                CHECK(g_lowHealthRect.y1 > g_lowHealthRect.y0 && covered == 0, msg);
+            }
+            g_toasts.clear();
+        }
+        g_listRect = {};
+        g_lowHealthRect = g_warnRect = {};
+        g_warnSide = 0; g_warnBeside = false; g_warnLowKept = false; g_msgEnd = 0;
+        config::labelSize = keepLs; config::SCREEN_W = keepW; config::SCREEN_H = keepH;
+        ImGui::GetIO().DisplaySize = ImVec2((float)keepW, (float)keepH);
+    }
+
     //---- an enemy's edge arrow at the close-enemy card's height: with the card moved right beside the readout (1366x768 at
     //Text size 36, the nearest enemy 9 m behind) it reaches to the screen's right edge, and drawn over everything it hid
     //the arrow and distance of a second enemy 40 m away to your right and a little behind. The arrow now steps above it.

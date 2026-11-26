@@ -379,6 +379,10 @@ inline float WarnFloor() {
 //arrows and labels keep off it: drawn later and solid red, it hid an enemy's red arrow under it.
 inline LabelRect g_lowHealthRect;
 
+//How far down the messages and cards at the top reached last frame, measured as if they had started at the top (main.cpp,
+//MessagesTop's end). The close-enemy card keeps LOW HEALTH's place under it rather than send LOW HEALTH up over them.
+inline float g_msgEnd = 0;
+
 //Where the messages and cards at the top of the screen start (main.cpp): at top, or 8 px under LOW HEALTH when it
 //reaches into where they went last frame and sits nearer the screen's top than the crosshair (a tall player list pushes
 //it up there), so its red card, drawn after them, never covers one. end: how far down they reached last frame, measured
@@ -439,6 +443,20 @@ inline float LowHealthX(float y) {
 //narrow screen) counts as if its top were 18 px under the crosshair, so LOW HEALTH never goes over the crosshair.
 constexpr float LOW_HEALTH_ABOVE = 40;
 
+//Where DrawLowHealth puts LOW HEALTH's middle down the screen (below / above: as DrawLowHealth's), and its red card with
+//its middle at y
+inline float LowHealthY(float below, float above) {
+    const float half = LabelSize("LOW HEALTH", config::labelSize * 2.4f).y / 2 + 6;
+    float y = below > 0 ? below + 10 + half : (float)config::SCREEN_H * 0.62f;
+    if (below > 0 && above > 0 && y + half > WarnFloor()) y = std::min(above, CrosshairY() + 18) - LOW_HEALTH_ABOVE - half; //no room under the card
+    return std::max(half, std::min(y, WarnFloor() - half));
+}
+inline LabelRect LowHealthRect(float y) {
+    const ImVec2 ts = LabelSize("LOW HEALTH", config::labelSize * 2.4f);
+    const float half = ts.y / 2 + 6, x = LowHealthX(y); //off the HP/SH readout
+    return {x - ts.x / 2 - 14, y - half, x + ts.x / 2 + 14, y + half};
+}
+
 //Your own health and shield in big white text on a dark card, at the bottom left just above the game's health bar.
 //hp < 0: not read, so nothing (never a guessed number). shield < 0: not read or no shield offset, so health only.
 //Overlay opacity never fades it. dl: where it goes (null: the background list).
@@ -464,18 +482,12 @@ inline void DrawLowHealth(double hp, float below = 0, float above = 0, ImDrawLis
     g_lowHealthRect = {};
     if (!IsLowHealth(hp)) return; //also not read or NaN
     const FullStrength solid;
-    const char* warn = "LOW HEALTH";
-    const float huge = config::labelSize * 2.4f;
-    const ImVec2 ts = LabelSize(warn, huge);
-    const float half = ts.y / 2 + 6;
-    float y = below > 0 ? below + 10 + half : (float)config::SCREEN_H * 0.62f;
-    if (below > 0 && above > 0 && y + half > WarnFloor()) y = std::min(above, CrosshairY() + 18) - LOW_HEALTH_ABOVE - half; //no room under the card
-    y = std::max(half, std::min(y, WarnFloor() - half));
-    const float x = LowHealthX(y); //off the HP/SH readout
+    const float y = LowHealthY(below, above), x = LowHealthX(y); //x: off the HP/SH readout
+    const LabelRect r = LowHealthRect(y);
     if (!COLOR::mono()) //white on solid red; monochrome: white on the dark card
-        DrawRectFilled(x - ts.x / 2 - 14, y - half, x + ts.x / 2 + 14, y + half, COLOR::red, dl);
-    DrawLabelCentered(x, y, warn, huge, COLOR::white, COLOR::mono(), dl);
-    g_lowHealthRect = {x - ts.x / 2 - 14, y - half, x + ts.x / 2 + 14, y + half};
+        DrawRectFilled(r.x0, r.y0, r.x1, r.y1, COLOR::red, dl);
+    DrawLabelCentered(x, y, "LOW HEALTH", config::labelSize * 2.4f, COLOR::white, COLOR::mono(), dl);
+    g_lowHealthRect = r;
 }
 
 //Both on the background list, LOW HEALTH over the readout
@@ -1213,6 +1225,10 @@ constexpr float WARN_SLACK_PX = 10, WARN_STICK_PX = 24;
 //The close-enemy card was moved right off the HP/SH readout last frame: it stays there until it is WARN_STICK_PX clear of
 //the readout's height, so small steps never make it jump sideways back and forth. False whenever no card shows.
 inline bool g_warnBeside = false;
+//The close-enemy card stayed at its own place last frame, over part of the HP/SH readout, so LOW HEALTH kept its place
+//under it: just under the readout, the card would have sent LOW HEALTH up over the nearest enemy or the messages at the
+//top. It stays so until LOW HEALTH's place up there is WARN_STICK_PX clear of them. False whenever no card shows.
+inline bool g_warnLowKept = false;
 
 //A big card under the middle of the screen for the nearest enemy closer than warnDist: "ENEMY 9 m BEHIND", or
 //"3 ENEMIES - NEAREST 9 m LEFT", with ", ABOVE" / ", BELOW" when he is more than 3 m higher or lower, and a big white
@@ -1225,9 +1241,10 @@ inline std::string DrawCloseEnemyWarning(const std::vector<RenderEntity>& entiti
                                          float* bottom = nullptr, float extraBelow = 0, ImDrawList* dl = nullptr,
                                          float* top = nullptr) {
     const int side = g_warnSide;
-    const bool wasBeside = g_warnBeside;
+    const bool wasBeside = g_warnBeside, wasKept = g_warnLowKept;
     g_warnSide = 0;
     g_warnBeside = false;
+    g_warnLowKept = false;
     g_warnRect = {};
     if (!config::closeWarning) return {};
     const View v(vm, MakeProjection());
@@ -1269,15 +1286,37 @@ inline std::string DrawCloseEnemyWarning(const std::vector<RenderEntity>& entiti
     //top stays 18 px or more below the crosshair
     const float F = WarnFloor();
     cy = std::min(cy, std::max(F - extraBelow - hy - 2, (float)v.cy + hy + 20));
+    //The nearest enemy's box, bars and labels when DrawESP shows him: the card keeps off them (below), and so does
+    //LOW HEALTH. His box is the standing one (90 cm up and down from him), not his animated pose, so the card does not
+    //shake with every step he takes.
+    float bx, by, bw, bh;
+    RenderEntity standing = *nearest;
+    standing.pose = nullptr;
+    const bool showsHim = config::showPlayers && best <= config::maxPlayerDist && PlayerScreenBox(v, standing, bx, by, bw, bh);
+    LabelRect him{};
+    if (showsHim) {
+        const float ls = config::labelSize, ls2 = SmallTextSize(0.9f);
+        const float m = std::max(3.0f, std::min(10.0f, std::max(1.0f, config::boxThickness)) / 2 + 1); //as in DrawESP
+        const float nameH = LineSlot(ls), linesH = 2 * LineSlot(ls2); //name above; distance and guns below (or above)
+        float half = bw / 2 + 2 * m + BarsReach(); //the health and shield bars on the right, as wide as Text size makes them
+        const float nh = config::showBars && config::barNumbers ? ls + 1 + std::max(2.0f, LabelReach(ls).y) : 0; //half the height of the bar numbers
+        if (nh > 0) half += LabelSize("HP 100", ls).x + 8; //beside the bars, on either side
+        for (const std::string& s : {nearest->label, nearest->sub, std::string("999m")}) half = std::max(half, LabelSize(s.c_str(), ls).x / 2 + 4);
+        //the bar numbers sit at his box's middle, under the name at the screen's top (DrawPlayerBars' minTop)
+        const float numMid = nh > 0 ? std::max(by + bh / 2, nameH + 2 + nh) : by + bh / 2;
+        him = {bx - half, std::min(by - m, numMid - nh) - nameH - linesH, bx + half, std::max(by + bh + m, numMid + nh) + linesH};
+    }
     //Under the crosshair, but kept on the screen (Shift X moves the crosshair sideways; FitSize made the card fit the
     //width; + the 3 px frame and its soft edge) and off the big HP/SH readout (its nearly black fill hid the shield
     //number): moved right just past it, as LOW HEALTH is. The widest readout counts, so the card does not move as the
     //numbers change. On a screen too narrow for both side by side, the card goes just under the readout (LOW HEALTH's
     //room under it still above the floor), or else just above it (its top still 18 px or more below the crosshair), or
-    //else just under it without LOW HEALTH's room (LOW HEALTH then goes above the crosshair). Where none of these fits
-    //(a short screen and a long player list: 1280x800 at Text size 40 with 5 or more players listed) the readout gives
-    //way: the card stays under the crosshair, moved right as far as the screen allows, and covers part of the readout.
-    //It never goes over the crosshair or the player list instead.
+    //else just under it without LOW HEALTH's room (LOW HEALTH then goes above the crosshair, but not when it would lie
+    //over the nearest enemy or the messages at the top there while it still fits under the card at the card's own place:
+    //drawn solid red over them, it hid his head or a message). Where none of these fits (a short screen and a long player
+    //list: 1280x800 at Text size 40 with 5 or more players listed) the readout gives way: the card stays under the
+    //crosshair, moved right as far as the screen allows, and covers part of the readout. It never goes over the
+    //crosshair or the player list instead.
     //ponytail: once moved below or above the nearest enemy on such a narrow screen, it can still reach over the readout.
     const LabelRect hpCard = config::showSelfHealth ? SelfHealthRect() : LabelRect{};
     const float gap = 8, xLo = hx + 3, xHi = std::max(xLo, (float)config::SCREEN_W - hx - 3);
@@ -1289,8 +1328,15 @@ inline std::string DrawCloseEnemyWarning(const std::vector<RenderEntity>& entiti
     if (onReadout(centre, cy, gap) && onReadout(beside, cy, gap)) {
         const float under = hpCard.y1 + gap + hy + 2, over = hpCard.y0 - gap - hy - 2;
         movedOff = true;
+        //LOW HEALTH's place above the crosshair, where the last of these sends it (kept off them last frame: until it
+        //is WARN_STICK_PX clear of them)
+        const LabelRect up = LowHealthRect(LowHealthY(under + hy + 2, under - hy - 2));
+        const float st = wasKept ? WARN_STICK_PX : 0;
+        const bool keepLow = cy + hy + 2 + extraBelow <= F && //at its own place, LOW HEALTH fits under the card
+                             (up.y0 - st < g_msgEnd || (showsHim && RectsOverlap(him, {up.x0 - st, up.y0 - st, up.x1 + st, up.y1 + st})));
         if (under + hy + 2 + extraBelow <= F) cy = under;
         else if (over - hy - 2 >= (float)v.cy + 18) cy = over;
+        else if (under + hy + 2 <= F && keepLow) { movedOff = false; g_warnLowKept = true; }
         else if (under + hy + 2 <= F) cy = under;
         else movedOff = false;
     }
@@ -1300,24 +1346,9 @@ inline std::string DrawCloseEnemyWarning(const std::vector<RenderEntity>& entiti
     float cx = besideHere ? beside : centre;
     //Never over the nearest enemy when DrawESP shows him: below his box, bars and labels, above them when there is no
     //room below (LOW HEALTH follows the card, and is kept off him too, but never by moving the card up to the
-    //crosshair). When he fills the screen top to bottom the card stays put. His box is the standing one (90 cm up and
-    //down from him), not his animated pose, so the card does not shake with every step he takes.
-    float bx, by, bw, bh;
-    RenderEntity standing = *nearest;
-    standing.pose = nullptr;
+    //crosshair). When he fills the screen top to bottom the card stays put.
     int newSide = 0;
-    if (config::showPlayers && best <= config::maxPlayerDist && PlayerScreenBox(v, standing, bx, by, bw, bh)) {
-        const float ls = config::labelSize, ls2 = SmallTextSize(0.9f);
-        const float m = std::max(3.0f, std::min(10.0f, std::max(1.0f, config::boxThickness)) / 2 + 1); //as in DrawESP
-        const float nameH = LineSlot(ls), linesH = 2 * LineSlot(ls2); //name above; distance and guns below (or above)
-        float half = bw / 2 + 2 * m + BarsReach(); //the health and shield bars on the right, as wide as Text size makes them
-        const float nh = config::showBars && config::barNumbers ? ls + 1 + std::max(2.0f, LabelReach(ls).y) : 0; //half the height of the bar numbers
-        if (nh > 0) half += LabelSize("HP 100", ls).x + 8; //beside the bars, on either side
-        for (const std::string& s : {nearest->label, nearest->sub, std::string("999m")}) half = std::max(half, LabelSize(s.c_str(), ls).x / 2 + 4);
-        //the bar numbers sit at his box's middle, under the name at the screen's top (DrawPlayerBars' minTop)
-        const float numMid = nh > 0 ? std::max(by + bh / 2, nameH + 2 + nh) : by + bh / 2;
-        const LabelRect him{bx - half, std::min(by - m, numMid - nh) - nameH - linesH, bx + half,
-                            std::max(by + bh + m, numMid + nh) + linesH};
+    if (showsHim) {
         //The card, and LOW HEALTH under it (extraBelow) where DrawSelfHealth draws it: the screen's middle, or beside the
         //HP/SH readout (LowHealthX at LOW HEALTH's middle: 10 px under the card plus half its height). One box round both:
         //he stays clear of the pair, and the card does not keep moving in and out of the gap between them
