@@ -87,7 +87,9 @@ inline void DrawPlayerRows(int maxRows) {
     if (players.empty()) { ui::Note(g_ui.live ? "No players in view." : "No live data from the game."); return; }
     std::stable_partition(players.begin(), players.end(), [](const RenderEntity* e) { return !IsTeammate(*e, g_ui.localTeam); });
     using ui::S; //column positions for 15 px text, grown with the menu text size
-    const float xDist = S(175), xHp = S(275), xSh = S(335), xSeen = S(395), xTeam = S(440), xGun = S(520), rowW = S(LIST_ROW_W);
+    //the name gets 184 px before WHERE, as much as before WHERE came (a long name would print over the distance); the
+    //row stays 810 wide, so a capped player list on a narrow screen keeps its text size
+    const float xDist = S(190), xHp = S(290), xSh = S(350), xSeen = S(410), xTeam = S(455), xGun = S(535), rowW = S(LIST_ROW_W);
     ImGui::TextColored(ImColor(ui::GREY), "NAME");
     ImGui::SameLine(xDist); ImGui::TextColored(ImColor(ui::GREY), "WHERE");
     ImGui::SameLine(xHp); ImGui::TextColored(ImColor(ui::GREY), "HP");

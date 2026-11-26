@@ -255,9 +255,10 @@ inline void PageEsp() {
     Note("ARC arrow range: a live ARC this near that you cannot see gets an arrow at the screen edge (never beyond ARC range).");
     Section("CLOSE ENEMY WARNING");
     Switch("Big warning for a close enemy", &config::closeWarning);
-    if (config::closeWarning) SliderD("Warning card range", &config::warnDist, 5, 100, "%.0f m");
+    SliderD("Warning card range", &config::warnDist, 5, 100, "%.0f m"); //shown with the card off too: it also sets the spoken "Enemy close" and the bigger edge arrows
     Note("The card has a big arrow pointing toward the nearest enemy and says ABOVE or BELOW when he is more than 3 m "
-         "higher or lower. Edge arrows for enemies within this range are bigger. The spoken warning has its own range: "
+         "higher or lower. Edge arrows for enemies within this range are bigger, and the spoken warning says \"Enemy "
+         "close\" when one comes within it, also with the card off. The first spoken warning has its own range: "
          "Settings tab, Spoken warning range.");
 }
 
@@ -332,7 +333,11 @@ inline void PagePlayers() {
     Note("F6 marks the player at your crosshair, F7 pressed twice clears all.");
     DrawSavedMarks();
     Section("PLAYERS IN VIEW");
+    //in a box of its own that scrolls sideways: at a big Menu text size the rows are wider than the page, and TEAM's
+    //'mark' button and GUNS would be out of reach (a sideways scroll on the whole page would also widen its notes)
+    ImGui::BeginChild("##rows", ImVec2(0, 0), ImGuiChildFlags_AutoResizeY | ImGuiChildFlags_NavFlattened, ImGuiWindowFlags_HorizontalScrollbar);
     DrawPlayerRows(16);
+    ImGui::EndChild();
 }
 
 inline void PageRadar() {

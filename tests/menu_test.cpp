@@ -14,6 +14,8 @@ static std::string testDir(const char* name) {
 
 static int fails = 0;
 #define CHECK(cond, msg) do { bool ok_ = (cond); std::printf("%s  %s\n", ok_ ? "PASS" : "FAIL", msg); if (!ok_) fails++; } while (0)
+//The menu's page (its child window "kwin-helper/##page_<id>"), not a child of the page such as the Players tab's rows
+static bool IsPage(const ImGuiWindow* w) { const char* p = std::strstr(w->Name, "##page"); return p && !std::strchr(p, '/'); }
 
 template <typename F> static void frame(F fn) {
     ImGui::GetIO().DeltaTime = 1.0f / 60.0f;
@@ -60,7 +62,7 @@ int main() {
     CHECK(true, "menu draws the Settings page");
     auto yellow = [] { for (const ImDrawVert& v : ImGui::GetBackgroundDrawList()->VtxBuffer) if (v.col == GUIDE_YELLOW) return true; return false; };
     ImGuiWindow* pageWin = nullptr;
-    for (ImGuiWindow* win : ImGui::GetCurrentContext()->Windows) if (std::strstr(win->Name, "##page")) pageWin = win;
+    for (ImGuiWindow* win : ImGui::GetCurrentContext()->Windows) if (IsPage(win)) pageWin = win;
     bool guide = false; //scrolled down to the game view part
     for (float at = 0; pageWin && !guide && at <= pageWin->ScrollMax.y + 100; at += 100) {
         ImGui::SetScrollY(pageWin, at);
@@ -153,7 +155,7 @@ int main() {
         CHECK(g_TextGrab.load() && (io.ConfigFlags & ImGuiConfigFlags_NavEnableKeyboard), "with the switch on the open menu takes the keyboard");
 
         ImGuiWindow* page = nullptr;
-        for (ImGuiWindow* win : g.Windows) if (std::strstr(win->Name, "##page")) page = win;
+        for (ImGuiWindow* win : g.Windows) if (IsPage(win)) page = win;
         const ImGuiID pid = page ? page->ID : 0;
         const ImGuiID espOn = ImGui::GetIDWithSeed("##sw", nullptr, ImGui::GetIDWithSeed("ESP on", nullptr, pid));
         const ImGuiID lootRange = ImGui::GetIDWithSeed("##v", nullptr, ImGui::GetIDWithSeed("Loot name range", nullptr, pid));
@@ -323,7 +325,7 @@ int main() {
         frame([] { DrawMenu(); }); frame([] { DrawMenu(); });
         ImGuiWindow* mw = ImGui::FindWindowByName("kwin-helper");
         ImGuiWindow* page = nullptr;
-        for (ImGuiWindow* win : G->Windows) if (std::strstr(win->Name, "##page")) page = win;
+        for (ImGuiWindow* win : G->Windows) if (IsPage(win)) page = win;
         pageId = page ? page->ID : 0;
         int hits = 0, steps = 0;
         hovered.clear();
@@ -361,18 +363,48 @@ int main() {
         char msg[160];
         for (int tab = 0; tab < MENU_TAB_COUNT; tab++) {
             g_MenuTab = tab;
+            const bool cardWas = config::closeWarning;
+            if (tab == 0) config::closeWarning = false; //the ESP tab with the big card off
             scan(MENU_TABS[tab]);
+            config::closeWarning = cardWas;
             if (tab == 0) {
                 std::snprintf(msg, sizeof msg, "ESP tab (menu text %.0f px): the mouse reaches Box style and every skeleton option below the first screen", text);
                 CHECK(hovered.count(choice("Box style")) && hovered.count(sw("Skeleton on players")) && hovered.count(choice("Head marker")) &&
                       hovered.count(choice("Skeleton colour")) && hovered.count(sw("Dim players behind cover")) && hovered.count(sw("Big warning for a close enemy")), msg);
                 std::snprintf(msg, sizeof msg, "ESP tab (menu text %.0f px): the mouse reaches Low health from and ARC arrow range", text);
                 CHECK(hovered.count(slider("Low health from")) && hovered.count(slider("ARC arrow range")), msg);
+                std::snprintf(msg, sizeof msg, "ESP tab (menu text %.0f px): with the big card off, the mouse still reaches Warning card range", text);
+                CHECK(hovered.count(slider("Warning card range")), msg);
             }
             if (tab == 1) {
                 std::snprintf(msg, sizeof msg, "Loot tab (menu text %.0f px): the mouse reaches Ground items, Guns and the container switches at its end", text);
                 CHECK(hovered.count(sw("Ground items")) && hovered.count(sw("Guns")) && hovered.count(sw("Containers")) &&
                       hovered.count(sw("Other##box")) && hovered.count(sw("Medical##box")), msg);
+            }
+            if (tab == 2) { //the rows of players in view scroll sideways in a box of their own, and 'mark' can be reached
+                ImGuiWindow* rows = nullptr;
+                for (ImGuiWindow* win : G->Windows) if (std::strstr(win->Name, "##rows")) rows = win;
+                bool reached = false;
+                if (rows) {
+                    ImGui::SetScrollY(rows->ParentWindow, rows->ParentWindow->ScrollMax.y); //the rows are at the page's end
+                    frame([] { DrawMenu(); }); frame([] { DrawMenu(); });
+                    ImGui::SetScrollX(rows, rows->ScrollMax.x);
+                    frame([] { DrawMenu(); }); frame([] { DrawMenu(); });
+                    const void* rowPtr = (const void*)fake[1].actor; //an enemy with an account: his row has a 'mark' button
+                    const ImGuiID markId = ImGui::GetIDWithSeed("mark", nullptr, ImHashData(&rowPtr, sizeof rowPtr, rows->ID));
+                    const float k = text / ui::BASE_TEXT;
+                    for (float y = rows->Pos.y + 2; y < rows->Pos.y + rows->Size.y && !reached; y += 5 * k)
+                        for (float x = rows->Pos.x + 4; x < rows->Pos.x + rows->Size.x && !reached; x += 9 * k) {
+                            io.AddMousePosEvent(x, y);
+                            frame([] { DrawMenu(); }); frame([] { DrawMenu(); });
+                            reached = G->HoveredId == markId;
+                        }
+                    io.AddMousePosEvent(-1000, -1000);
+                    ImGui::SetScrollX(rows, 0); ImGui::SetScrollY(rows->ParentWindow, 0);
+                    frame([] { DrawMenu(); }); frame([] { DrawMenu(); });
+                }
+                std::snprintf(msg, sizeof msg, "Players tab (menu text %.0f px, %d wide): the rows have a sideways scrollbar and the mouse reaches 'mark'", text, config::SCREEN_W);
+                CHECK(rows && rows->ScrollbarX && reached, msg);
             }
             if (tab == 4) {
                 std::snprintf(msg, sizeof msg, "Settings tab (menu text %.0f px): the mouse reaches Menu text size, the calibration step buttons and Quit", text);
@@ -469,6 +501,32 @@ int main() {
                 }
         io.AddMousePosEvent(-1000, -1000); frame(list); frame(list);
         CHECK(hits == 0, "player list: a body sharing its owner's account clashes with no ID");
+        g_ui.ents = &fake;
+    }
+
+    //a name just under 184 px wide (the room it had before WHERE came) ends before the WHERE column starts
+    {
+        std::vector<RenderEntity> one(1, fake[2]); //an enemy, 60 m ahead
+        std::string name;
+        frame([&] { //'a' up to about 160 px, then 'i' while it stays within 182 px, in the list's own font
+            ui::PushTheme(0.9f, ui::BASE_TEXT);
+            while (ImGui::CalcTextSize((name + "i").c_str()).x <= 182) name += ImGui::CalcTextSize(name.c_str()).x < 160 ? 'a' : 'i';
+            ui::PopTheme();
+        });
+        one[0].label = name;
+        g_ui.ents = &one;
+        for (int i = 0; i < 3; i++) frame([] { DrawPlayerListWindow(true); });
+        std::vector<float> xs; //the left and right x of every white glyph: the name's come first, then WHERE's
+        if (ImGuiWindow* pw = ImGui::FindWindowByName("##playerlist"))
+            for (const ImDrawVert& v : pw->DrawList->VtxBuffer) if (v.col == ui::WHITE) xs.push_back(v.pos.x);
+        const size_t n = 4 * name.size(); //4 corners a glyph
+        float nameEnd = -1e9f, whereStart = 1e9f;
+        for (size_t i = 0; i < xs.size() && i < n + 4; i++) {
+            if (i < n) nameEnd = std::max(nameEnd, xs[i]);
+            else whereStart = std::min(whereStart, xs[i]);
+        }
+        std::printf("name of %zu letters ends at %.1f, WHERE starts at %.1f\n", name.size(), nameEnd, whereStart);
+        CHECK(xs.size() >= n + 4 && nameEnd < whereStart, "player list: a name up to 184 px wide ends before WHERE starts (15 px menu text)");
         g_ui.ents = &fake;
     }
 
