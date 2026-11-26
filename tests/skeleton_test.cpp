@@ -137,6 +137,149 @@ int main() {
         CHECK(!chain(local, comp), "a missing number is rejected");
     }
 
+    //The head marker's centre: 12 cm beyond the head bone along the neck; straight up without a neck; none without a head
+    {
+        Pose p;
+        for (int k = 0; k < JOINT_COUNT; k++) p.j[k] = Vector3(0, 0, 10.0 * k);
+        p.j[NECK2] = Vector3(0, 0, 150);
+        p.j[HEAD] = Vector3(0, 10, 150); //the neck points along +y here
+        Vector3 c = headCentre(p);
+        CHECK(near(c.x, 0) && near(c.y, 22) && near(c.z, 150), "head centre: 12 cm beyond the head bone, along the neck");
+        p.j[NECK2] = badJoint();
+        c = headCentre(p);
+        CHECK(near(c.y, 10) && near(c.z, 162), "no neck: 12 cm straight up");
+        p.j[HEAD] = badJoint();
+        CHECK(!jointOk(headCentre(p)), "no head: no head centre");
+    }
+
+    //One bad bone leaves out only its own joints; the trunk, or more than one limb, and it is no figure at all
+    {
+        std::vector<uint8_t> buf((size_t)BONES * RECORD, 0);
+        auto fill = [&] {
+            for (int i = 0; i < BONES; i++) { Xform x; x.t = i == 0 ? Vector3(0, 0, 0) : Vector3(0, 0, 10); put(buf, i, x); }
+        };
+        fill();
+        Xform local[BONES];
+        decode(buf.data(), local);
+        BoneLengths L;
+        bool bad[BONES];
+        checkLengths(local, L, bad);
+        int marked = 0;
+        for (bool b : bad) marked += b;
+        CHECK(marked == 0 && L.known[10] && near(L.len[10], 10) && !L.known[1], "the first read teaches the limb lengths (not the pelvis, which moves) and marks nothing");
+        Xform stretched;
+        stretched.t = Vector3(0, 0, 30); //a forearm three times as long: a torn record
+        put(buf, 10, stretched);
+        decode(buf.data(), local);
+        checkLengths(local, L, bad);
+        marked = 0;
+        for (bool b : bad) marked += b;
+        CHECK(bad[10] && marked == 1, "a stretched forearm is the only bone marked");
+        Pose p;
+        CHECK(componentPose(local, p, bad), "one bad forearm: still a figure");
+        CHECK(!jointOk(p.j[FOREARM_A]) && !jointOk(p.j[HAND_A]), "its forearm and hand are left out");
+        bool rest = true;
+        for (int k = 0; k < JOINT_COUNT; k++) if (k != FOREARM_A && k != HAND_A) rest = rest && jointOk(p.j[k]);
+        CHECK(rest && near(p.j[HEAD].z, 70) && near(p.j[ARM_A].z, 60), "every other joint is where it was");
+        Xform mesh;
+        mesh.t = Vector3(500, 0, 0);
+        Pose w;
+        CHECK(placePose(p, mesh, Vector3(500, 0, 0), w) && !jointOk(w.j[HAND_A]) && near(w.j[HEAD].x, 500), "placed in the world, the missing joints stay missing");
+        for (int i = 1; i < RELEARN_AFTER; i++) checkLengths(local, L, bad);
+        checkLengths(local, L, bad);
+        CHECK(!bad[10] && near(L.len[10], 30), "a new length read again and again replaces the learned one (the first read was the torn one)");
+
+        fill();
+        Xform zero;
+        zero.q = {0, 0, 0, 0}; //half-written: no rotation
+        put(buf, 44, zero);
+        decode(buf.data(), local);
+        CHECK(componentPose(local, p) && !jointOk(p.j[FOREARM_B]) && !jointOk(p.j[HAND_B]) && jointOk(p.j[ARM_B]),
+              "a half-written forearm: only that forearm and hand are left out, not the whole figure");
+        put(buf, 65, zero);
+        decode(buf.data(), local);
+        CHECK(!componentPose(local, p), "a forearm and a whole leg missing: no figure");
+        fill();
+        put(buf, 3, zero);
+        decode(buf.data(), local);
+        CHECK(!componentPose(local, p), "a bad spine bone: no figure");
+    }
+
+    //Line thickness: never thinner than the box, never thinner as the player comes closer (his box grows), capped
+    {
+        CHECK(thickness(1.5f, 10) == 1.5f && thickness(4, 0) == 4, "far away: the box's own thickness");
+        CHECK(std::fabs(thickness(1.5f, 370) - 7.4f) < 1e-3f, "a player about 5 m away (box 370 px): about 7 px");
+        CHECK(thickness(1.5f, 1e5f) == MAX_LINE && thickness(10, 1e5f) == 12 && thickness(1.5f, NAN) == 1.5f,
+              "capped at 12 px; an unknown box size gives the box's thickness");
+        bool rising = true, inside = true;
+        for (float th : {1.0f, 1.5f, 4.0f, 10.0f}) {
+            float last = 0;
+            for (float h = 0; h < 3000; h += 0.5f) {
+                const float t = thickness(th, h);
+                rising = rising && t >= last;
+                inside = inside && t >= th && t <= std::max(th, MAX_LINE);
+                last = t;
+            }
+        }
+        CHECK(rising && inside, "thickness never drops as the box grows, never under the box's, never over the cap");
+    }
+
+    //The simple far figure: every joint pulled onto one of a few straight lines, smoothly
+    {
+        Pose p;
+        for (int k = 0; k < JOINT_COUNT; k++) p.j[k] = Vector3(std::sin(k * 1.7) * 30, std::cos(k * 2.3) * 20, k * 7.0);
+        Pose s0, s1, half;
+        simplify(p, 0, s0);
+        simplify(p, 1, s1);
+        simplify(p, 0.5, half);
+        bool same = true;
+        for (int k = 0; k < JOINT_COUNT; k++) same = same && s0.j[k] == p.j[k];
+        CHECK(same, "simple 0: the full figure as it is");
+        auto offLine = [](const Vector3& q, const Vector3& a, const Vector3& b) {
+            const Vector3 ab = b - a, aq = q - a;
+            const double l2 = ab.Dot(ab), f = l2 > 0 ? std::fmax(0.0, std::fmin(1.0, aq.Dot(ab) / l2)) : 0.0;
+            return q.Dist(Vector3(a.x + ab.x * f, a.y + ab.y * f, a.z + ab.z * f));
+        };
+        bool onLines = true, endsStay = true;
+        for (int k = 0; k < JOINT_COUNT; k++) {
+            const int a = SIMPLE_ON[k][0], b = SIMPLE_ON[k][1];
+            if (a < 0) endsStay = endsStay && s1.j[k] == p.j[k];
+            else onLines = onLines && offLine(s1.j[k], s1.j[a], s1.j[b]) < 1e-9;
+        }
+        CHECK(endsStay && onLines, "simple 1: the ends stay, every other joint lies on its simple line");
+        bool fullOnSimple = true; //so drawing only SIMPLE_LINES at 1 shows the same as the full figure
+        for (int l = 0; l < LINE_COUNT; l++) {
+            bool found = false;
+            for (int s = 0; s < SIMPLE_COUNT && !found; s++) {
+                const Vector3 &a = s1.j[SIMPLE_LINES[s][0]], &b = s1.j[SIMPLE_LINES[s][1]];
+                found = offLine(s1.j[LINES[l][0]], a, b) < 1e-9 && offLine(s1.j[LINES[l][1]], a, b) < 1e-9;
+            }
+            fullOnSimple = fullOnSimple && found;
+        }
+        CHECK(fullOnSimple, "simple 1: every line of the full figure lies on a line of the simple one");
+        bool halfway = true;
+        for (int k : {SPINE1, SPINE2, SPINE3, NECK1, HIP_A, KNEE_A, TOE_A, HIP_B, KNEE_B, TOE_B})
+            halfway = halfway && half.j[k].Dist(lerp(p.j[k], s1.j[k], 0.5)) < 1e-9;
+        CHECK(halfway, "simple 0.5: half way there");
+    }
+
+    //Easing: how far a step goes, missing joints, and settling within about 150 ms
+    {
+        CHECK(near(easeStep(0.025, 0.025), 1 - std::exp(-1.0)) && easeStep(0, 0.025) == 0 && easeStep(0.01, 0) == 1 && easeStep(1, 0.025) > 0.999999,
+              "ease step: 63% after one time constant, nothing without time, all the way without smoothing");
+        Pose shown, target;
+        for (int k = 0; k < JOINT_COUNT; k++) { shown.j[k] = Vector3(0, 0, 0); target.j[k] = Vector3(10, 20, 30); }
+        target.j[HAND_A] = badJoint();
+        shown.j[HAND_B] = badJoint();
+        Pose settle = shown;
+        ease(shown, target, 0.5);
+        CHECK(near(shown.j[PELVIS].x, 5) && near(shown.j[PELVIS].z, 15), "half a step: half way");
+        CHECK(!jointOk(shown.j[HAND_A]), "a joint the new pose does not have is not drawn");
+        CHECK(near(shown.j[HAND_B].y, 20), "a joint that was missing jumps straight to the new pose");
+        for (int i = 0; i < 19; i++) ease(settle, target, easeStep(0.008, 0.025)); //150 ms of 120 Hz steps
+        CHECK(std::fabs(settle.j[PELVIS].z - 30) < 0.1, "after 150 ms the figure is where the bones are");
+    }
+
     if (failures) { std::printf("%d failures\n", failures); return 1; }
     std::printf("skeleton_test: all passed\n");
     return 0;
