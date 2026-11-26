@@ -830,6 +830,31 @@ int main() {
         CHECK(draw([&] { DrawToast(DrawStatusCard("live", "120 fps")); }) > 0, "status card and toast draw");
     }
 
+    //---- messages at the top: a second one shows under the first instead of wiping it, each for its own time; at most 3
+    {
+        g_toasts.clear();
+        auto shown = [] { std::string s; if (ToastShowing()) for (const ToastMsg& m : g_toasts) s += m.text + "|"; return s; };
+        auto wait = [](double s) { for (int i = 0; i < (int)(s * 60) + 1; i++) draw([] {}); }; //each frame is 1/60 s
+        Toast("Teammate marked: cooked", 1.0);
+        draw([] { DrawToast(100); });
+        const float oneTop = g_minY, oneBottom = g_maxY;
+        Toast("F7 again to clear 2 marks", 3.0);
+        draw([] { DrawToast(100); });
+        CHECK(shown() == "Teammate marked: cooked|F7 again to clear 2 marks|", "a second message does not wipe the first: both show, in the order they came");
+        CHECK(g_minY == oneTop && g_maxY > oneBottom + config::labelSize, "the second message shows under the first, which stays where it was");
+        wait(1.2);
+        CHECK(shown() == "F7 again to clear 2 marks|", "the first goes after its own time, the second stays for its own");
+        Toast("F7 again to clear 2 marks", 3.0);
+        Toast("a", 5.0); Toast("b", 5.0);
+        CHECK(shown() == "F7 again to clear 2 marks|a|b|", "the same text again is not shown twice");
+        wait(2.5);
+        CHECK(shown() == "F7 again to clear 2 marks|a|b|", "the same text again starts its time anew");
+        Toast("c", 5.0);
+        CHECK(shown() == "a|b|c|", "at most 3 messages: a fourth makes the oldest go");
+        wait(5.1);
+        CHECK(shown().empty() && !ToastShowing(), "all gone after their time");
+    }
+
     //---- the spoken warning when an enemy comes close (camera at 0,0,0 looking along +x; your team is 3). Warning card
     //range 10 m here: nobody below is that close, so only the first warnings are said
     {
@@ -1135,6 +1160,7 @@ int main() {
         const float keepLs = config::labelSize;
         const int keepW = config::SCREEN_W, keepH = config::SCREEN_H;
         config::labelSize = 40; config::showSelfHealth = true;
+        g_toasts.clear(); //one message, the longest of the tests
         Toast("Teammate marked: Rattlerfan", 5.0);
         for (const ImVec2 scr : {ImVec2(1280, 720), ImVec2(1920, 1080)}) {
             config::SCREEN_W = (int)scr.x; config::SCREEN_H = (int)scr.y;
@@ -1208,6 +1234,7 @@ int main() {
             std::snprintf(msg, sizeof msg, "Text size: the %s text is clearly larger at 28 than at 10", what);
             CHECK(small > 0 && big >= 1.8f * small, msg);
         };
+        g_toasts.clear();
         Toast("Teammate marked: cooked", 5.0);
         std::vector<RenderEntity> box = {ent(Object::SEARCH, 1500, 100, 0)};
         box[0].label = "Trash can";

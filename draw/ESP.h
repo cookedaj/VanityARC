@@ -155,12 +155,18 @@ inline bool IsTeammate(const RenderEntity& e, int localTeam) {
     return (localTeam >= 0 && e.teamID == localTeam) || marks::isMarked(e.account);
 }
 
-//--- a short message at the top of the screen ("Teammate marked: ...")
-inline std::string g_toast;
-inline double g_toastUntil = 0;
+//--- short messages at the top of the screen ("Teammate marked: ..."). Up to TOAST_COUNT show at once, one under the
+//other in the order they came, each for its own time, so a second message never wipes the first and none has to wait
+//(a "press again within 2 s" message would be too late). A fourth one makes the oldest go; the same text again only
+//starts its time anew.
+constexpr size_t TOAST_COUNT = 3;
+struct ToastMsg { std::string text; double until; };
+inline std::vector<ToastMsg> g_toasts;
 inline void Toast(const std::string& text, double seconds = 3.0) {
-    g_toast = text;
-    g_toastUntil = ImGui::GetTime() + seconds;
+    const double until = ImGui::GetTime() + seconds;
+    for (ToastMsg& m : g_toasts) if (m.text == text) { m.until = until; return; }
+    if (g_toasts.size() >= TOAST_COUNT) g_toasts.erase(g_toasts.begin());
+    g_toasts.push_back({text, until});
 }
 
 //Status card at the top, in the middle: its lines a little smaller than Text size, or in the full Text size with
@@ -174,12 +180,26 @@ inline float DrawStatusCard(const std::string& line1, const std::string& line2, 
     return y;
 }
 
-inline bool ToastShowing() { return !g_toast.empty() && ImGui::GetTime() < g_toastUntil; }
+//Lets go of the messages whose time is up; true while any is left to show
+inline bool ToastShowing() {
+    const double now = ImGui::GetTime();
+    std::erase_if(g_toasts, [&](const ToastMsg& m) { return now >= m.until; });
+    return !g_toasts.empty();
+}
 
-//dl: where to draw (null: the background list; main.cpp passes the foreground list while the menu is open)
+//The messages from y down (y: the middle of the first one's line), their cards TOAST_GAP px apart. dl: where to draw
+//(null: the background list; main.cpp passes the foreground list while the menu is open)
+constexpr float TOAST_GAP = 6;
 inline void DrawToast(float y, ImDrawList* dl = nullptr) {
     if (!ToastShowing()) return;
-    DrawLabelCentered((float)config::SCREEN_W * 0.5f, y, g_toast.c_str(), config::labelSize, COLOR::white, true, dl);
+    const float ls = config::labelSize;
+    float lastHalf = -1; //half the card height of the message above (-1: none yet)
+    for (const ToastMsg& m : g_toasts) {
+        const float half = LabelSize(m.text.c_str(), ls).y / 2 + CARD_PAD_Y;
+        if (lastHalf >= 0) y += lastHalf + TOAST_GAP + half;
+        DrawLabelCentered((float)config::SCREEN_W * 0.5f, y, m.text.c_str(), ls, COLOR::white, true, dl);
+        lastHalf = half;
+    }
 }
 
 //Where a point is from the camera, flat (the camera's yaw only, so looking up or down changes nothing): f ahead and r to
