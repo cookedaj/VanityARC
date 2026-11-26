@@ -1387,6 +1387,16 @@ int main() {
         });
         return n;
     };
+    //which letters a drawing makes, in the order drawn: each letter has its own place in the font atlas (its uv), so
+    //DOWN and DEAD, or 15m and 16m, differ although they have as many letters
+    auto glyphsOf = [&](auto fn) {
+        std::vector<std::pair<float, float>> g;
+        draw([&] {
+            fn();
+            for (const ImDrawVert& q : ImGui::GetBackgroundDrawList()->VtxBuffer) if (isText(q)) g.push_back({q.uv.x, q.uv.y});
+        });
+        return g;
+    };
 
     //---- markers and bars grow with Text size: at 28 px about 28/15 times as big as at the 15 px default
     {
@@ -1512,12 +1522,19 @@ int main() {
         });
         CHECK(faint == 0 && !greyTitle, "radar: every line is at least half solid and the title is white");
         ImGui::GetStyle().AntiAliasedLinesUseTex = false; //lines then use the white pixel too, so only letters count as text
-        const int radarText = textOf([&] { DrawRadar({}, cam, 3); });
+        const auto radarText = glyphsOf([&] { DrawRadar({}, cam, 3); });
         ImGui::GetStyle().AntiAliasedLinesUseTex = true;
-        int ringsText = textOf([&] { DrawLabelCentered(500, 500, RadarTitle().c_str(), RadarTitleSize(), COLOR::white); });
-        for (const char* t : {"67m", "133m", "200m"}) ringsText += textOf([&] { DrawLabelCentered(500, 500, t, 12); });
-        std::printf("      radar text vertices %d, title and three ranges %d\n", radarText, ringsText);
-        CHECK(config::radarRadius * config::scale / 100 == 200 && radarText == ringsText, "radar: each of the three rings is labelled with its range (67m, 133m, 200m)");
+        //the same letters as the three ranges (drawn from the outer ring in) and then the title
+        std::vector<std::pair<float, float>> ringsText;
+        for (const char* t : {"200m", "133m", "67m"}) {
+            const auto g = glyphsOf([&] { DrawLabelCentered(500, 500, t, std::max(12.0f, SmallTextSize(0.8f))); });
+            ringsText.insert(ringsText.end(), g.begin(), g.end());
+        }
+        const auto title = glyphsOf([&] { DrawLabelCentered(500, 500, RadarTitle().c_str(), RadarTitleSize(), COLOR::white); });
+        ringsText.insert(ringsText.end(), title.begin(), title.end());
+        std::printf("      radar text vertices %zu, title and three ranges %zu\n", radarText.size(), ringsText.size());
+        CHECK(config::radarRadius * config::scale / 100 == 200 && !radarText.empty() && radarText == ringsText,
+              "radar: each of the three rings is labelled with its range (67m, 133m, 200m)");
         config::labelSize = 40;
         draw([&] { DrawRadar({}, cam, 3); });
         const LabelRect panel = RadarPanel();
@@ -1653,11 +1670,12 @@ int main() {
         RenderEntity down = ent(Object::PLAYER, 1500, 100, 0), wreck = ent(Object::ARC, 2000, 100, 0);
         down.isDead = true; wreck.isDead = true; wreck.label = "Tick";
         const float s = config::labelSize * 0.9f;
-        const int downText = textVerts({down}), downLabel = textOf([&] { DrawLabelCentered(500, 500, "DOWN  15m", s); });
-        const int wreckText = textVerts({wreck}), wreckLabel = textOf([&] { DrawLabelCentered(500, 500, "DEAD  Tick  20m", s); });
+        //the same letters, not only as many (DOWN and DEAD both have four)
+        const auto downText = glyphsOf([&] { DrawESP({down}, cam, 3); }), downLabel = glyphsOf([&] { DrawLabelCentered(500, 500, "DOWN  15m", s); });
+        const auto wreckText = glyphsOf([&] { DrawESP({wreck}, cam, 3); }), wreckLabel = glyphsOf([&] { DrawLabelCentered(500, 500, "DEAD  Tick  20m", s); });
         config::showPlayerNames = true;
-        CHECK(downText > 0 && downText == downLabel, "a down player's label: DOWN and his distance");
-        CHECK(wreckText > 0 && wreckText == wreckLabel, "a destroyed ARC's label: DEAD, its name and distance");
+        CHECK(!downText.empty() && downText == downLabel, "a down player's label: DOWN and his distance");
+        CHECK(!wreckText.empty() && wreckText == wreckLabel, "a destroyed ARC's label: DEAD, its name and distance");
     }
 
     //garbage in: NaN, infinity, zero-size camera, on the camera, FOV 0
