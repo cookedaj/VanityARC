@@ -111,6 +111,18 @@ int main() {
     }
 
 
+    //--- lines of text stacked one under the other only touch: never an overlap, whatever the rounding (no flicker)
+    {
+        CHECK(!RectsOverlap({0, 0, 100, 20}, {0, 20, 100, 40}) && !RectsOverlap({0, 0, 100, 20.004f}, {0, 20, 100, 40}) &&
+              RectsOverlap({0, 0, 100, 21}, {0, 20, 100, 40}) && RectsOverlap({0, 0, 100, 20}, {99, 0, 200, 20}),
+              "areas that touch (to a hundredth of a pixel) do not overlap; areas that share a pixel do");
+        std::vector<LabelReq> r(2);
+        r[0] = {0, 1000.0f, 100, 1020.003f, 0, 5.0, true, {}};                         //a distance line, its bottom rounded down a little
+        r[1] = {0, 1020.0f, 100, 1040.0f, 0, 5.0, true, {{0, 1040, 100, 1060}}};        //the guns line right under it
+        const auto pl = ChoosePlaces(r);
+        CHECK(pl.size() == 2 && pl[1].alt == -1, "a line right under another keeps its place (it did not flicker a line further down)");
+    }
+
     //--- label places: a label that finds its first place taken tries the others
     {
         std::vector<LabelReq> r(3);

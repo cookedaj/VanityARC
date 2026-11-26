@@ -20,8 +20,11 @@ struct LabelReq {
     bool body = false;                    //an enemy's box kept clear: other labels move off it, players' (forced or prio <= 0) ignore it
 };
 
+//Areas that only touch do not overlap. Lines of text stacked one under the other touch exactly; without the 0.01 px
+//slack, rounding made them "overlap" on some frames, and the lower line (a player's guns) flickered a line further down.
 inline bool RectsOverlap(const LabelRect& a, const LabelRect& b) {
-    return a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
+    constexpr float TOUCH = 0.01f;
+    return a.x0 < b.x1 - TOUCH && b.x0 < a.x1 - TOUCH && a.y0 < b.y1 - TOUCH && b.y0 < a.y1 - TOUCH;
 }
 
 inline bool LabelsOverlap(const LabelReq& a, const LabelReq& b) {
