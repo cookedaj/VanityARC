@@ -1589,6 +1589,45 @@ int main() {
         ImGui::GetIO().DisplaySize = ImVec2((float)keepW, (float)keepH);
     }
 
+    //---- ...and with the card just under the readout (1280x800, Text size 40, 3 players listed, the nearest enemy 9 m
+    //behind): the arrow of a second enemy 40 m behind and to the left was moved above the list, into the card, then above
+    //the card, onto the readout, which hid it. Now it also steps above the readout.
+    {
+        const float keepLs = config::labelSize;
+        const int keepW = config::SCREEN_W, keepH = config::SCREEN_H;
+        config::showSelfHealth = true; config::closeWarning = true; config::warnDist = 25; config::showOffscreen = true;
+        config::SCREEN_W = 1280; config::SCREEN_H = 800; config::labelSize = 40;
+        ImGui::GetIO().DisplaySize = ImVec2(1280, 800);
+        g_listRect = {227, 666, 1053, 786};
+        const std::vector<RenderEntity> two = {ent(Object::PLAYER, -900, 0, 0), ent(Object::PLAYER, -3000, -2640, 0)};
+        const LabelRect hp = SelfHealthRect(); //the widest readout, as the arrows keep off it
+        for (const double health : {80.0, 20.0}) {
+            g_warnSide = 0; g_warnBeside = false; g_warnLowKept = false; g_msgEnd = 0; g_lowHealthRect = g_warnRect = {};
+            LabelRect arrow{}, card{};
+            for (int f = 0; f < 4; f++) //the card's place is one frame old
+                draw([&] {
+                    DrawESP(two, cam, 3);
+                    arrow = {1e9f, 1e9f, -1e9f, -1e9f};
+                    for (const ImDrawVert& q : ImGui::GetBackgroundDrawList()->VtxBuffer)
+                        if (q.col == COLOR::enemy() && q.pos.x < 520) {
+                            arrow.x0 = std::min(arrow.x0, q.pos.x); arrow.x1 = std::max(arrow.x1, q.pos.x);
+                            arrow.y0 = std::min(arrow.y0, q.pos.y); arrow.y1 = std::max(arrow.y1, q.pos.y);
+                        }
+                    DrawWarnings(two, cam, 3, health, 50, false);
+                    card = g_warnRect;
+                });
+            char msg[240];
+            std::snprintf(msg, sizeof msg, "1280x800, Text size 40, health %.0f, the card just under the readout (y %.0f-%.0f): a second enemy's edge arrow (x %.0f-%.0f y %.0f-%.0f) is clear of the readout, the card and LOW HEALTH",
+                          health, card.y0, card.y1, arrow.x0, arrow.x1, arrow.y0, arrow.y1);
+            CHECK(arrow.x1 > arrow.x0 && card.y0 > hp.y1 && !RectsOverlap(arrow, hp) && !RectsOverlap(arrow, card) && !RectsOverlap(arrow, g_lowHealthRect), msg);
+        }
+        g_listRect = {};
+        g_lowHealthRect = g_warnRect = {};
+        g_warnSide = 0; g_warnBeside = false;
+        config::labelSize = keepLs; config::SCREEN_W = keepW; config::SCREEN_H = keepH;
+        ImGui::GetIO().DisplaySize = ImVec2((float)keepW, (float)keepH);
+    }
+
     //---- LOW HEALTH while the menu is closed: on a screen too narrow for it beside the readout (Text size 40 on 1024x768)
     //it is drawn over the readout, not under it (it lost its first letters); with a player list that reaches almost to
     //the screen's top (High visibility, 14 or 16 list rows) it stays on the screen, at the top, over the list

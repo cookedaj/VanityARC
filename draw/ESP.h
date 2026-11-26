@@ -878,16 +878,22 @@ inline std::vector<LabelRect> DrawEdgeArrows(const View& v, std::vector<EdgeArro
         //leave the picture (it reaches up to the screen's top: a tall player list, or LOW HEALTH put at the top over it),
         //beside it instead, the nearer side first; with no room beside it either (a list as wide as the screen), as high
         //as the picture allows, where the most of the arrow shows. In this order: LOW HEALTH and the card are above the
-        //list or at the screen's top, and of those two the lower one goes first, so an arrow moved for one never lands
-        //under one checked before it.
-        for (const LabelRect& L : {g_listRect, hpCard, lowFirst ? lowCard : g_warnRect, lowFirst ? g_warnRect : lowCard}) {
-            if (!(L.x1 > L.x0 && px > L.x0 - m && px < L.x1 + m && py > L.y0 - m && py < L.y1 + m)) continue;
-            const bool leftNearer = px - L.x0 < L.x1 - px;
-            const float sideA = leftNearer ? L.x0 - m : L.x1 + m, sideB = leftNearer ? L.x1 + m : L.x0 - m;
-            if (L.y0 - m >= y0) py = L.y0 - m;
-            else if (sideA >= x0 && sideA <= x1) px = sideA;
-            else if (sideB >= x0 && sideB <= x1) px = sideB;
-            else py = y0;
+        //list or at the screen's top, and of those two the lower one goes first. An arrow moved for one can still land
+        //under another (the card just under the readout: moved above the card, it lay on the readout), so all of them
+        //are checked again until it is under none (a few rounds at most).
+        for (int pass = 0; pass < 4; pass++) {
+            bool moved = false;
+            for (const LabelRect& L : {g_listRect, hpCard, lowFirst ? lowCard : g_warnRect, lowFirst ? g_warnRect : lowCard}) {
+                if (!(L.x1 > L.x0 && px > L.x0 - m && px < L.x1 + m && py > L.y0 - m && py < L.y1 + m)) continue;
+                moved = true;
+                const bool leftNearer = px - L.x0 < L.x1 - px;
+                const float sideA = leftNearer ? L.x0 - m : L.x1 + m, sideB = leftNearer ? L.x1 + m : L.x0 - m;
+                if (L.y0 - m >= y0) py = L.y0 - m;
+                else if (sideA >= x0 && sideA <= x1) px = sideA;
+                else if (sideB >= x0 && sideB <= x1) px = sideB;
+                else py = y0;
+            }
+            if (!moved) break;
         }
         const LabelRect sq{px - half, py - half, px + half, py + half};
         //The ARC kite's pointed tail reaches 1.3 * as back, past sq: a second square, tail px further back, covers it
