@@ -200,6 +200,7 @@ namespace off {
     inline constexpr int PAWN_INVENTORY = 0xCB0;          //pawn -> inventory component
     inline constexpr int INV_STOWED[2] = {0x3B0, 0x3F0};  //inventory: stowed weapon slots, +0x18 = DA_WeaponVisuals_<gun>
     inline constexpr int INV_SLOT_LEVEL = 0x38;           //stowed slot: the gun's level, 0..3 = I..IV (probed: Hairpin II 1, Stitcher I 0)
+    inline constexpr int WEAPON_LEVEL = 0x4A2;            //held weapon actor (BP_WeaponActor_): the gun's level byte, 0..3 = I..IV (gunlevel probe: 280 of 280 samples, 9 guns, levels I to IV)
     inline constexpr int INV_HELD = 0x530;                //inventory: TArray of 0x20-byte records: +0x0 weapon actor, +0x10 DA_Item_<gun>
     inline constexpr int PICKUP_ITEM_ASSET = 0x518;       //BP_PickupBase_C -> DA_Item_<thing>
     inline constexpr int ARC_TYPE_ASSET = 0x11C0;         //ARC actor -> EnemyTypeDataAsset

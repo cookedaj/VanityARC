@@ -31,7 +31,7 @@ Google/ask AI how to set up the build utility inside of CLion (Release build).
     Ferro = My rifle
     ```
     Delete the line to go back to the built-in name. Lines starting with `#` are ignored. The overlay only reads this file, it never changes it. (The older form `category<TAB>internal key<TAB>your name`, for example `item<TAB>BattleRifle_BreachAction_01<TAB>My rifle`, still works and wins over a shown-name line.)
-    Guns show their level as a plain number, `Stitcher 4` (the game writes `Stitcher IV`), and an amplified gun as `AMP Il Toro` (the game writes `Amplified Il Toro`). This is the same under a player's name, in the inventory window and on the ground. Levels 1 to 4 come from a player's stowed gun slots (probed on game build `0x6AF5C6FC`), so a gun on a player's back shows `Stitcher 1` to `Stitcher 4`; the gun in their hands, in the inventory window and on the ground shows its plain name (`Stitcher`), because the game does not send that gun's level. Amplified guns always show `AMP`.
+    Guns show their level as a plain number, `Stitcher 4` (the game writes `Stitcher IV`), and an amplified gun as `AMP Il Toro` (the game writes `Amplified Il Toro`). This is the same under a player's name, in the inventory window and on the ground. Levels 1 to 4 come from a player's stowed gun slots and, for the gun in their hands, from the weapon itself (both probed on game build `0x6AF5C6FC`), so a player's guns show `Stitcher 1` to `Stitcher 4` in their hands and on their back alike; guns in the inventory window and on the ground show their plain name (`Stitcher`), because the game does not send their level. Amplified guns always show `AMP`.
 
 ## Known Issues
 1) ESP gets distorted at the edges. Fix it in Insert menu > Settings > Calibration.

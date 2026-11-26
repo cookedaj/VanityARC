@@ -36,7 +36,7 @@ std::string builtInItemName(const std::string& key) {
 }
 
 //The offsets live in config.h (off::), shared with the probe report so both always read the same fields
-using off::PAWN_PLAYERSTATE, off::PS_NAME, off::PS_ACCOUNT_OBJ, off::PAWN_INVENTORY, off::INV_STOWED, off::INV_SLOT_LEVEL, off::INV_HELD,
+using off::PAWN_PLAYERSTATE, off::PS_NAME, off::PS_ACCOUNT_OBJ, off::PAWN_INVENTORY, off::INV_STOWED, off::INV_SLOT_LEVEL, off::INV_HELD, off::WEAPON_LEVEL,
       off::PICKUP_ITEM_ASSET, off::ARC_TYPE_ASSET;
 
 constexpr double CLASS_TTL = 5.0, PLAYER_TTL = 3.0, GUNS_TTL = 1.5, RETRY_TTL = 1.0, ASSET_RECHECK = 2.0, FORGET_AFTER = 20.0;
@@ -110,8 +110,8 @@ std::string assetName(uintptr_t p, const char* prefix) {
     return startsWith(n, prefix) ? n : std::string();
 }
 
-//The guns a player has: held first (inventory "current items" with a weapon actor), then the stowed slots. Only a
-//stowed gun's level is known (its slot holds it); an amplified gun says so in its name, held or not.
+//The guns a player has: held first (inventory "current items" with a weapon actor), then the stowed slots. A held gun's
+//level is in its weapon actor, a stowed gun's in its slot; an amplified gun says so in its name, held or not.
 std::string gunsOf(uintptr_t pawn) {
     uintptr_t inv = ReadMemory<uintptr_t>(pawn + PAWN_INVENTORY);
     if (!isObj(inv)) return "";
@@ -122,10 +122,12 @@ std::string gunsOf(uintptr_t pawn) {
     if (isValidPtr(data) && num > 0 && num <= 16) {
         for (int i = 0; i < num && i < 4; i++) {
             uintptr_t rec = data + (uintptr_t)i * 0x20;
-            if (assetName(ReadMemory<uintptr_t>(rec), "BP_WeaponActor_").empty()) continue; //not a gun
+            const uintptr_t weapon = ReadMemory<uintptr_t>(rec);
+            if (assetName(weapon, "BP_WeaponActor_").empty()) continue; //not a gun
             std::string asset = assetName(ReadMemory<uintptr_t>(rec + 0x10), "DA_Item_");
-            if (asset.empty()) asset = assetName(ReadMemory<uintptr_t>(rec), "BP_WeaponActor_");
-            if (!asset.empty()) held.push_back(itemName(labels::itemToken(asset), true));
+            if (asset.empty()) asset = assetName(weapon, "BP_WeaponActor_");
+            const int q = ReadMemory<uint8_t>(weapon + WEAPON_LEVEL); //0..3 = level I..IV; anything else: not shown
+            if (!asset.empty()) held.push_back(itemName(labels::itemToken(asset), true, q <= 3 ? q + 1 : 0));
         }
     }
     for (int base : INV_STOWED) {
