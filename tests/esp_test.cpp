@@ -1293,6 +1293,14 @@ int main() {
             std::printf("      %s: %.0f px wide on %.0f\n", said.c_str(), g_maxX - g_minX, scr.x);
             std::snprintf(msg, sizeof msg, "Text size 40 on %.0fx%.0f: the close-enemy card for three enemies fits across the screen", scr.x, scr.y);
             CHECK(said.rfind("3 ENEMIES", 0) == 0 && onScreen(), msg);
+            for (const float sx : {-300.0f, 150.0f, 300.0f}) { //Shift X moves the crosshair sideways: the card stays on the screen
+                config::centerOffsetX = sx;
+                draw([&] { said = DrawCloseEnemyWarning(three, cam, 3); });
+                std::snprintf(msg, sizeof msg, "Text size 40 on %.0fx%.0f, Shift X %+.0f: the close-enemy card stays on the screen (x %.0f..%.0f)",
+                              scr.x, scr.y, sx, g_minX, g_maxX);
+                CHECK(said.rfind("3 ENEMIES", 0) == 0 && onScreen(), msg);
+            }
+            config::centerOffsetX = 0;
             draw([&] { DrawLabelCentered(scr.x * 0.5f, 12 + 32, "GAME UPDATED: MARKERS MAY BE WRONG", 40 * 1.6f, COLOR::white, true); });
             std::snprintf(msg, sizeof msg, "Text size 40 on %.0fx%.0f: the GAME UPDATED banner fits across the screen", scr.x, scr.y);
             CHECK(onScreen(), msg);

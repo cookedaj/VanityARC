@@ -1151,7 +1151,7 @@ inline std::string DrawCloseEnemyWarning(const std::vector<RenderEntity>& entiti
     FlatOffset(vm, nearest->pos, f, r);
     const double flat = std::hypot(f, r);
     const bool arrow = flat > 1e-6 && std::isfinite(flat); //not when he is straight above or below you
-    const float big = config::labelSize * 2.0f, cx = (float)v.cx;
+    const float big = config::labelSize * 2.0f;
     //the card, arrow and frame fit across the screen (the arrow's column is about 1.2 x the text size)
     const float size = FitSize(big, LabelSize(buf, big).x + (arrow ? 1.2f * big + 8 : 0), (float)config::SCREEN_W - 28);
     float cy = (float)v.cy + 140.0f;
@@ -1161,6 +1161,8 @@ inline std::string DrawCloseEnemyWarning(const std::vector<RenderEntity>& entiti
     //0.75 x its length from its middle); its column is 1.5 x that long, 8 px from the text
     const float L = arrow ? std::min(0.8f * ts.y, (hy - 3) / 0.75f) : 0, aw = arrow ? 1.5f * L + 8 : 0;
     const float hx = (ts.x + aw) / 2 + 10;
+    //under the crosshair, but kept on the screen: Shift X moves the crosshair sideways (FitSize made the card fit the width)
+    const float cx = std::clamp((float)v.cx, hx + 3, std::max(hx + 3, (float)config::SCREEN_W - hx - 3)); //+ the 3 px frame and its soft edge
     //The card and LOW HEALTH under it end above the player list (or the screen's bottom): moved up if needed, but its
     //top stays 18 px or more below the crosshair
     const float F = WarnFloor();
