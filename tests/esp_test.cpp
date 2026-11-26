@@ -3,6 +3,7 @@
 #include "imgui_internal.h"
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <random>
@@ -953,6 +954,22 @@ int main() {
         config::lowHealthFrom = 50;
         SelfCue t;
         CHECK(t.update(45, -1, true, false, 0) == "Low health", "self: follows Low health from");
+        //a slider drag stops between whole numbers: 35.4 is shown as 35, so health 35 is not low, and "Low health" is
+        //said again once health was 5 above the shown 35
+        config::lowHealthFrom = 35.4;
+        SelfCue q;
+        CHECK(!IsLowHealth(35) && IsLowHealth(34) && LowHealthRoom(35) == 0, "Low health from 35.4 (shown as 35): health 35 is not low");
+        CHECK(q.update(30, -1, true, false, 0) == "Low health" && q.update(40, -1, true, false, 1).empty() &&
+              q.update(30, -1, true, false, 2) == "Low health", "self: said again after 5 above the shown 35");
+        for (double from : {34.5, 35.5, 40.49}) { //the line is the number the menu shows (%.0f), halves included
+            config::lowHealthFrom = from;
+            char shown[16];
+            std::snprintf(shown, sizeof shown, "%.0f", from);
+            const int line = std::atoi(shown);
+            char msg[96];
+            std::snprintf(msg, sizeof msg, "Low health from %.2f is shown as %d: low under %d only", from, line, line);
+            CHECK(!IsLowHealth(line) && IsLowHealth(line - 1), msg);
+        }
         config::lowHealthFrom = 35;
         //game data: lost only after it was live, said once; back after 2 s live in one go
         SelfCue g;
@@ -1152,6 +1169,40 @@ int main() {
         const int under = onCard();
         config::showSelfHealth = true;
         CHECK(under > 0 && onCard() == 0, "an edge arrow and its distance move off the HP readout");
+    }
+
+    //---- Text size 40 on a short, narrow screen (1280x800 is the Steam Deck): LOW HEALTH keeps off the big HP/SH readout
+    //(it hid the shield number), stays on the screen and off the crosshair
+    {
+        const float keepLs = config::labelSize;
+        const int keepW = config::SCREEN_W, keepH = config::SCREEN_H;
+        const double keepFrom = config::lowHealthFrom;
+        config::labelSize = 40; config::showSelfHealth = true; config::lowHealthFrom = 90;
+        for (const ImVec2 scr : {ImVec2(1280, 800), ImVec2(1280, 720), ImVec2(1366, 768), ImVec2(1600, 900), ImVec2(1920, 1080)})
+            for (const double hp : {30.0, 89.0}) {
+                config::SCREEN_W = (int)scr.x; config::SCREEN_H = (int)scr.y;
+                ImGui::GetIO().DisplaySize = scr;
+                LabelRect red{1e9f, 1e9f, -1e9f, -1e9f};
+                draw([&] {
+                    DrawSelfHealth(hp, 100);
+                    for (const ImDrawVert& q : ImGui::GetBackgroundDrawList()->VtxBuffer)
+                        if (q.col == COLOR::red) {
+                            red.x0 = std::min(red.x0, q.pos.x); red.x1 = std::max(red.x1, q.pos.x);
+                            red.y0 = std::min(red.y0, q.pos.y); red.y1 = std::max(red.y1, q.pos.y);
+                        }
+                });
+                char text[32];
+                std::snprintf(text, sizeof text, "HP %.0f   SH 100", hp);
+                const LabelRect hpCard = SelfHealthRect(text);
+                const float cx = scr.x / 2, cy = scr.y / 2;
+                const bool cross = red.x0 < cx + 12 && red.x1 > cx - 12 && red.y0 < cy + 12 && red.y1 > cy - 12;
+                char msg[160];
+                std::snprintf(msg, sizeof msg, "Text size 40 on %.0fx%.0f, health %.0f: LOW HEALTH (x %.0f-%.0f) keeps off the HP/SH readout (to %.0f), on the screen, off the crosshair",
+                              scr.x, scr.y, hp, red.x0, red.x1, hpCard.x1);
+                CHECK(red.x1 > red.x0 && !RectsOverlap(red, hpCard) && red.x0 >= 0 && red.x1 <= scr.x && red.y1 <= scr.y && !cross, msg);
+            }
+        config::labelSize = keepLs; config::SCREEN_W = keepW; config::SCREEN_H = keepH; config::lowHealthFrom = keepFrom;
+        ImGui::GetIO().DisplaySize = ImVec2((float)keepW, (float)keepH);
     }
 
     //---- the largest Text size (40): the big HP/SH readout, LOW HEALTH, the status card and a toast all stay on a 1280x720
