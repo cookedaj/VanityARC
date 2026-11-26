@@ -1879,6 +1879,23 @@ int main() {
         CHECK(textBox.y1 < found + lineH + s / 2 + 4, "the guns line stays right under the distance line, not a line further down");
     }
 
+    //---- a label wider than the screen at Text size 40 (two held guns, 1318 px at 40 px) on a 1097 px wide screen (1920
+    //at 175 % scaling): drawn smaller to fit and in the middle, all of it on the screen. It was centred by its full width
+    //(x 663), then shrunk round that, so its last word ran 110 px off the right edge; a marker label had no place left.
+    {
+        const int keepW = config::SCREEN_W;
+        config::SCREEN_W = 1097;
+        const std::string guns = "AMP Il Toro (held) + Hullcracker 4 (held) + AMP Il Toro + Torrente 4";
+        const int n = textOf([&] { QueueLabel(700, 500, guns, 40, 0, 30, true); FlushLabels(); });
+        std::printf("      %.0f px wide at 40 px: drawn x %.1f-%.1f on a 1097 px screen\n", LabelSize(guns.c_str(), 40).x, textBox.x0, textBox.x1);
+        CHECK(n > 0 && textBox.x0 >= 0 && textBox.x1 <= 1097, "a label wider than the screen is drawn smaller and wholly on the screen");
+        QueueMarkerLabel(548, 500, 8, guns, 40, 3, 20);
+        const PendingLabel& p = PendingLabels().back();
+        CHECK(p.box.x0 >= 0 && p.box.x1 <= 1097 && !p.box.alts.empty(), "a marker label wider than the screen keeps its place on the screen and others to move to");
+        PendingLabels().clear();
+        config::SCREEN_W = keepW;
+    }
+
     //---- label cards: nearly solid with a light border, and the room a label keeps free is all of its card or outline
     {
         const ImVec2 ts = LabelSize("Trash can", 15);

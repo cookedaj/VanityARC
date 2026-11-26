@@ -524,10 +524,13 @@ inline LabelRect LabelAt(float x, float y, const ImVec2& ts) {
 }
 
 //step: when the place is taken, try one and two steps further (in y), as long as that stays on the screen. The label
-//stays inside the screen's width: near the left or right edge it slides in (smoothly, never cut off). color: the text's.
+//stays inside the screen's width: near the left or right edge it slides in (smoothly, never cut off); one wider than
+//the screen is drawn smaller to fit (as DrawLabelCentered does), and placed and kept apart by that width, so all of it
+//stays on the screen. color: the text's.
 inline void QueueLabel(float x, float y, const std::string& text, float size, int prio, double dist, bool force = false, float step = 0,
                        ImU32 color = IM_COL32(255, 255, 255, 255)) {
     if (text.empty()) return;
+    size = FitSize(size, LabelSize(text.c_str(), size).x, (float)config::SCREEN_W - 16); //as DrawLabelCentered draws it
     const ImVec2 ts = LabelSize(text.c_str(), size);
     const float edge = ts.x / 2 + LabelReach(size).x;
     x = std::clamp(x, edge, std::max(edge, (float)config::SCREEN_W - edge));
@@ -549,6 +552,7 @@ inline void QueueLabel(float x, float y, const std::string& text, float size, in
 //is not fully on the screen is not offered (the label moves to the next one, or is left out, instead of being cut off).
 inline void QueueMarkerLabel(float cx, float cy, float radius, const std::string& text, float size, int prio, double dist) {
     if (text.empty()) return;
+    size = FitSize(size, LabelSize(text.c_str(), size).x, (float)config::SCREEN_W - 16); //its places by the width it is drawn at
     const ImVec2 ts = LabelSize(text.c_str(), size);
     const float W = (float)config::SCREEN_W, H = (float)config::SCREEN_H;
     const float pad = LinePad(size);
