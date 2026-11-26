@@ -786,6 +786,16 @@ int main() {
         config::valuableFrom = 20000;
         CHECK(!colours(far30).count(rgb(COLOR::gold)), "Valuable from 20000: a 14000 item is not highlighted");
         config::valuableFrom = 10000;
+        //renamed in labels.txt ("Snap Hook = Hook"): its price is still found by the game's own name, and a price listed
+        //by the internal name counts too, as in the inventory window
+        itemvalues::setValueForTest("Snap Hook", 14000);
+        itemvalues::setValueForTest("Kettle_02", 12000);
+        RenderEntity hook = far30; hook.label = "Hook"; hook.itemKey = "Gadget_SnapHook_01"; hook.gameName = "Snap Hook";
+        RenderEntity kettle = far30; kettle.label = "Kettle"; kettle.itemKey = "Kettle_02"; kettle.gameName = "Kettle";
+        CHECK(colours(hook).count(rgb(COLOR::gold)), "a valuable item renamed in labels.txt is still gold (priced by the game's own name)");
+        CHECK(colours(kettle).count(rgb(COLOR::gold)), "a valuable item priced by its internal name in values.txt is gold");
+        CHECK(ItemPrice("Gadget_SnapHook_01", "Hook", "Snap Hook") == 14000 && ItemPrice("Kettle_02", "Kettle", "Kettle") == 12000 &&
+              ItemPrice("Nothing_01", "Nothing", "Nothing") == -1 && ItemPrice("", "", "") == -1, "item prices: internal name, shown name, then the game's name");
         config::monochrome = true; config::colorLootKinds = true;
         bool grey = true;
         const std::vector<RenderEntity> mix = {far30, meds, shield, gun};

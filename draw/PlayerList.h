@@ -234,8 +234,8 @@ inline void DrawInspectWindows() {
                 }
                 ui::Section("CARRYING");
                 if (rows && !rows->empty()) {
-                    //values.txt may name the internal key or the display name
-                    auto price = [](const ItemRow& r) { long v = itemvalues::valueOf(r.key); return v >= 0 ? v : itemvalues::valueOf(r.name); };
+                    //values.txt may name the internal key, the shown name or the game's own name
+                    auto price = [](const ItemRow& r) { return ItemPrice(r.key, r.name, r.gameName); };
                     const bool values = config::showItemValues; //off (the default): no prices, no total, no note
                     const bool havePrices = values && itemvalues::count() > 0;
                     auto slotsOnly = [](const std::string& cat) { //stack sizes not read for this list (no qty in offsets.txt): counts are slots

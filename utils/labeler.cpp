@@ -27,6 +27,14 @@ std::string itemName(const std::string& key, bool gun, int slotLevel) {
 
 namespace {
 
+//The game's own name for an item key: itemName without your labels.txt names. values.txt prices are also looked up by
+//it, so renaming an item never loses a price listed under the game's name.
+std::string builtInItemName(const std::string& key) {
+    const amp::GunLevel g = amp::gunLevel(key);
+    if (g.level == 0 || !labels::isGun(key)) return labels::defaultName(labels::Cat::Item, key);
+    return amp::gunLabel(labels::defaultName(labels::Cat::Item, g.base), g.level);
+}
+
 //The offsets live in config.h (off::), shared with the probe report so both always read the same fields
 using off::PAWN_PLAYERSTATE, off::PS_NAME, off::PS_ACCOUNT_OBJ, off::PAWN_INVENTORY, off::INV_STOWED, off::INV_SLOT_LEVEL, off::INV_HELD,
       off::PICKUP_ITEM_ASSET, off::ARC_TYPE_ASSET;
@@ -44,6 +52,7 @@ struct Info {
     std::string key;    //raw key of what it is (asset name or class name), once known
     bool resolved = false;
     std::string label, sub;
+    std::string gameName; //ground items: builtInItemName of the key
     std::string account;
     uintptr_t ps = 0;   //the PlayerState the account came from
     bool turret = false;
@@ -257,6 +266,7 @@ void fillPickup(Info& in, uintptr_t actor, double t) {
     }
     if (in.resolved && in.label.empty()) {
         in.label = itemName(in.key);
+        in.gameName = builtInItemName(in.key);
     }
 }
 
@@ -298,6 +308,7 @@ void fill(RenderEntity& e) {
     e.account = in.account;
     e.isTurret = in.turret;
     e.itemKind = in.kind;
+    if (e.type == Object::PICKUP) { e.itemKey = in.key; e.gameName = in.gameName; }
 }
 
 std::vector<ItemRow> inventoryOf(uintptr_t pawn) {
@@ -320,7 +331,7 @@ std::vector<ItemRow> inventoryOf(uintptr_t pawn) {
             const int q = a.qty >= 0 ? std::clamp(ReadMemory<int>(rec + (uintptr_t)a.qty), 1, 9999) : 1; //stack size; not known: one per slot
             bool merged = false;
             for (ItemRow& r : out) if (r.key == key && r.category == a.category) { r.count += q; merged = true; break; }
-            if (!merged) { ItemRow r; r.name = itemName(key); r.key = key; r.category = a.category; r.count = q; out.push_back(r); }
+            if (!merged) { ItemRow r; r.name = itemName(key); r.key = key; r.gameName = builtInItemName(key); r.category = a.category; r.count = q; out.push_back(r); }
         }
     }
     return out;

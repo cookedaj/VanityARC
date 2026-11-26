@@ -319,6 +319,16 @@ inline std::string StatusSentence(double hp, double shield, const std::vector<Re
     return s;
 }
 
+//An item's price in values.txt, found the same way on the ground and in the inventory window: by its internal name (key),
+//by the name on screen (shown: your labels.txt name, if you gave it one), then by the game's own name (game), so a rename
+//in labels.txt never loses a price listed under the game's name. -1: no price.
+inline long ItemPrice(const std::string& key, const std::string& shown, const std::string& game) {
+    for (const std::string* n : {&key, &shown, &game})
+        if (!n->empty())
+            if (const long v = itemvalues::valueOf(*n); v >= 0) return v;
+    return -1;
+}
+
 //Where the player list at the bottom was drawn (set by DrawPlayerListWindow, one frame old; all zero when it is not shown)
 inline LabelRect g_listRect;
 
@@ -1062,7 +1072,7 @@ inline void DrawESP(const std::vector<RenderEntity>& entities, FminimalViewInfo 
                 if (!config::showPickups || dist > config::maxLootDist) continue;
                 if (!KindShown(LootSwitches(), labels::KIND_COUNT, ent.itemKind)) continue; //Loot tab, GROUND ITEMS
                 if (config::highlightValuable && !ent.label.empty()) {
-                    const long p = itemvalues::valueOf(ent.label); //by the name on screen, as values.txt lists it
+                    const long p = ItemPrice(ent.itemKey, ent.label, ent.gameName);
                     if (p >= 0 && p >= config::valuableFrom) price = p;
                 }
                 color = price >= 0 ? COLOR::valuable() : COLOR::pickup(ent.itemKind);

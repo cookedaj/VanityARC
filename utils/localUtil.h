@@ -41,6 +41,7 @@ struct ItemRow {
     std::string key;       //internal name ("Bandage_01"): rows merge on it, prices look it up before the name
     std::string category;  //which list it came from (offsets.txt)
     int count = 1;
+    std::string gameName;  //the game's own name, also when labels.txt renames it: prices look it up last (ItemPrice)
 };
 
 struct RenderEntity {
@@ -63,6 +64,8 @@ struct RenderEntity {
     std::string account; //players: the account id as hex text (stable between games), "" when unknown
     bool isTurret = false; //ARC: a turret
     int itemKind = -1;     //ground items: labels::Kind, containers: labels::Group, as a number; -1 while not read yet (counts as Other)
+    std::string itemKey;   //ground items: the internal name ("SnapHook") and the game's own name ("Snap Hook", also when
+    std::string gameName;  //labels.txt renames it), so a price in values.txt is found by either (ItemPrice)
     std::shared_ptr<const skeleton::Pose> pose; //players: the stick figure in world space, null when it could not be read
     bool poseLive = true; //false: the game has stopped animating this player (not drawn / out of range), so the pose is an
                           //estimate: DrawSkeleton gives it a dashed head ring (never fainter than a live pose)

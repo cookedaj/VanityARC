@@ -411,6 +411,15 @@ int main() {
     labeler::fill(e1);
     CHECK(e1.label == "Ferro", "ground item named Ferro");
     CHECK(e1.itemKind == (int)labels::Kind::Gun, "ground item Ferro is a gun (Loot tab)");
+    CHECK(e1.itemKey == "BattleRifle_BreachAction_01" && e1.gameName == "Ferro", "ground item: its internal name and the game's name, for prices");
+    //renamed in labels.txt (ESR Analyzer = Scanner): shown as Scanner, but the game's own name stays for prices
+    addPoolName(0x2500, "DA_Item_ESRAnalyzer_01");
+    u64 scanner = makeObject(0x1000, 0x1240, 0);
+    put<u64>(scanner, 0x518, makeObject(0x400, 0x2500, 0));
+    RenderEntity eScan = ent(Object::SEARCH, 5.0, scanner);
+    labeler::refine(eScan); labeler::fill(eScan);
+    CHECK(eScan.label == "Scanner" && eScan.gameName == "ESR Analyzer" && eScan.itemKey == "ESRAnalyzer_01",
+          "a ground item renamed in labels.txt keeps the game's own name for prices");
 
     u64 bin = makeObject(0x1000, 0x12C0, 7);
     RenderEntity e2 = ent(Object::SEARCH, 10.0, bin);
@@ -443,6 +452,9 @@ int main() {
     bool keyOk = false;
     for (const ItemRow& r : rows) keyOk |= r.name == "Bandage" && r.key == "Bandage_01";
     CHECK(keyOk, "inventory: a row keeps the internal name as its key (for prices)");
+    bool gameOk = false;
+    for (const ItemRow& r : rows) gameOk |= r.key == "Bandage_01" && r.gameName == "Bandage";
+    CHECK(gameOk, "inventory: a row keeps the game's own name too (for prices)");
     put<int>(recs, 0x18, 5); put<int>(recs, 0x58, 3); //stack sizes; [1] keeps 0, which counts as 1
     listA.qty = 0x18;
     live::invArrays = {listA};
