@@ -78,16 +78,18 @@ inline std::vector<ptr> InspectedActors() {
     return a;
 }
 
-//One row per player: name, distance, health, shield, team, guns. Click a name for the inventory, the TEAM button marks a
-//teammate. Clickable only while the menu is open: DrawPlayerListWindow adds NoInputs otherwise.
-inline constexpr float LIST_ROW_W = 780; //a row's width at 15 px text
+//One row per player: name, distance and side, health, shield, team, guns. Enemies come first, then teammates, each
+//nearest first, so a full list leaves out teammates before enemies. Click a name for the inventory, the TEAM button marks
+//a teammate. Clickable only while the menu is open: DrawPlayerListWindow adds NoInputs otherwise.
+inline constexpr float LIST_ROW_W = 810; //a row's width at 15 px text
 inline void DrawPlayerRows(int maxRows) {
-    const auto players = PlayersByDistance();
+    auto players = PlayersByDistance();
     if (players.empty()) { ui::Note(g_ui.live ? "No players in view." : "No live data from the game."); return; }
+    std::stable_partition(players.begin(), players.end(), [](const RenderEntity* e) { return !IsTeammate(*e, g_ui.localTeam); });
     using ui::S; //column positions for 15 px text, grown with the menu text size
-    const float xDist = S(190), xHp = S(245), xSh = S(295), xSeen = S(360), xTeam = S(415), xGun = S(495), rowW = S(LIST_ROW_W);
+    const float xDist = S(175), xHp = S(275), xSh = S(335), xSeen = S(395), xTeam = S(440), xGun = S(520), rowW = S(LIST_ROW_W);
     ImGui::TextColored(ImColor(ui::GREY), "NAME");
-    ImGui::SameLine(xDist); ImGui::TextColored(ImColor(ui::GREY), "DIST");
+    ImGui::SameLine(xDist); ImGui::TextColored(ImColor(ui::GREY), "WHERE");
     ImGui::SameLine(xHp); ImGui::TextColored(ImColor(ui::GREY), "HP");
     ImGui::SameLine(xSh); ImGui::TextColored(ImColor(ui::GREY), "SHIELD");
     ImGui::SameLine(xSeen); ImGui::TextColored(ImColor(ui::GREY), "SEEN");
@@ -101,7 +103,7 @@ inline void DrawPlayerRows(int maxRows) {
         const bool marked = marks::isMarked(e->account);
         const bool mate = squad || marked;
         const ImU32 col = e->isDead ? ui::DIM : (mate ? ui::GREY : ui::WHITE);
-        ImGui::PushID(key.c_str());
+        ImGui::PushID((const void*)e->actor); //by the actor: two players sharing an account (a body and its owner) get rows of their own
         const std::string name = !e->label.empty() ? e->label : (e->account.empty() ? "Unknown" : e->account.substr(0, 8));
         ImGui::SetNextItemAllowOverlap(); //the TEAM button on top of the row takes its own clicks (and hides the row tooltip)
         //An outline, not a fill (a lit fill would wash out the grey and dim names): white while its inventory is open,
@@ -119,10 +121,15 @@ inline void DrawPlayerRows(int maxRows) {
         ImGui::SameLine(S(6));
         ImGui::PushStyleColor(ImGuiCol_Text, ImColor(col).Value);
         ImGui::TextUnformatted(name.c_str());
-        char b[32];
-        std::snprintf(b, sizeof b, "%.0f m", e->pos.Dist(g_ui.vm.Location) / 100.0);
+        char b[48];
+        //how far, and which way from where you look: "12 m left"
+        static const char* const sides[] = {"ahead", "behind", "left", "right"};
+        const int side = FlatDir(g_ui.vm, e->pos);
+        std::snprintf(b, sizeof b, "%.0f m %s", e->pos.Dist(g_ui.vm.Location) / 100.0, side < 0 ? "" : sides[side]);
         ImGui::SameLine(xDist); ImGui::TextUnformatted(b);
-        std::snprintf(b, sizeof b, e->isDead ? "down" : "%.0f", e->playerHealth);
+        //under Low health from (ESP tab, YOUR HEALTH) the word LOW follows the number, so it is not told by colour alone
+        if (e->isDead) std::snprintf(b, sizeof b, "down");
+        else std::snprintf(b, sizeof b, IsLowHealth(e->playerHealth) ? "%.0f LOW" : "%.0f", e->playerHealth);
         ImGui::SameLine(xHp); ImGui::TextUnformatted(b);
         if (e->hasShield && e->shield >= 1.0) std::snprintf(b, sizeof b, "%.0f", e->shield); else std::snprintf(b, sizeof b, "-");
         ImGui::SameLine(xSh); ImGui::TextUnformatted(b);

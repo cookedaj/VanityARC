@@ -320,6 +320,8 @@ inline void PagePlayers() {
     Section("LIST");
     Choice("Player list", &config::listMode, {"Off", "Always", "Only with menu"});
     SliderD("List rows", &config::listRows, 3, 16, "%.0f");
+    Note("Enemies are listed first, nearest first, then teammates. WHERE shows how far a player is and on which side: ahead, "
+         "behind, left or right. LOW after his health means it is under Low health from (ESP tab, YOUR HEALTH).");
     Switch("Show item values", &config::showItemValues);
     Note("Sell prices, most valuable first, and a total in the inventory windows. Prices come from ~/.config/kwin-helper/values.txt.");
     Section("TEAMMATES");

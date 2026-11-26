@@ -424,7 +424,8 @@ int main() {
         auto list = [] { DrawPlayerListWindow(true); };
         for (int i = 0; i < 4; i++) frame(list);
         ImGuiWindow* pw = ImGui::FindWindowByName("##playerlist");
-        const ImGuiID markId = ImGui::GetIDWithSeed("mark", nullptr, ImGui::GetIDWithSeed("793381ba5d093c9f", nullptr, pw->ID));
+        const void* rowPtr = (const void*)fake[0].actor; //each row's ID comes from its player's actor
+        const ImGuiID markId = ImGui::GetIDWithSeed("mark", nullptr, ImHashData(&rowPtr, sizeof rowPtr, pw->ID));
         bool over = false;
         for (float y = pw->Pos.y + 2; y < pw->Pos.y + pw->Size.y && !over; y += 3)
             for (float x = pw->Pos.x + 4; x < pw->Pos.x + pw->Size.x && !over; x += 6) {
@@ -438,6 +439,37 @@ int main() {
         CHECK(marks::isMarked("793381ba5d093c9f"), "clicking 'mark' marks the player as a teammate");
         CHECK(g_inspect.empty(), "clicking 'mark' does not open the inventory window");
         io.AddMousePosEvent(-1000, -1000); frame(list); frame(list);
+    }
+
+    //the player list: enemies first, then teammates (each nearest first); WHERE says how far and on which side; a low
+    //health says LOW; a body that shares its owner's account gets a row of its own (no clashing IDs)
+    {
+        std::vector<RenderEntity> four = fake;
+        four.push_back(fake[0]);
+        four[3].actor = 0x1F00; four[3].pos = Vector3(0, -1500, 0); four[3].isDead = true; //cooked's body, 15 m to the left
+        g_ui.ents = &four; g_ui.vm = FminimalViewInfo{}; config::lowHealthFrom = 35;
+        std::string shown;
+        auto logged = [&] { ImGui::LogToBuffer(); DrawPlayerListWindow(true); shown = G->LogBuffer.c_str(); ImGui::LogFinish(); };
+        for (int i = 0; i < 3; i++) frame(logged);
+        const size_t foe = shown.find("Rattlerfan"), mate = shown.find("cooked");
+        CHECK(marks::isMarked("793381ba5d093c9f") && foe != std::string::npos && mate != std::string::npos && foe < mate,
+              "player list: enemies first, then teammates, even nearer ones");
+        CHECK(shown.find("20 m ahead") != std::string::npos && shown.find("15 m left") != std::string::npos,
+              "player list: WHERE shows the distance and the side (ahead, left)");
+        CHECK(shown.find("30 LOW") != std::string::npos && shown.find("60 LOW") == std::string::npos && shown.find("90 LOW") == std::string::npos,
+              "player list: a health under Low health from is followed by LOW, others are not");
+        auto list = [] { DrawPlayerListWindow(true); };
+        int hits = 0;
+        if (ImGuiWindow* pw = ImGui::FindWindowByName("##playerlist"))
+            for (float y = pw->Pos.y + 2; y < pw->Pos.y + pw->Size.y; y += 6)
+                for (float x = pw->Pos.x + 4; x < pw->Pos.x + pw->Size.x; x += 12) {
+                    io.AddMousePosEvent(x, y);
+                    frame(list); frame(list);
+                    if (G->DebugDrawIdConflictsId != 0) hits++;
+                }
+        io.AddMousePosEvent(-1000, -1000); frame(list); frame(list);
+        CHECK(hits == 0, "player list: a body sharing its owner's account clashes with no ID");
+        g_ui.ents = &fake;
     }
 
     //menu text 30 px: the player list and a newly opened inventory window grow with it, and stay on the screen
