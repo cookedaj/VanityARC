@@ -53,7 +53,7 @@ int main() {
 
     ImGuiWindow* w = ImGui::FindWindowByName("kwin-helper");
     CHECK(w != nullptr, "menu window exists");
-    g_MenuTab = 3; //the Settings page (it has the game view part too)
+    g_MenuTab = 4; //the Settings page (it has the game view part too)
     g_OverlayNote = "Monitor 'DP-9' not found (have: DP-1)\nThe desktop chose the monitor"; //the overlay window part shows it
     for (int i = 0; i < 3; i++) frame([] { DrawMenu(); });
     CHECK(true, "menu draws the Settings page");
@@ -221,29 +221,90 @@ int main() {
         io.AddMousePosEvent(-1000, -1000); frame(gv); frame(gv);
     }
 
-    auto scan = [&](const char* what) {
+    //---- the Loot tab: every switch on it is saved; its "Show" drop-downs set the switches and always say what is on
+    {
+        std::set<void*> saved;
+        for (const settings::Entry& e : settings::table()) saved.insert(e.p);
+        bool all = saved.count(&config::colorLootKinds) && saved.count(&config::highlightValuable) && saved.count(&config::valuableFrom);
+        for (int k = 0; k < labels::KIND_COUNT; k++) all &= saved.count(LootSwitches()[k]) > 0;
+        for (int g = 0; g < labels::GROUP_COUNT; g++) all &= saved.count(ContainerSwitches()[g]) > 0;
+        CHECK(all, "every Loot tab switch is in the settings table (saved and reset)");
+
+        bool* const* s = LootSwitches();
+        const int N = labels::KIND_COUNT, ammo = (int)labels::Kind::Ammo, meds = (int)labels::Kind::Meds;
+        std::string shown; //the text the menu wrote (ImGui's log): a drop-down's shown line is in it
+        auto page = [&] { ImGui::LogToBuffer(); DrawMenu(); shown = G->LogBuffer.c_str(); ImGui::LogFinish(); };
+        g_MenuOpen = true; g_MenuTab = 1;
+        SetSwitchPreset(s, N, 1 + ammo);
+        bool only = true;
+        for (int k = 0; k < N; k++) only &= *s[k] == (k == ammo);
+        for (int i = 0; i < 3; i++) frame(page);
+        CHECK(only && SwitchPreset(s, N) == 1 + ammo && shown.find("Only ammo") != std::string::npos,
+              "Show: Only ammo leaves only Ammo on, and the drop-down says Only ammo");
+        *s[meds] = true;
+        frame(page);
+        CHECK(SwitchPreset(s, N) == N + 1 && shown.find("Mixed (switches below)") != std::string::npos, "ammo and meds on: the drop-down says Mixed");
+        SetSwitchPreset(s, N, N + 1);
+        CHECK(*s[ammo] && *s[meds] && !*s[0], "picking Mixed leaves the switches as they are");
+        SetSwitchPreset(s, N, 0);
+        bool allOn = true;
+        for (int k = 0; k < N; k++) allOn &= *s[k];
+        frame(page);
+        CHECK(allOn && SwitchPreset(s, N) == 0 && shown.find("All kinds") != std::string::npos, "Show: All kinds turns every kind back on");
+        SetSwitchPreset(ContainerSwitches(), labels::GROUP_COUNT, 1 + (int)labels::Group::Arc);
+        frame(page);
+        CHECK(config::showContainerArc && !config::showContainerMedical && !config::showContainerOther && shown.find("Only ARC") != std::string::npos,
+              "containers: Only ARC (in capitals) leaves only the ARC group on");
+        SetSwitchPreset(ContainerSwitches(), labels::GROUP_COUNT, 0);
+        frame(page);
+        CHECK(config::showContainerMedical && config::showContainerArc && shown.find("All groups") != std::string::npos, "containers: All groups");
+        g_MenuOpen = false;
+    }
+
+    //bottom: scroll the page to its end first, and hover only the page (what lies below the first screen)
+    std::set<ImGuiID> hovered;
+    ImGuiID pageId = 0;
+    auto scan = [&](const char* what, bool bottom) {
         g_MenuOpen = true;
         frame([] { DrawMenu(); }); frame([] { DrawMenu(); });
         ImGuiWindow* mw = ImGui::FindWindowByName("kwin-helper");
+        ImGuiWindow* page = nullptr;
+        for (ImGuiWindow* win : G->Windows) if (std::strstr(win->Name, "##page")) page = win;
+        pageId = page ? page->ID : 0;
+        float x0 = mw->Pos.x + 4;
+        if (bottom && page) {
+            ImGui::SetScrollY(page, page->ScrollMax.y);
+            frame([] { DrawMenu(); }); frame([] { DrawMenu(); });
+            x0 = page->Pos.x + 2;
+        }
         int hits = 0;
+        hovered.clear();
         for (float y = mw->Pos.y + 2; y < mw->Pos.y + mw->Size.y; y += 5)
-            for (float x = mw->Pos.x + 4; x < mw->Pos.x + mw->Size.x; x += 9) {
+            for (float x = x0; x < mw->Pos.x + mw->Size.x; x += 9) {
                 io.AddMousePosEvent(x, y);
                 frame([] { DrawMenu(); }); frame([] { DrawMenu(); });
                 if (G->DebugDrawIdConflictsId != 0) hits++;
+                hovered.insert(G->HoveredId);
             }
         io.AddMousePosEvent(-1000, -1000);
+        if (page) ImGui::SetScrollY(page, 0); //the pages share one scroll position
         frame([] { DrawMenu(); }); frame([] { DrawMenu(); });
-        char msg[96]; std::snprintf(msg, sizeof msg, "no conflicting IDs when hovering the menu (%s)", what);
+        char msg[112]; std::snprintf(msg, sizeof msg, "no conflicting IDs when hovering the menu (%s%s)", what, bottom ? ", scrolled to the end" : "");
         CHECK(hits == 0, msg);
     };
+    auto sw = [&](const char* label) { return ImGui::GetIDWithSeed("##sw", nullptr, ImGui::GetIDWithSeed(label, nullptr, pageId)); };
     for (int tab = 0; tab < MENU_TAB_COUNT; tab++) {
         g_MenuTab = tab;
-        scan(MENU_TABS[tab]);
+        scan(MENU_TABS[tab], false);
+        if (tab == 1) CHECK(hovered.count(sw("Ground items")) && hovered.count(sw("Guns")), "Loot tab: the mouse reaches Ground items and Guns");
     }
+    g_MenuTab = 1;
+    scan("Loot", true);
+    CHECK(hovered.count(sw("Containers")) && hovered.count(sw("Other##box")) && hovered.count(sw("Medical##box")),
+          "Loot tab scrolled to the end: the mouse reaches the container switches");
 
     //the player list and an inventory window next to the menu draw without clashing IDs either
-    g_MenuTab = 1;
+    g_MenuTab = 2;
     g_inspect = {"793381ba5d093c9f", "@1200"};
     {
         int hits = 0;

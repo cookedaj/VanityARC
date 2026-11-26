@@ -125,26 +125,26 @@ inline bool SliderD(const char* label, double* v, double lo, double hi, const ch
     return SliderRow(label, ImGuiDataType_Double, v, &lo, &hi, fmt);
 }
 
-//A drop-down list; the chosen number is kept in a double (the settings are doubles)
-inline bool Choice(const char* label, double* v, std::initializer_list<const char*> items) {
+//A drop-down list of n items; the chosen number is kept in a double (the settings are doubles)
+inline bool Choice(const char* label, double* v, const char* const* items, int n) {
     ImGui::PushID(label);
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted(label, LabelEnd(label));
     ImGui::SameLine(LABEL_W);
     ImGui::SetNextItemWidth(CONTROL_W);
     int idx = (int)*v;
-    idx = idx < 0 ? 0 : idx >= (int)items.size() ? (int)items.size() - 1 : idx;
+    idx = idx < 0 ? 0 : idx >= n ? n - 1 : idx;
     bool changed = false;
-    if (ImGui::BeginCombo("##c", *(items.begin() + idx))) {
-        int i = 0;
-        for (const char* it : items) {
-            if (ImGui::Selectable(it, i == idx)) { *v = i; changed = true; }
-            i++;
-        }
+    if (ImGui::BeginCombo("##c", items[idx])) {
+        for (int i = 0; i < n; i++)
+            if (ImGui::Selectable(items[i], i == idx)) { *v = i; changed = true; }
         ImGui::EndCombo();
     }
     ImGui::PopID();
     return changed;
+}
+inline bool Choice(const char* label, double* v, std::initializer_list<const char*> items) {
+    return Choice(label, v, items.begin(), (int)items.size());
 }
 
 //A tab on the left: the chosen one is lit grey with a white bar (white text on it: about 9:1)

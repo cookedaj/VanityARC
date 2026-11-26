@@ -19,6 +19,21 @@ namespace config {
     inline bool showDeadPlayers = true;
     inline bool showDeadArc = true;
 
+    //Which kinds of ground items are drawn (Insert menu: Loot tab, GROUND ITEMS; order of labels::Kind). All on, so nothing
+    //is hidden until you choose. An item not read yet counts as Other. The tracker reads them all either way.
+    inline bool showLootGuns = true, showLootAmmo = true, showLootMeds = true, showLootShields = true;
+    inline bool showLootGrenades = true, showLootGadgets = true, showLootMods = true, showLootAugments = true;
+    inline bool showLootBlueprints = true, showLootKeys = true, showLootMaterials = true, showLootValuables = true;
+    inline bool showLootOther = true;
+    //Which groups of containers are drawn (Loot tab, CONTAINERS; order of labels::Group). All on; not read yet: Other.
+    inline bool showContainerMedical = true, showContainerWeapons = true, showContainerTech = true, showContainerIndustrial = true;
+    inline bool showContainerHome = true, showContainerLockers = true, showContainerTrash = true, showContainerArc = true;
+    inline bool showContainerNature = true, showContainerCaches = true, showContainerOther = true;
+    inline bool colorLootKinds = false;    //Loot tab, "Colour items by kind": guns red, ammo pink, meds green, shields blue (rest stay cyan)
+    inline bool highlightValuable = false; //Loot tab, "Highlight valuable items": priced at or above valuableFrom in values.txt:
+                                           //gold, 1.5 times the size, always named (within Loot range) with the price ("14k")
+    inline double valuableFrom = 10000;    //Loot tab, "Valuable from": the price that counts as valuable
+
     //Names next to the markers. Also in the Insert menu (ESP tab, NAMES).
     inline bool showPlayerNames = true;
     inline bool showPlayerGuns = true;     //the guns a player carries, under the box

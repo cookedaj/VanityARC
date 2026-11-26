@@ -3,7 +3,10 @@
 #include "imgui_internal.h"
 #include <cmath>
 #include <cstdio>
+#include <filesystem>
+#include <fstream>
 #include <random>
+#include <set>
 
 static int fails = 0;
 #define CHECK(cond, msg) do { bool ok_ = (cond); std::printf("%s  %s\n", ok_ ? "PASS" : "FAIL", msg); if (!ok_) fails++; } while (0)
@@ -344,6 +347,121 @@ int main() {
         });
         config::monochrome = false;
         CHECK(grey, "monochrome: every vertex is white, grey or black");
+    }
+
+    //---- the Loot tab: kinds of ground items, groups of containers, colours by kind, valuable items
+    {
+        using K = labels::Kind;
+        using G = labels::Group;
+        RenderEntity gun = ent(Object::PICKUP, 1500, 100, 0); gun.itemKind = (int)K::Gun; gun.label = "Ferro";
+        RenderEntity unread = gun; unread.itemKind = -1;
+        RenderEntity bin = ent(Object::SEARCH, 1500, 100, 0); bin.itemKind = (int)G::Trash; bin.label = "Trash Can";
+        RenderEntity binUnread = bin; binUnread.itemKind = -1;
+        auto n = [&](const RenderEntity& e) { return draw([&] { DrawESP({e}, cam, 3); }); };
+        auto rgb = [](ImU32 c) { return c | IM_COL32_A_MASK; }; //AA fringes share the colour at alpha 0
+        auto colours = [&](const RenderEntity& e) {
+            std::set<ImU32> c;
+            draw([&] { DrawESP({e}, cam, 3); for (const ImDrawVert& v : ImGui::GetBackgroundDrawList()->VtxBuffer) c.insert(rgb(v.col)); });
+            return c;
+        };
+        auto width = [&](const RenderEntity& e, ImU32 col) { //how wide the shapes in this colour are drawn
+            float x0 = 1e9f, x1 = -1e9f;
+            draw([&] {
+                DrawESP({e}, cam, 3);
+                for (const ImDrawVert& v : ImGui::GetBackgroundDrawList()->VtxBuffer)
+                    if (rgb(v.col) == rgb(col)) { x0 = std::min(x0, v.pos.x); x1 = std::max(x1, v.pos.x); }
+            });
+            return x1 - x0;
+        };
+        bool* const* items = LootSwitches();
+        bool* const* groups = ContainerSwitches();
+
+        const int gunOn = n(gun), binOn = n(bin);
+        bool same = gunOn > 0;
+        for (int k = -1; k < labels::KIND_COUNT; k++) { RenderEntity e = gun; e.itemKind = k; same &= n(e) == gunOn && colours(e).count(rgb(COLOR::cyan)); }
+        CHECK(same, "every kind on (the default): each kind and an unread item draw exactly as before (cyan, same size)");
+        config::showLootGuns = false;
+        CHECK(n(gun) == 0 && n(unread) == gunOn, "Guns off: a gun on the ground is hidden, an item not read yet is not");
+        config::showLootGuns = true;
+        config::showLootOther = false;
+        RenderEntity odd = gun; odd.itemKind = 99;
+        CHECK(n(unread) == 0 && n(odd) == 0 && n(gun) == gunOn, "Other off: items not read yet (and unknown kinds) are hidden, guns are not");
+        config::showLootOther = true;
+        for (int k = 0; k < labels::KIND_COUNT; k++) *items[k] = false;
+        CHECK(n(bin) == binOn && n(binUnread) == binOn, "every item kind off: containers are drawn as before");
+        for (int k = 0; k < labels::KIND_COUNT; k++) *items[k] = true;
+        config::showContainerTrash = false;
+        CHECK(n(bin) == 0 && n(binUnread) == binOn, "Trash off: a trash can is hidden, a container not read yet is not");
+        config::showContainerTrash = true;
+        config::showContainerOther = false;
+        CHECK(n(binUnread) == 0 && n(bin) == binOn, "containers Other off: containers not read yet are hidden");
+        for (int g = 0; g < labels::GROUP_COUNT; g++) *groups[g] = false;
+        CHECK(n(gun) == gunOn, "every container group off: ground items are drawn as before");
+        for (int g = 0; g < labels::GROUP_COUNT; g++) *groups[g] = true;
+
+        //Colour items by kind: guns, ammo, meds and shields get their own colour, the same triangle and size
+        config::colorLootKinds = true;
+        RenderEntity meds = gun; meds.itemKind = (int)K::Meds;
+        RenderEntity shield = gun; shield.itemKind = (int)K::Shield;
+        const ImU32 cGun = COLOR::pickup((int)K::Gun), cMeds = COLOR::pickup((int)K::Meds), cShield = COLOR::pickup((int)K::Shield);
+        CHECK(colours(gun).count(rgb(cGun)) && !colours(gun).count(rgb(COLOR::cyan)) && colours(meds).count(rgb(cMeds)) &&
+              colours(shield).count(rgb(cShield)) && colours(unread).count(rgb(COLOR::cyan)),
+              "Colour items by kind: a gun, meds and a shield in their own colours, an unread item stays cyan");
+        CHECK(cGun != cMeds && cMeds != cShield && cGun != cShield && cGun != COLOR::cyan && COLOR::pickup((int)K::Ammo) != COLOR::cyan &&
+              COLOR::pickup((int)K::Blueprint) == COLOR::cyan, "four kind colours, all different from each other and from cyan");
+        CHECK(n(gun) == gunOn && n(meds) == gunOn, "Colour items by kind: the same triangle, the same size");
+
+        //values.txt is read only while Show item values or Highlight valuable items is on
+        const std::string vdir = (std::filesystem::temp_directory_path() / "kwinhelper_test_espvalues").string();
+        std::filesystem::create_directories(vdir);
+        std::ofstream(vdir + "/values.txt", std::ios::trunc) << "Ferro | 14000\nBandage | 300\n";
+        itemvalues::setDir(vdir);
+        config::colorLootKinds = false;
+        n(gun);
+        CHECK(itemvalues::count() == 0, "Highlight valuable items off: values.txt is not read");
+        config::highlightValuable = true;
+        n(gun);
+        CHECK(itemvalues::count() == 2, "Highlight valuable items on: values.txt is read");
+
+        //a valuable item 30 m away (past the 25 m Loot name range): gold, half as big again, named with its price
+        config::showItemNames = true; config::nameMaxLootDist = 25;
+        RenderEntity far30 = gun; far30.pos = Vector3(3000, 100, 0);
+        RenderEntity cheap = far30; cheap.label = "Bandage"; cheap.itemKind = (int)K::Meds;
+        RenderEntity nameless = far30; nameless.label = "Unpriced thing";
+        const float bigW = width(far30, COLOR::gold);
+        const int bigN = n(far30), cheapN = n(cheap);
+        CHECK(colours(far30).count(rgb(COLOR::gold)) && !colours(far30).count(rgb(COLOR::cyan)), "a valuable item is gold");
+        CHECK(!colours(cheap).count(rgb(COLOR::gold)) && !colours(nameless).count(rgb(COLOR::gold)), "a cheap item and an unpriced one are not gold");
+        config::highlightValuable = false;
+        const float normalW = width(far30, COLOR::cyan);
+        const int normalN = n(far30);
+        CHECK(n(cheap) == cheapN, "a cheap item looks the same with the highlight on and off");
+        std::printf("valuable triangle %.1f px wide, normal %.1f px\n", bigW, normalW);
+        CHECK(bigW / normalW > 1.4f && bigW / normalW < 1.6f, "a valuable item's triangle is half as big again");
+        CHECK(bigN > normalN, "a valuable item past the Loot name range still shows its name and price");
+        config::highlightValuable = true;
+        config::showItemNames = false;
+        CHECK(n(far30) == bigN, "a valuable item is named even with Item names off");
+        config::showItemNames = true;
+        config::valuableFrom = 20000;
+        CHECK(!colours(far30).count(rgb(COLOR::gold)), "Valuable from 20000: a 14000 item is not highlighted");
+        config::valuableFrom = 10000;
+        config::monochrome = true; config::colorLootKinds = true;
+        bool grey = true;
+        const std::vector<RenderEntity> mix = {far30, meds, shield, gun};
+        draw([&] {
+            DrawESP(mix, cam, 3);
+            for (const ImDrawVert& v : ImGui::GetBackgroundDrawList()->VtxBuffer) {
+                const int r = v.col & 0xFF, g = (v.col >> 8) & 0xFF, b = (v.col >> 16) & 0xFF;
+                if (std::abs(r - g) > 2 || std::abs(g - b) > 2) grey = false;
+            }
+        });
+        CHECK(grey, "monochrome: kind colours and valuable gold stay white and grey");
+        config::monochrome = false; config::colorLootKinds = false; config::highlightValuable = false;
+        CHECK(ShortPrice(14000) == "14k" && ShortPrice(14500) == "14.5k" && ShortPrice(800) == "800" && ShortPrice(1500000) == "1.5M",
+              "prices as a short suffix: 14k, 14.5k, 800, 1.5M");
+        itemvalues::clear(); itemvalues::setDir("");
+        std::filesystem::remove_all(vdir);
     }
 
     //---- label cards add a dark rectangle behind the text

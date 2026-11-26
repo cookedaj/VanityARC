@@ -1,10 +1,11 @@
 #ifndef KWINHELPER_MENU_H
 #define KWINHELPER_MENU_H
-//The Insert menu: black and white, tabs on the left (ESP, Players, Radar, Settings).
+//The Insert menu: black and white, tabs on the left (ESP, Loot, Players, Radar, Settings).
 //Settings and your own names are saved in ~/.config/kwin-helper/ (see settings.h and labels.h).
 #include <atomic>
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <cstdio>
 #include <map>
 #include <set>
@@ -26,8 +27,8 @@
 inline bool g_MenuOpen = false;
 inline std::atomic<bool> g_MenuQuit{false}; //the menu's Quit button; the main loop ends the program
 inline int g_MenuTab = 0; //which page is shown
-inline const char* const MENU_TABS[] = {"ESP", "Players", "Radar", "Settings"};
-inline constexpr int MENU_TAB_COUNT = 4;
+inline const char* const MENU_TABS[] = {"ESP", "Loot", "Players", "Radar", "Settings"};
+inline constexpr int MENU_TAB_COUNT = 5;
 
 //Call once per frame before RenderBegin(). Flips the menu on Insert. The overlay is click-through
 //normally; while the menu is open it takes the mouse so the menu can be clicked.
@@ -202,6 +203,7 @@ inline void PageEsp() {
     Switch("Ground items", &config::showPickups); ImGui::NextColumn();
     Switch("Containers", &config::showContainers); ImGui::NextColumn();
     ImGui::Columns(1);
+    Note("To show only guns, only ammo, only meds or other kinds of ground items and containers, use the Loot tab.");
     Section("NAMES");
     ImGui::Columns(2, "##names", false);
     Switch("Player names", &config::showPlayerNames); ImGui::NextColumn();
@@ -241,6 +243,60 @@ inline void PageEsp() {
     Switch("Big warning for a close enemy", &config::closeWarning);
     if (config::closeWarning) SliderD("Warning card range", &config::warnDist, 5, 100, "%.0f m");
     Note("The spoken warning has its own range: Settings tab, Spoken warning range.");
+}
+
+//The "Show" drop-down over a block of switches: 0 all on, 1 + k only switch k on, n + 1 anything else (Mixed). Worked out
+//from the switches every frame, so it keeps no state of its own and always says what is on.
+inline int SwitchPreset(bool* const* s, int n) {
+    int on = 0, last = -1;
+    for (int k = 0; k < n; k++) if (*s[k]) { on++; last = k; }
+    return on == n ? 0 : on == 1 ? 1 + last : n + 1;
+}
+//A line of that drop-down picked: all on, or only one on. Mixed leaves the switches as they are.
+inline void SetSwitchPreset(bool* const* s, int n, int p) {
+    if (p < 0 || p > n) return;
+    for (int k = 0; k < n; k++) *s[k] = p == 0 || k == p - 1;
+}
+
+//A "Show" drop-down (all, only one kind, mixed), then one switch per kind in two columns. name(k): the kind's name.
+//suffix: added to each switch's ID, so two blocks on one page can both have an "Other".
+inline void KindSwitches(const char* label, const char* all, bool* const* s, int n, const char* (*name)(int), const char* cols,
+                         const char* suffix) {
+    std::vector<std::string> text{all};
+    for (int k = 0; k < n; k++) {
+        std::string t = name(k);
+        if (t.size() > 1 && std::islower((unsigned char)t[1])) t[0] = (char)std::tolower((unsigned char)t[0]); //"ARC" stays
+        text.push_back("Only " + t);
+    }
+    text.push_back("Mixed (switches below)");
+    std::vector<const char*> items;
+    for (const std::string& t : text) items.push_back(t.c_str());
+    double pick = SwitchPreset(s, n);
+    if (ui::Choice(label, &pick, items.data(), (int)items.size())) SetSwitchPreset(s, n, (int)pick);
+    ImGui::Columns(2, cols, false);
+    for (int k = 0; k < n; k++) { ui::Switch((std::string(name(k)) + suffix).c_str(), s[k]); ImGui::NextColumn(); }
+    ImGui::Columns(1);
+}
+
+inline void PageLoot() {
+    using namespace ui;
+    Section("GROUND ITEMS");
+    Switch("Ground items", &config::showPickups);
+    KindSwitches("Show##items", "All kinds", LootSwitches(), labels::KIND_COUNT,
+                 [](int k) { return labels::kindName((labels::Kind)k); }, "##kinds", "");
+    Note("Items whose name is not read yet count as Other.");
+    Switch("Colour items by kind", &config::colorLootKinds);
+    Note("Guns magenta, ammo white, meds green, shields blue; everything else stays cyan. Monochrome keeps them all grey.");
+    Section("VALUABLE ITEMS");
+    Switch("Highlight valuable items", &config::highlightValuable);
+    SliderD("Valuable from", &config::valuableFrom, 1000, 100000, "%.0f");
+    Note("Ground items with at least this price in ~/.config/kwin-helper/values.txt are drawn gold (white in monochrome) and "
+         "half as big again, always with their name and price (\"14k\"), anywhere within the ESP tab's Loot range.");
+    Section("CONTAINERS");
+    Switch("Containers", &config::showContainers);
+    KindSwitches("Show##containers", "All groups", ContainerSwitches(), labels::GROUP_COUNT,
+                 [](int g) { return labels::groupName((labels::Group)g); }, "##groups", "##box");
+    Note("Containers whose name is not read yet count as Other.");
 }
 
 inline void PagePlayers() {
@@ -454,8 +510,9 @@ inline void DrawMenu() {
     ImGui::BeginChild("##page", ImVec2(0, -footer), ImGuiChildFlags_NavFlattened, ImGuiWindowFlags_AlwaysVerticalScrollbar);
     switch (g_MenuTab) {
         case 0: PageEsp(); break;
-        case 1: PagePlayers(); break;
-        case 2: PageRadar(); break;
+        case 1: PageLoot(); break;
+        case 2: PagePlayers(); break;
+        case 3: PageRadar(); break;
         default: PageSettings(); break;
     }
     ImGui::EndChild();

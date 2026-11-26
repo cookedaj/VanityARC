@@ -12,6 +12,8 @@
 #include "Overlay.h"
 #include "W2S.h"
 #include "../utils/gameview.h"
+#include "../utils/itemvalues.h"
+#include "../utils/labels.h"
 #include "../utils/localUtil.h"
 #include "../utils/marks.h"
 
@@ -67,7 +69,21 @@ namespace COLOR {
     inline ImU32 mate() { return mono() ? grey : green; }
     inline ImU32 arc(bool dead) { return mono() ? (dead ? IM_COL32(110, 110, 110, 150) : white) : (dead ? darkorange : orange); }
     inline ImU32 container() { return mono() ? IM_COL32(150, 150, 150, 170) : green; }
-    inline ImU32 pickup() { return mono() ? IM_COL32(215, 215, 215, 200) : cyan; }
+    //Ground items: cyan. With "Colour items by kind" (Loot tab) guns are magenta, ammo white, meds green and shields blue;
+    //the rest stay cyan. Monochrome: light grey for all of them.
+    inline ImU32 pickup(int kind = -1) {
+        if (mono()) return IM_COL32(215, 215, 215, 200);
+        if (config::colorLootKinds) switch ((labels::Kind)kind) {
+            case labels::Kind::Gun: return IM_COL32(255, 60, 220, 255);
+            case labels::Kind::Ammo: return IM_COL32(255, 255, 255, 255);
+            case labels::Kind::Meds: return IM_COL32(90, 255, 90, 255);
+            case labels::Kind::Shield: return IM_COL32(70, 150, 255, 255);
+            default: break;
+        }
+        return cyan;
+    }
+    inline ImU32 gold = IM_COL32(255, 215, 0, 255);
+    inline ImU32 valuable() { return mono() ? white : gold; } //"Highlight valuable items" (Loot tab)
     inline ImU32 deadPlayer() { return mono() ? IM_COL32(110, 110, 110, 150) : darkred; }
     inline ImU32 shieldBar() { return mono() ? IM_COL32(170, 170, 170, 255) : shield; }
 
@@ -91,6 +107,36 @@ inline void ESPInit() {
     }
     if (config::makeDeadBotESPTranslucent) COLOR::darkorange = COLOR::withAlpha(COLOR::darkorange, 128);
     if (config::makeDeadPlayerESPTranslucent) COLOR::darkred = COLOR::withAlpha(COLOR::darkred, 128);
+}
+
+//The Loot tab's switch for each kind of ground item (labels::Kind order) and each group of containers (labels::Group order)
+inline bool* const* LootSwitches() {
+    static bool* const s[] = {&config::showLootGuns, &config::showLootAmmo, &config::showLootMeds, &config::showLootShields,
+                              &config::showLootGrenades, &config::showLootGadgets, &config::showLootMods, &config::showLootAugments,
+                              &config::showLootBlueprints, &config::showLootKeys, &config::showLootMaterials, &config::showLootValuables,
+                              &config::showLootOther};
+    static_assert(sizeof s / sizeof *s == labels::KIND_COUNT, "one switch per kind");
+    return s;
+}
+inline bool* const* ContainerSwitches() {
+    static bool* const s[] = {&config::showContainerMedical, &config::showContainerWeapons, &config::showContainerTech,
+                              &config::showContainerIndustrial, &config::showContainerHome, &config::showContainerLockers,
+                              &config::showContainerTrash, &config::showContainerArc, &config::showContainerNature,
+                              &config::showContainerCaches, &config::showContainerOther};
+    static_assert(sizeof s / sizeof *s == labels::GROUP_COUNT, "one switch per group");
+    return s;
+}
+//Is this kind (group) switched on? Not read yet (-1) or anything unknown follows Other, the last switch.
+inline bool KindShown(bool* const* s, int count, int kind) { return *s[kind >= 0 && kind < count ? kind : count - 1]; }
+
+//A price as a short suffix: "800", "14k", "14.5k", "1.2M"
+inline std::string ShortPrice(long v) {
+    char b[24];
+    if (v < 1000) std::snprintf(b, sizeof b, "%ld", v);
+    else if (v < 1000000 && (v % 1000 < 50 || v % 1000 >= 950)) std::snprintf(b, sizeof b, "%.0fk", v / 1000.0);
+    else if (v < 1000000) std::snprintf(b, sizeof b, "%.1fk", v / 1000.0);
+    else std::snprintf(b, sizeof b, "%.1fM", v / 1000000.0);
+    return b;
 }
 
 //Your squad (same team id) or players you marked by hand
@@ -531,6 +577,7 @@ inline void DrawESP(const std::vector<RenderEntity>& entities, FminimalViewInfo 
     auto onScreen = [&](double x, double y) { return x > -60 && x < W + 60 && y > -60 && y < H + 60; };
     std::vector<EdgeArrow> edge, arcEdge;
     char buf[64];
+    if (config::highlightValuable) itemvalues::reloadIfChanged(); //values.txt: a saved change shows within 2 s
 
     for (const auto& ent : entities) {
         if (ent.type == Object::NONE && !isDebugMode) continue;
@@ -635,6 +682,7 @@ inline void DrawESP(const std::vector<RenderEntity>& entities, FminimalViewInfo 
             double radius;
             int prio;
             bool nameOn;
+            long price = -1; //a valuable ground item's price ("Highlight valuable items"), else -1
             void (*shape)(float, float, float, ImU32); //each kind its own shape, in colour and in monochrome
             if (ent.type == Object::ARC) {
                 if (!config::showArc || (ent.isDead && !config::showDeadArc)) continue;
@@ -647,6 +695,7 @@ inline void DrawESP(const std::vector<RenderEntity>& entities, FminimalViewInfo 
                 shape = DrawDiamondFilled;
             } else if (ent.type == Object::SEARCH) {
                 if (!config::showContainers || dist > config::maxLootDist) continue;
+                if (!KindShown(ContainerSwitches(), labels::GROUP_COUNT, ent.itemKind)) continue; //Loot tab, CONTAINERS
                 color = COLOR::container();
                 radius = getProportionalRadius(dist, config::maxLootDist);
                 prio = 3;
@@ -654,10 +703,16 @@ inline void DrawESP(const std::vector<RenderEntity>& entities, FminimalViewInfo 
                 shape = DrawSquareFilled;
             } else if (ent.type == Object::PICKUP) {
                 if (!config::showPickups || dist > config::maxLootDist) continue;
-                color = COLOR::pickup();
+                if (!KindShown(LootSwitches(), labels::KIND_COUNT, ent.itemKind)) continue; //Loot tab, GROUND ITEMS
+                if (config::highlightValuable && !ent.label.empty()) {
+                    const long p = itemvalues::valueOf(ent.label); //by the name on screen, as values.txt lists it
+                    if (p >= 0 && p >= config::valuableFrom) price = p;
+                }
+                color = price >= 0 ? COLOR::valuable() : COLOR::pickup(ent.itemKind);
                 radius = getProportionalRadius(dist, config::maxLootDist) * 1.25; //the same for the triangle
+                if (price >= 0) radius *= 1.5; //a valuable item: bigger, and named anywhere within Loot range
                 prio = 2;
-                nameOn = config::showItemNames && dist <= config::nameMaxLootDist;
+                nameOn = price >= 0 || (config::showItemNames && dist <= config::nameMaxLootDist);
                 shape = DrawTriangleFilled;
             } else {
                 continue;
@@ -666,6 +721,7 @@ inline void DrawESP(const std::vector<RenderEntity>& entities, FminimalViewInfo 
             shape((float)sp.x, (float)sp.y, (float)radius, color);
             std::string text;
             if (nameOn && !ent.label.empty()) text = ent.label + "  ";
+            if (price >= 0) text += ShortPrice(price) + "  ";
             snprintf(buf, sizeof buf, "%.0fm", dist);
             text += buf;
             QueueMarkerLabel((float)sp.x, (float)sp.y, (float)radius, text, ls2, prio, dist);
