@@ -1395,6 +1395,31 @@ int main() {
                               c.ls, c.w, c.h, health, card.x0, card.x1, card.y0, card.y1, hp.x1, hp.y0, hp.y1);
                 CHECK(card.x1 > card.x0 && !RectsOverlap(card, hp) && card.x0 >= 0 && card.x1 <= c.w && card.y1 <= c.h && lowOk, msg);
             }
+        //Moved beside the readout, the card stays there until it is WARN_STICK_PX clear of the readout's height, so small
+        //steps up and down never make it jump sideways back and forth (here Shift Y moves it up and down)
+        config::SCREEN_W = 1280; config::SCREEN_H = 720; config::labelSize = 28;
+        ImGui::GetIO().DisplaySize = ImVec2(1280, 720);
+        g_listRect = {}; g_warnSide = 0; g_warnBeside = false;
+        const LabelRect r = SelfHealthRect();
+        float cardTop = 0, cardBottom = 0, cardX0 = 0, top0 = 0;
+        auto cardAt = [&](float under) { //Shift Y that puts the card's top this far under the readout, then where it went
+            config::centerOffsetY = under - (top0 - r.y1);
+            draw([&] {
+                DrawCloseEnemyWarning(close, cam, 3, &cardBottom, 0, nullptr, &cardTop);
+                cardX0 = 1e9f;
+                for (const ImDrawVert& q : ImGui::GetBackgroundDrawList()->VtxBuffer) if (q.col == IM_COL32(0, 0, 0, 220)) cardX0 = std::min(cardX0, q.pos.x);
+            });
+            return cardX0 > r.x1; //beside the readout
+        };
+        config::centerOffsetY = 0;
+        draw([&] { DrawCloseEnemyWarning(close, cam, 3, &cardBottom, 0, nullptr, &top0); });
+        g_warnBeside = false;
+        const bool near = cardAt(4), stuck = cardAt(20), back = !cardAt(40), stays = !cardAt(20);
+        std::printf("      card beside the readout with its top under it by 4 px: %d, then 20 px: %d, 40 px: %d, 20 px: %d (last top %.0f, readout to %.0f)\n",
+                    near, stuck, !back, !stays, cardTop, r.y1);
+        CHECK(near && stuck && back && stays, "the close-enemy card moved beside the HP/SH readout stays there for small steps, and comes back under the crosshair once well clear of it");
+        config::centerOffsetY = 0;
+        g_warnBeside = false;
         g_lowHealthRect = {};
         g_warnSide = 0;
         config::labelSize = keepLs; config::SCREEN_W = keepW; config::SCREEN_H = keepH;

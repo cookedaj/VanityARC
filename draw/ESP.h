@@ -1178,6 +1178,9 @@ inline void DrawESP(const std::vector<RenderEntity>& entities, FminimalViewInfo 
 //WARN_STICK_PX clear of its own place, so small steps never make it jump back and forth. 0 again whenever no card shows.
 inline int g_warnSide = 0;
 constexpr float WARN_SLACK_PX = 10, WARN_STICK_PX = 24;
+//The close-enemy card was moved right off the HP/SH readout last frame: it stays there until it is WARN_STICK_PX clear of
+//the readout's height, so small steps never make it jump sideways back and forth. False whenever no card shows.
+inline bool g_warnBeside = false;
 
 //A big card under the middle of the screen for the nearest enemy closer than warnDist: "ENEMY 9 m BEHIND", or
 //"3 ENEMIES - NEAREST 9 m LEFT", with ", ABOVE" / ", BELOW" when he is more than 3 m higher or lower, and a big white
@@ -1190,7 +1193,9 @@ inline std::string DrawCloseEnemyWarning(const std::vector<RenderEntity>& entiti
                                          float* bottom = nullptr, float extraBelow = 0, ImDrawList* dl = nullptr,
                                          float* top = nullptr) {
     const int side = g_warnSide;
+    const bool wasBeside = g_warnBeside;
     g_warnSide = 0;
+    g_warnBeside = false;
     if (!config::closeWarning) return {};
     const View v(vm, MakeProjection());
     if (!v.ok) return {};
@@ -1239,19 +1244,18 @@ inline std::string DrawCloseEnemyWarning(const std::vector<RenderEntity>& entiti
     //ponytail: once moved below or above the nearest enemy on such a narrow screen, it can still reach over the readout.
     const LabelRect hpCard = config::showSelfHealth ? SelfHealthRect() : LabelRect{};
     const float gap = 8, xLo = hx + 3, xHi = std::max(xLo, (float)config::SCREEN_W - hx - 3);
-    auto onReadout = [&](float x, float y) {
-        return hpCard.x1 > hpCard.x0 && RectsOverlap({x - hx - 3 - gap, y - hy - 2 - gap, x + hx + 3 + gap, y + hy + 2 + gap}, hpCard);
+    auto onReadout = [&](float x, float y, float g) {
+        return hpCard.x1 > hpCard.x0 && RectsOverlap({x - hx - 3 - g, y - hy - 2 - g, x + hx + 3 + g, y + hy + 2 + g}, hpCard);
     };
-    auto cardX = [&](float y) {
-        const float x = std::clamp((float)v.cx, xLo, xHi);
-        return onReadout(x, y) ? std::min(std::max(x, hpCard.x1 + gap + hx + 3), xHi) : x;
-    };
-    if (onReadout(cardX(cy), cy)) {
+    const float centre = std::clamp((float)v.cx, xLo, xHi), beside = std::min(std::max(centre, hpCard.x1 + gap + hx + 3), xHi);
+    if (onReadout(centre, cy, gap) && onReadout(beside, cy, gap)) {
         const float under = hpCard.y1 + gap + hy + 2, over = hpCard.y0 - gap - hy - 2;
         if (under + hy + 2 + extraBelow <= F) cy = under;
         else if (over - hy - 2 >= (float)v.cy + 18) cy = over;
     }
-    float cx = cardX(cy);
+    const float stickGap = wasBeside ? gap + WARN_STICK_PX : gap; //moved beside it last frame: it stays there a little longer
+    const bool besideHere = onReadout(centre, cy, stickGap);       //beside it at its own place: also once moved for him
+    float cx = besideHere ? beside : centre;
     //Never over the nearest enemy when DrawESP shows him: below his box, bars and labels, above them when there is no
     //room below (LOW HEALTH follows the card, and is kept off him too, but never by moving the card up to the
     //crosshair). When he fills the screen top to bottom the card stays put. His box is the standing one (90 cm up and
@@ -1295,7 +1299,8 @@ inline std::string DrawCloseEnemyWarning(const std::vector<RenderEntity>& entiti
         }
     }
     g_warnSide = newSide;
-    cx = cardX(cy); //moved below or above him: off the readout at its new height
+    if (!besideHere && onReadout(centre, cy, stickGap)) cx = beside; //moved below or above him to the readout's height
+    g_warnBeside = cx != centre;
     DrawRectFilled(cx - hx, cy - hy, cx + hx, cy + hy, IM_COL32(0, 0, 0, 220), dl);
     DrawRectOutline(cx - hx, cy - hy, cx + hx, cy + hy, COLOR::enemy(), 3.0f, dl);
     if (arrow) { //its middle in the middle of its column; screen up is ahead of you, right is your right
