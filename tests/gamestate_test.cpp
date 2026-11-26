@@ -2,6 +2,7 @@
 //tracker thread running against it while the menu thread hammers the name list.
 #include <sys/mman.h>
 #include <unistd.h>
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cmath>
@@ -284,7 +285,10 @@ int main() {
         fast.step();
         fast.step();
         giveMesh(mate, cx + 2500, cy + 2500, cz - 182);   //a frozen player of the same stance: his own list never changes
-        fast.step();                                      //its list is seen for the first time
+        gsRet rfirst = fast.step();                       //its list is seen for the first time
+        const RenderEntity* m0 = findPlayer(rfirst, mate);
+        CHECK(m0 && m0->pose && m0->poseLive && std::abs(m0->pose->j[skeleton::PELVIS].z - (cz - 182 + 10)) < 1e-6,
+              "a newly seen player is drawn with his own pose at once, as live (not an estimate before his list is seen to stop)");
         std::this_thread::sleep_for(std::chrono::milliseconds(400));
         fast.step();
         gsRet rm = fast.step();
@@ -297,6 +301,63 @@ int main() {
             CHECK(std::abs(mh - eh) < 1e-6, "and it is the shape the game animates for that stance, not his own old list");
             CHECK(std::abs(m->pose->j[skeleton::PELVIS].z - (cz - 182 + 85)) < 1e-6, "placed on him, at his own place");
         }
+
+        //A frozen player whose bone list is the wrong size gets no estimate: never another player's pose
+        put<int>(get<u64>(mate + off::MESH) + off::BONE_ARRAY + 8, 50);
+        fast.step();
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        fast.step();
+        gsRet rw = fast.step();
+        const RenderEntity* mw = findPlayer(rw, mate);
+        CHECK(mw && !mw->pose, "a frozen player whose bone list has the wrong size gets no pose, though stances are learned");
+        put<int>(get<u64>(mate + off::MESH) + off::BONE_ARRAY + 8, 97);
+
+        //Limbs are eased: a bone that moves 20 cm is followed part of the way at once, and all the way soon after
+        auto pelvisZ = [&](const gsRet& r) {
+            const RenderEntity* p = findPlayer(r, enemy1);
+            return p && p->pose ? p->pose->j[skeleton::PELVIS].z - (cz - 182) : NAN;
+        };
+        fast.step();
+        put<double>(bones1 + 0x60 * 1 + 0x20 + 16, 105.0);
+        std::this_thread::sleep_for(std::chrono::milliseconds(20)); //past BONE_PERIOD: the list is read again
+        const double z1 = pelvisZ(fast.step());
+        CHECK(z1 > 86 && z1 < 104, "a bone that moved 20 cm is followed part of the way at once (eased, no jump)");
+        gsRet settled;
+        for (auto until = std::chrono::steady_clock::now() + std::chrono::milliseconds(200); std::chrono::steady_clock::now() < until;) {
+            settled = fast.step();
+            std::this_thread::sleep_for(std::chrono::milliseconds(4));
+        }
+        CHECK(std::abs(pelvisZ(settled) - 105) < 0.5, "and all the way within 200 ms");
+
+        //A player who leaves the world takes his stick-figure state with him
+        const size_t kept = fast.poseStates();
+        actorList.erase(std::find(actorList.begin(), actorList.end(), mate));
+        publishActors();
+        std::this_thread::sleep_for(std::chrono::milliseconds(150)); //a scan
+        fast.step();
+        CHECK(kept >= 2 && fast.poseStates() == kept - 1, "a player who is gone leaves no stick-figure state behind");
+        actorList.insert(actorList.begin() + 5, mate);
+        publishActors();
+        std::this_thread::sleep_for(std::chrono::milliseconds(150));
+        fast.step();
+
+        //A new world: stances are learned again, so a frozen player is not drawn with a stance from the last raid
+        const u64 world2 = alloc(0x400);
+        put<u64>(world2 + off::LEVEL_COLLECTIONS, get<u64>(uworldObj + off::LEVEL_COLLECTIONS));
+        put<u64>(g_chain2 + off::UWORLD_CHAIN_3, world2);
+        std::this_thread::sleep_for(std::chrono::milliseconds(40)); //past the world check gap
+        fast.step();
+        fast.step();
+        std::this_thread::sleep_for(std::chrono::milliseconds(400)); //no list changes: everyone is frozen now
+        fast.step();
+        gsRet rn = fast.step();
+        const RenderEntity* mn = findPlayer(rn, mate);
+        CHECK(mn && mn->pose && !mn->poseLive && std::abs(mn->pose->j[skeleton::PELVIS].z - (cz - 182 + 10)) < 1e-6,
+              "after a world change a frozen player keeps his own pose: no stance learned in the last world");
+        fixWorld();
+        std::this_thread::sleep_for(std::chrono::milliseconds(40));
+        fast.step();
+        fast.step();
     }
 
     //--- bones are read only for players whose skeleton is drawn: not for a hidden squad mate, anyone behind you, or the dead

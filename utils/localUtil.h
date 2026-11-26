@@ -64,8 +64,8 @@ struct RenderEntity {
     bool isTurret = false; //ARC: a turret
     int itemKind = -1;     //ground items: labels::Kind, containers: labels::Group, as a number; -1 while not read yet (counts as Other)
     std::shared_ptr<const skeleton::Pose> pose; //players: the stick figure in world space, null when it could not be read
-    bool poseLive = true; //false: the game has stopped animating this player (not drawn / out of range), so the pose is old.
-                          //Not used for drawing (an old pose is never drawn fainter); kept so tests can check that frozen players are detected.
+    bool poseLive = true; //false: the game has stopped animating this player (not drawn / out of range), so the pose is an
+                          //estimate: DrawSkeleton gives it a dashed head ring (never fainter than a live pose)
 };
 
 #endif //KWINHELPER_LOCALUTIL_H

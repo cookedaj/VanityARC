@@ -53,6 +53,7 @@ public:
 
     struct Timing { double lastScanMs = 0; double lastStepMs = 0; size_t statics = 0, dynamics = 0; };
     Timing timing() const { return timing_; }
+    size_t poseStates() const { return poseSeen_.size(); } //players whose stick-figure state is kept (only those still in the world)
 
 private:
     ptr getUworld();
@@ -104,10 +105,12 @@ private:
     double shieldCap_ = 0; //highest shield any player held still on two steps in a row (under 1000), for the whole session
     //The game stops animating a player it is not drawing: his bone list then stops changing. Per player: the list as
     //last read whole and when it last differed (a list that has not changed for a while is "frozen"), how fast he
-    //moves, and the last pose that could be read whole (a half-written list is replaced by it for a moment).
+    //moves, and the last pose that could be read whole (a half-written list is replaced by it for a moment). Also the
+    //figure as drawn (eased towards each new pose) and the bone lengths learned for him. Dropped with the player.
     struct PoseState {
         bool init = false;
         std::chrono::steady_clock::time_point changed{};
+        bool seenChange = false;               //his list has been seen to change: the game animates him (only then is he a stance to learn)
         bool havePos = false;
         Vector3 lastPos;
         std::chrono::steady_clock::time_point lastPosAt{};
@@ -118,6 +121,12 @@ private:
         std::chrono::steady_clock::time_point goodAt{};
         std::vector<uint8_t> bones;            //the bones the figure uses (skeleton::READ_RANGES) as last read whole, reused between reads (BONE_PERIOD)
         std::chrono::steady_clock::time_point bonesAt{};
+        bool badBones[skeleton::BONES] = {};   //the bones of that list whose length was wrong when it was read (their joints are not drawn)
+        skeleton::BoneLengths lengths;
+        bool haveShown = false;
+        skeleton::Pose shown;                  //mesh space: the figure as drawn at the last step, eased towards each new pose
+        std::chrono::steady_clock::time_point shownAt{}, fadeUntil{};
+        bool shownGuess = false;               //shown came from a stance estimate (tmpl_), not from his own list
     };
     std::unordered_map<ptr, PoseState> poseSeen_;
     //Per player: his LastRenderTimeOnScreen as last read, and when it last changed (the game rewrites it every frame it draws him)

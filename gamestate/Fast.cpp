@@ -52,6 +52,10 @@ double shieldNumber(uint64_t raw) {
 double ms(clk::time_point a, clk::time_point b) { return std::chrono::duration<double, std::milli>(b - a).count(); }
 
 constexpr auto POSE_FROZEN_AFTER = std::chrono::milliseconds(300); //a drawn, animated player's bones change every game tick
+constexpr double LIMB_EASE = 0.025;   //s: limbs follow their bones with this time constant (smooth, about 25 ms behind)
+constexpr double CROSS_FADE = 0.040;  //s: the time constant after a switch between his own pose and a stance estimate...
+constexpr auto CROSS_FADE_FOR = std::chrono::milliseconds(120); //...for this long, so the figure blends over instead of jumping
+constexpr auto EASE_GAP = std::chrono::milliseconds(100); //a figure not updated for longer than this starts afresh (nothing to ease from)
 constexpr auto BONE_PERIOD = std::chrono::milliseconds(16);        //a bone list is read at most about 60 times a second; between reads the last one is reused
 constexpr auto CAMERA_HOLD = std::chrono::milliseconds(250);       //a view that cannot be used is replaced by the last good one for this long
 constexpr auto WORLD_CHECK_GAP = std::chrono::milliseconds(30);    //the UWorld chain is read at least this often (every 4th step at 120 updates a second)
@@ -83,7 +87,10 @@ bool GameState::scan(ptr uworld) {
         logThrottled("[-] Invalid Uworld (not in a raid yet?)");
         return false;
     }
-    if (uworld != lastWorld_) { camActor_ = 0; shieldSeen_.clear(); lastTeamID = -1; meActor_ = 0; learned_.clear(); slots_.clear(); } //a new world: new camera, players and actors, your team and pawn not known yet, vtables learned again
+    if (uworld != lastWorld_) { //a new world: new camera, players and actors, your team and pawn not known yet, vtables and stances learned again
+        camActor_ = 0; shieldSeen_.clear(); lastTeamID = -1; meActor_ = 0; learned_.clear(); slots_.clear();
+        poseSeen_.clear(); std::fill(std::begin(haveTmpl_), std::end(haveTmpl_), false);
+    }
     lastWorld_ = uworld;
     //PersistentLevel at UWorld+0x170 is encrypted; the plain pointer is in LevelCollections[0] (see config.h)
     ptr levelCollection = ReadMemory<ptr>(uworld + off::LEVEL_COLLECTIONS);
@@ -228,15 +235,17 @@ void GameState::learnKinds(const std::unordered_map<ptr, std::pair<int, ptr>>& u
 
 //One player's stick figure for this step. The bone list is read whole only some of the time (the game rewrites it
 //every frame), the game stops animating players it is not drawing, and nobody far away is animated at all, so:
+//  - a bone whose length is wrong (a torn record) leaves out only its own arm or leg,
 //  - a list that cannot be read is replaced by the last good one for a moment (no flicker),
-//  - a frozen player gets the pose of someone the game IS animating in the same stance and speed (drawn at full
-//    strength like a live pose; only Dim players behind cover can fade him).
+//  - a frozen player whose list is there gets the pose of someone the game IS animating in the same stance and speed
+//    (drawn at full strength; DrawSkeleton marks it as an estimate). Never for a player whose list is missing.
+//The limbs are eased in the mesh's own space, so they move smoothly while the figure stays on his box.
 //Returns nullptr when he got a pose, otherwise why not (for the console).
 const char* GameState::updatePose(Tracked& t, const std::vector<uint8_t>& bones, const skeleton::Xform& mesh, bool freshBones) {
     using namespace std::chrono;
     const auto now = clk::now();
     PoseState& ps = poseSeen_[t.ent.actor];
-    if (!ps.init) { ps.init = true; ps.changed = now - POSE_FROZEN_AFTER; } //not animated until his list is seen to change
+    if (!ps.init) { ps.init = true; ps.changed = now; } //newly seen: his own pose, until his list is seen not to change for a while
 
     //Ground speed, over at least 150 ms so the replication jitter averages out
     if (!ps.havePos) { ps.havePos = true; ps.lastPos = t.ent.pos; ps.lastPosAt = now; }
@@ -261,35 +270,53 @@ const char* GameState::updatePose(Tracked& t, const std::vector<uint8_t>& bones,
     if (haveBones) {
         skeleton::Xform local[skeleton::BONES];
         skeleton::decodeRead(bones.data(), local);
-        readOk = skeleton::componentPose(local, comp);
+        bool bad[skeleton::BONES]; //bones of this list whose length is wrong: checked when read, kept with the list for the next steps
+        if (freshBones) skeleton::checkLengths(local, ps.lengths, bad);
+        else std::memcpy(bad, ps.badBones, sizeof bad);
+        readOk = skeleton::componentPose(local, comp, bad);
         if (freshBones && readOk) { //a whole list read just now: compare it with the last one, and keep it for the next steps
             if (ps.bones != bones) { //a byte compare with the list kept last time; an unchanged list is not copied again
-                if (!ps.bones.empty()) ps.changed = now; //the first list has nothing to differ from
+                ps.changed = now; //his first list too: nothing says yet that the game has stopped animating him
+                ps.seenChange = ps.seenChange || !ps.bones.empty(); //but only a list that differs from the last shows he moves
                 ps.bones = bones;
             }
             ps.bonesAt = now;
+            std::memcpy(ps.badBones, bad, sizeof bad);
         }
     }
     const bool animated = now - ps.changed < POSE_FROZEN_AFTER; //a failed read leaves the kept list alone: still animated if it was
     if (readOk) {
         ps.good = comp; ps.haveGood = true; ps.goodAt = now;
-        //Learn what this stance looks like from a clean, animated, living player
+        //Learn what this stance looks like from a clean, animated, living player (seen to move, every joint read)
         const double pelvisZ = comp.j[skeleton::PELVIS].z;
         const bool idle = ps.speed < 40.0;
         const bool plausible = crouched ? (pelvisZ > 25.0 && pelvisZ < 60.0) : pelvisZ > 70.0;
         //Not from a roll or a sprint: those poses are not a stance to copy (450 cm/s is above a walk, below a sprint)
-        if (animated && ps.speedKnown && !t.ent.isDead && plausible && (idle || moving) && ps.speed < 450.0) { tmpl_[cls] = comp; haveTmpl_[cls] = true; }
+        if (animated && ps.seenChange && ps.speedKnown && !t.ent.isDead && plausible && (idle || moving) && ps.speed < 450.0 && skeleton::whole(comp)) {
+            tmpl_[cls] = comp; haveTmpl_[cls] = true;
+        }
     } else if (ps.haveGood && now - ps.goodAt < milliseconds(400)) {
         comp = ps.good; readOk = true;   //a half-written list: the last whole one, moved with the player
     }
     t.ent.poseLive = animated;
-    if (!animated) { //frozen: his own list is old, so a pose that fits what he is doing now
-        for (int c : {cls, cls ^ 1}) if (haveTmpl_[c]) { comp = tmpl_[c]; readOk = true; break; }
+    bool guess = false;
+    if (!animated && haveBones) { //frozen, his list still there: his own list is old, so a pose that fits what he is doing now
+        for (int c : {cls, cls ^ 1}) if (haveTmpl_[c]) { comp = tmpl_[c]; readOk = true; guess = true; break; }
     }
-    if (!readOk) return haveBones ? "the bone records do not read as bones (record layout in utils/skeleton.h, or BONE_ARRAY in config.h)"
-                                  : "no bone list was read";
+    if (!readOk) {
+        ps.haveShown = false;
+        return haveBones ? "the bone records do not read as bones (record layout in utils/skeleton.h, or BONE_ARRAY in config.h)"
+                         : "no bone list was read";
+    }
+    //Eased towards the new pose in the mesh's own space; the mesh transform of this step still puts it on his box
+    if (!ps.haveShown || now - ps.shownAt > EASE_GAP) ps.shown = comp;
+    else {
+        if (guess != ps.shownGuess) ps.fadeUntil = now + CROSS_FADE_FOR;
+        skeleton::ease(ps.shown, comp, skeleton::easeStep(duration<double>(now - ps.shownAt).count(), now < ps.fadeUntil ? CROSS_FADE : LIMB_EASE));
+    }
+    ps.haveShown = true; ps.shownAt = now; ps.shownGuess = guess;
     auto pose = std::make_shared<skeleton::Pose>();
-    if (!skeleton::placePose(comp, mesh, t.ent.pos, *pose)) return "the mesh transform is not believable (MESH_TRANSFORM in config.h)";
+    if (!skeleton::placePose(ps.shown, mesh, t.ent.pos, *pose)) return "the mesh transform is not believable (MESH_TRANSFORM in config.h)";
     t.ent.pose = std::move(pose);
     return nullptr;
 }
