@@ -2,9 +2,10 @@
 //Spoken cues, so you do not have to read the screen: the result of a hotkey (F6, F7, F8, F9, F10), a warning when an
 //enemy comes close, low health, a broken shield and lost game data are said out loud by speech-dispatcher's spd-say,
 //with your own speech-dispatcher voice (and your own speed unless Speech speed is set).
-//Nothing waits: spd-say hands the text over and exits at once, and speech-dispatcher queues what it gets, so cues
-//never talk over each other; an enemy warning goes first (priority "important"). Without spd-say the overlay stays
-//silent (the Settings tab says so).
+//Nothing waits: spd-say hands the text over and exits at once. The warnings (an enemy close, low health, a broken
+//shield, game data lost or back) go at priority "important": speech-dispatcher says them in turn and never cuts one off,
+//and one cuts off anything else being said (a hotkey result), which is not said again. Without spd-say the overlay
+//stays silent (the Settings tab says so).
 #ifndef KWINHELPER_CUE_H
 #define KWINHELPER_CUE_H
 
@@ -36,8 +37,8 @@ inline void reap() {
     }
 }
 
-//spd-say's command line for text. urgent: an enemy warning, said before anything else waiting. Speech speed (-r) only
-//when it is not 0, so 0 keeps your own speech-dispatcher speed. "--": the text is never read as an option.
+//spd-say's command line for text. urgent: a warning (AlertArgs), said before anything else waiting. Speech speed (-r)
+//only when it is not 0, so 0 keeps your own speech-dispatcher speed. "--": the text is never read as an option.
 inline std::vector<std::string> Args(const std::string& text, bool urgent) {
     std::vector<std::string> a{"spd-say"};
     if (urgent && !noPriority) { a.push_back("-P"); a.push_back("important"); }
@@ -48,11 +49,18 @@ inline std::vector<std::string> Args(const std::string& text, bool urgent) {
     return a;
 }
 
-//Says text out loud without waiting for it. posix_spawnp, not fork: the overlay's memory is not copied (no stutter),
-//and it is safe in a program with several threads. Called from the draw thread only.
-inline void say(const std::string& text, bool urgent = false) {
-    if (!config::soundCues || text.empty()) return;
-    std::vector<std::string> args = Args(text, urgent);
+//spd-say's command line for one frame's warnings: the enemy warning first, then your own news (self: game data lost or
+//back, a broken shield, low health), as one text at priority important. speech-dispatcher cuts a message at its normal
+//priority (text) off for good when an important one comes, so "Low health" said at text could be lost to the next enemy
+//warning. One spd-say, not two: two started together would race to speech-dispatcher.
+inline std::vector<std::string> AlertArgs(const std::string& enemy, const std::string& self) {
+    return Args(enemy.empty() ? self : self.empty() ? enemy : enemy + ". " + self, true);
+}
+
+//Starts spd-say (args from Args or AlertArgs) without waiting for it. posix_spawnp, not fork: the overlay's memory is
+//not copied (no stutter), and it is safe in a program with several threads. Called from the draw thread only.
+inline void run(std::vector<std::string> args) {
+    if (!config::soundCues || args.back().empty()) return;
     std::vector<char*> argv;
     for (std::string& s : args) argv.push_back(s.data());
     argv.push_back(nullptr);
@@ -60,6 +68,12 @@ inline void say(const std::string& text, bool urgent = false) {
     missing = posix_spawnp(&pid, argv[0], nullptr, nullptr, argv.data(), environ) != 0;
     if (!missing && args.size() > 2 && args[1] == "-P") urgentPid = pid;
 }
+
+//Says text out loud (a hotkey result, Spoken cues on), at the normal priority
+inline void say(const std::string& text) { run(Args(text, false)); }
+
+//Says one frame's warnings out loud, never cut off (AlertArgs)
+inline void alert(const std::string& enemy, const std::string& self) { run(AlertArgs(enemy, self)); }
 
 } // namespace cue
 

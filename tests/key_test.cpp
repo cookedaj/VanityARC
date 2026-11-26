@@ -49,7 +49,14 @@ int main() {
     std::printf("%d wrong Insert menu / F9 results\n", menu);
     //spd-say's command line: enemy warnings with priority important, Speech speed only when it is not 0
     auto line = [](const std::string& text, bool urgent) { std::string s; for (const std::string& a : cue::Args(text, urgent)) s += "[" + a + "]"; return s; };
-    if (line("Low health", false) != "[spd-say][--][Low health]" || line("Enemy close", true) != "[spd-say][-P][important][--][Enemy close]") wrong++;
+    if (line("Marked", false) != "[spd-say][--][Marked]" || line("Enemy close", true) != "[spd-say][-P][important][--][Enemy close]") wrong++;
+    //a frame's warnings: one spd-say, the enemy first, all at priority important, so the next enemy warning cannot cut
+    //"Low health" (or a broken shield, or game data lost or back) off for good
+    auto alert = [](const std::string& enemy, const std::string& self) { std::string s; for (const std::string& a : cue::AlertArgs(enemy, self)) s += "[" + a + "]"; return s; };
+    if (alert("", "Low health") != "[spd-say][-P][important][--][Low health]" ||
+        alert("Enemy close, left, 8 meters", "Shield broken. Low health") != "[spd-say][-P][important][--][Enemy close, left, 8 meters. Shield broken. Low health]" ||
+        alert("Enemy behind, 30 meters", "") != "[spd-say][-P][important][--][Enemy behind, 30 meters]" ||
+        !cue::AlertArgs("", "").back().empty()) wrong++;
     config::speechRate = 20;
     if (line("-r 5", true) != "[spd-say][-P][important][-r][20][--][-r 5]") wrong++;
     config::speechRate = -49.6;

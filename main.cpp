@@ -263,8 +263,9 @@ int main() {
         //nothing away); when cues come back on, whoever is near (and low health) is said again.
         if (!config::soundCues || config::streamHide) { nearCue = NearCue{}; selfCue = SelfCue{}; }
         else {
-            if (live) cue::say(nearCue.update(ents, vm, snap->localPlayerTeam, ImGui::GetTime()), true); //before anything waiting
-            cue::say(selfCue.update(snap->selfHealth, snap->selfShield, live, lost, ImGui::GetTime()));
+            //one spd-say, the enemy first, never cut off (cue::AlertArgs)
+            const std::string enemy = live ? nearCue.update(ents, vm, snap->localPlayerTeam, ImGui::GetTime()) : "";
+            cue::alert(enemy, selfCue.update(snap->selfHealth, snap->selfShield, live, lost, ImGui::GetTime()));
         }
 
         //Drawn in this order, each over the one before: radar, then markers, then the messages at the top
