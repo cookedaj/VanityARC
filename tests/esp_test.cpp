@@ -414,14 +414,14 @@ int main() {
         //values.txt is read only while Show item values or Highlight valuable items is on
         const std::string vdir = (std::filesystem::temp_directory_path() / "kwinhelper_test_espvalues").string();
         std::filesystem::create_directories(vdir);
-        std::ofstream(vdir + "/values.txt", std::ios::trunc) << "Ferro | 14000\nBandage | 300\n";
+        std::ofstream(vdir + "/values.txt", std::ios::trunc) << "Ferro | 14000\nBandage | 300\nFerro with a long name | 14000\n";
         itemvalues::setDir(vdir);
         config::colorLootKinds = false;
         n(gun);
         CHECK(itemvalues::count() == 0, "Highlight valuable items off: values.txt is not read");
         config::highlightValuable = true;
         n(gun);
-        CHECK(itemvalues::count() == 2, "Highlight valuable items on: values.txt is read");
+        CHECK(itemvalues::count() == 3, "Highlight valuable items on: values.txt is read");
 
         //a valuable item 30 m away (past the 25 m Loot name range): gold, half as big again, named with its price
         config::showItemNames = true; config::nameMaxLootDist = 25;
@@ -441,7 +441,8 @@ int main() {
         CHECK(bigN > normalN, "a valuable item past the Loot name range still shows its name and price");
         config::highlightValuable = true;
         config::showItemNames = false;
-        CHECK(n(far30) == bigN, "a valuable item is named even with Item names off");
+        RenderEntity longName = far30; longName.label = "Ferro with a long name"; //the same price: only the name differs
+        CHECK(n(far30) == bigN && n(longName) > bigN, "a valuable item is named past the Loot name range, even with Item names off");
         config::showItemNames = true;
         config::valuableFrom = 20000;
         CHECK(!colours(far30).count(rgb(COLOR::gold)), "Valuable from 20000: a 14000 item is not highlighted");
