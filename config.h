@@ -29,7 +29,7 @@ namespace config {
     inline bool showContainerMedical = true, showContainerWeapons = true, showContainerTech = true, showContainerIndustrial = true;
     inline bool showContainerHome = true, showContainerLockers = true, showContainerTrash = true, showContainerArc = true;
     inline bool showContainerNature = true, showContainerCaches = true, showContainerOther = true;
-    inline bool colorLootKinds = false;    //Loot tab, "Colour items by kind": guns red, ammo pink, meds green, shields blue (rest stay cyan)
+    inline bool colorLootKinds = false;    //Loot tab, "Colour items by kind": guns magenta, ammo white, meds green, shields blue (rest stay cyan)
     inline bool highlightValuable = false; //Loot tab, "Highlight valuable items": priced at or above valuableFrom in values.txt:
                                            //gold, 1.5 times the size, always named (within Loot range) with the price ("14k")
     inline double valuableFrom = 10000;    //Loot tab, "Valuable from": the price that counts as valuable
