@@ -15,8 +15,11 @@
 
 namespace labeler {
 
-std::string itemName(const std::string& key, bool gun) {
+std::string itemName(const std::string& key, bool gun, int slotLevel) {
     const amp::GunLevel g = amp::gunLevel(key);
+    //The level the gun slot holds, when the name has none: "Stitcher 2" (your own name for the gun keeps the number)
+    if (g.level == 0 && gun && slotLevel >= 1 && slotLevel <= 4)
+        return amp::gunLabel(labels::display(labels::Cat::Item, key), slotLevel);
     if (g.level == 0 || !(gun || labels::isGun(key))) return labels::display(labels::Cat::Item, key);
     //"AMP Canto"; your own name for the full internal key, or for "AMP Canto" itself, wins
     return labels::display(labels::Cat::Item, key, amp::gunLabel(labels::display(labels::Cat::Item, g.base), g.level));
@@ -25,7 +28,7 @@ std::string itemName(const std::string& key, bool gun) {
 namespace {
 
 //The offsets live in config.h (off::), shared with the probe report so both always read the same fields
-using off::PAWN_PLAYERSTATE, off::PS_NAME, off::PS_ACCOUNT_OBJ, off::PAWN_INVENTORY, off::INV_STOWED, off::INV_HELD,
+using off::PAWN_PLAYERSTATE, off::PS_NAME, off::PS_ACCOUNT_OBJ, off::PAWN_INVENTORY, off::INV_STOWED, off::INV_SLOT_LEVEL, off::INV_HELD,
       off::PICKUP_ITEM_ASSET, off::ARC_TYPE_ASSET;
 
 constexpr double CLASS_TTL = 5.0, PLAYER_TTL = 3.0, GUNS_TTL = 1.5, RETRY_TTL = 1.0, ASSET_RECHECK = 2.0, FORGET_AFTER = 20.0;
@@ -96,7 +99,8 @@ std::string assetName(uintptr_t p, const char* prefix) {
     return startsWith(n, prefix) ? n : std::string();
 }
 
-//The guns a player has: held first (inventory "current items" with a weapon actor), then the stowed slots
+//The guns a player has: held first (inventory "current items" with a weapon actor), then the stowed slots. Only a
+//stowed gun's level is known (its slot holds it); an amplified gun says so in its name, held or not.
 std::string gunsOf(uintptr_t pawn) {
     uintptr_t inv = ReadMemory<uintptr_t>(pawn + PAWN_INVENTORY);
     if (!isObj(inv)) return "";
@@ -115,7 +119,9 @@ std::string gunsOf(uintptr_t pawn) {
     }
     for (int base : INV_STOWED) {
         std::string asset = assetName(ReadMemory<uintptr_t>(inv + base + 0x18), "DA_WeaponVisuals_");
-        if (!asset.empty()) stowed.push_back(itemName(labels::itemToken(asset), true));
+        if (asset.empty()) continue;
+        const int q = ReadMemory<int>(inv + base + INV_SLOT_LEVEL); //0..3 = level I..IV; anything else: not shown
+        stowed.push_back(itemName(labels::itemToken(asset), true, q >= 0 && q <= 3 ? q + 1 : 0));
     }
 
     std::string out;

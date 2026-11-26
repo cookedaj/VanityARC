@@ -199,11 +199,11 @@ void probePlayers(FILE* out, const std::vector<std::pair<double, const RenderEnt
 //----------------------------------------------------------------------------------------------
 // Guns
 //----------------------------------------------------------------------------------------------
-//One stowed weapon slot: +0x10 weapon actor, +0x18 gun asset, +0x38 quality. True when the asset is a named DA_.
+//One stowed weapon slot: +0x10 weapon actor, +0x18 gun asset, +0x38 level (0..3 = I..IV). True when the asset is a named DA_.
 bool printSlot(FILE* out, const char* label, ptr inv, int base) {
     ptr actor = ReadMemory<ptr>(inv + base + 0x10);
     ptr asset = ReadMemory<ptr>(inv + base + 0x18);
-    int q = ReadMemory<int>(inv + base + 0x38);
+    int q = ReadMemory<int>(inv + base + off::INV_SLOT_LEVEL);
     if (!asset) { std::fprintf(out, " %s empty |", label); return false; }
     std::fprintf(out, " %s asset %s actor %s q %d |", label, gunTag(asset).c_str(), gunTag(actor).c_str(), q);
     return isDA(asset);

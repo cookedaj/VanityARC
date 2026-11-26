@@ -24,8 +24,9 @@ void fill(RenderEntity& e);
 
 //An item's shown name from its key (labels::itemToken). A gun gets its level from the key: "Stitcher 4", "AMP Il Toro".
 //gun: the key is known to be a gun (a player's gun slots); otherwise only keys of the gun table get a level.
-//Used for player guns, the inventory list and ground items alike.
-std::string itemName(const std::string& key, bool gun = false);
+//slotLevel: 1..4 from a stowed gun slot, used when the key has no level. Used for player guns, the inventory list and
+//ground items alike.
+std::string itemName(const std::string& key, bool gun = false, int slotLevel = 0);
 
 //Everything we can read in a player's inventory: the built-in held list, or the lists named in offsets.txt
 //(utils/offsets.h). Same name merged into one row with a count.

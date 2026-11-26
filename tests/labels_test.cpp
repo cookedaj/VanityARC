@@ -435,7 +435,18 @@ int main() {
     RenderEntity e4 = ent(Object::PLAYER, 50.0, pawn);
     labeler::fill(e4);
     CHECK(e4.label == "cooked", "player name");
-    CHECK(e4.sub == "Rattler (held) + Stitcher", "player guns: held first, then stowed");
+    CHECK(e4.sub == "Rattler (held) + Stitcher 1", "player guns: held first, then stowed with its slot's level (0: level 1)");
+    put<int>(inv, 0x3B0 + 0x38, 3);
+    RenderEntity e4b = ent(Object::PLAYER, 50.0, makeObject(0x1400, 0x2000, 1));
+    put<u64>(e4b.actor, 0x3E8, ps); put<u64>(e4b.actor, 0xCB0, inv);
+    labeler::fill(e4b);
+    put<int>(inv, 0x3B0 + 0x38, 7);
+    RenderEntity e4c = ent(Object::PLAYER, 50.0, makeObject(0x1400, 0x2000, 1));
+    put<u64>(e4c.actor, 0x3E8, ps); put<u64>(e4c.actor, 0xCB0, inv);
+    labeler::fill(e4c);
+    put<int>(inv, 0x3B0 + 0x38, 0);
+    CHECK(e4b.sub == "Rattler (held) + Stitcher 4" && e4c.sub == "Rattler (held) + Stitcher",
+          "player guns: slot level 3 is level 4; a number outside 0..3 shows no level");
 
     //a nickname in labels.txt replaces the game name (a fresh actor: a known one is re-read only every few seconds)
     { std::ofstream out(labelsFile, std::ios::binary | std::ios::app); out << "player\t793381ba5d093c9f\tAlex\n"; }
@@ -458,6 +469,7 @@ int main() {
     addPoolName(0x2640, "DA_WeaponVisuals_SMG_LowTier_01_Ascended_Default_A");
     u64 ampInv = makeObject(0x800, 0x2000, 0);
     put<u64>(ampInv, 0x3B0 + 0x18, makeObject(0x400, 0x2640, 0));
+    put<int>(ampInv, 0x3B0 + 0x38, 2); //an amplified gun's slot number does not turn it into "Stitcher 3"
     u64 ampRec = alloc(0x40); put<u64>(ampRec, 0x0, heldActor); put<u64>(ampRec, 0x10, makeObject(0x400, 0x2600, 0));
     put<u64>(ampInv, 0x530, ampRec); put<int>(ampInv, 0x538, 1);
     u64 ampPawn = makeObject(0x1400, 0x2000, 1); put<u64>(ampPawn, 0x3E8, ps); put<u64>(ampPawn, 0xCB0, ampInv);
@@ -467,6 +479,9 @@ int main() {
     //the inventory list and ground items use the same names, but only a gun gets a level
     CHECK(labeler::itemName("SMG_Medium_01_Carbine") == "AMP Canto" && labeler::itemName("Shotgun_PumpAction_01_Ascended") == "AMP Il Toro", "inventory and ground: an amplified gun shows AMP");
     CHECK(labeler::itemName("Augment_Combat_T1") == "Combat Mk. 1", "an augment's _T1 is not a gun level");
+    CHECK(labeler::itemName(labels::itemToken("DA_WeaponVisuals_Pistol_Silenced_01"), true, 2) == "Hairpin 2" &&
+          labeler::itemName(labels::itemToken("DA_WeaponVisuals_SMG_LowTier_01_Ascended_Default_A"), true, 2) == "AMP Stitcher",
+          "a stowed gun's slot level: Hairpin 2; an amplified one stays AMP");
     { std::ofstream out(labelsFile, std::ios::binary | std::ios::app); out << "item\tSMG_Medium_01_Carbine\tMy Canto\n" "AMP Il Toro = Bull\n"; }
     labels::load();
     CHECK(labeler::itemName("SMG_Medium_01_Carbine") == "My Canto", "labels.txt: a TAB line for the full internal key of an amplified gun still works");
