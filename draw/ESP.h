@@ -819,7 +819,9 @@ inline void DrawSkeleton(const View& v, const skeleton::Pose& pose, ImU32 color,
     //color already carries the hidden-player dimming (dimHidden / hiddenAlpha): no second fade here
     Pose p;
     simplify(pose, simple, p);
-    const bool simpleOnly = simple >= 1; //every full line lies on a simple one now: the few simple lines look the same
+    //every full line lies on a simple one now: the few simple lines look the same. Not with a joint missing: simplify
+    //leaves that arm or leg as it is, and the simple table would drop it all at once
+    const bool simpleOnly = simple >= 1 && whole(p);
     const int n = simpleOnly ? SIMPLE_COUNT : LINE_COUNT;
     const int (*lines)[2] = simpleOnly ? SIMPLE_LINES : LINES;
     Vector2 a[LINE_COUNT], b[LINE_COUNT];
@@ -962,16 +964,18 @@ inline void DrawESP(const std::vector<RenderEntity>& entities, FminimalViewInfo 
 
             Vector2 headC;
             bool headOk = false;
+            float hrx = 0, hry = 0;
             if (skel) {
                 const float st = SkeletonWidth(v, ent);
-                float hrx, hry;
                 DrawSkeleton(v, *ent.pose, SkeletonColor(color), st, SkeletonSimple(StandingBoxPx(v, ent.pos)), !ent.poseLive);
                 headOk = HeadOnScreen(v, *ent.pose, st, headC, hrx, hry);
             }
+            const bool filledHead = headOk && (int)config::headMarker == 1 && ent.poseLive; //as DrawSkeleton draws it
 
             //Which way he faces, seen from you: an arrow from the middle of the box (from the head with a skeleton, not over
-            //the spine), pointing down when he faces you. It stays inside the box, clear of his labels, except on a tiny far
-            //box: it is never under 12 px, so it still reads.
+            //the spine; just under a filled head, which is in the same colour and would swallow it), pointing down when he
+            //faces you. It stays inside the box, clear of his labels, except on a tiny far box: it is never under 12 px, so
+            //it still reads.
             float fx = 0, fy = 0;
             const double toHim = std::atan2(ent.pos.y - vm.Location.y, ent.pos.x - vm.Location.x) * 180.0 / 3.14159265358979;
             if (config::showFacing && FacingOnScreen(ent.yaw, toHim, fx, fy)) {
@@ -979,7 +983,11 @@ inline void DrawESP(const std::vector<RenderEntity>& entities, FminimalViewInfo 
                 const float lineT = std::max(3.0f, th + 1.0f), len0 = std::clamp(std::min(w, h) * 0.4f, 12.0f, 40.0f);
                 const float tip = std::max({7.0f, len0 * 0.45f, 1.6f * (lineT + 2.0f)}), len = std::max(len0, tip);
                 float mxs = bx, mys = y0 + h / 2;
-                if (headOk) { //at the head, moved in just enough that the arrow stays in the box whichever way it points
+                if (filledHead) { //all of it under the disc and its 2 px dark edge (going up it ends there), and in the box the way it points
+                    const float under = (float)headC.y + hry + 3 + 0.55f * tip + std::max(0.0f, -fy) * len;
+                    mys = std::max(y0 + std::max(0.0f, -fy) * len, std::min(under, y0 + h - std::max(0.0f, fy) * len));
+                    if (2 * len <= w) mxs = std::clamp((float)headC.x, x0 + len, x0 + w - len);
+                } else if (headOk) { //at the head, moved in just enough that the arrow stays in the box whichever way it points
                     if (2 * len <= h) mys = std::clamp((float)headC.y, y0 + len, y0 + h - len);
                     if (2 * len <= w) mxs = std::clamp((float)headC.x, x0 + len, x0 + w - len);
                 }

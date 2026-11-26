@@ -501,6 +501,21 @@ int main() {
                 std::copy(now, now + 4, last);
             }
             CHECK(jump < 1.5f, "walking away through the change to the simple figure, its edges move smoothly");
+            //an arm missing only its hand, a leg missing only its ankle (a torn bone record): the rest of that limb stays
+            //where it was as he gets far enough for the simple figure, not gone all at once
+            for (const int missing : {skeleton::HAND_A, skeleton::ANKLE_A}) {
+                auto torn = std::make_shared<skeleton::Pose>(*far1[0].pose);
+                if (missing == skeleton::HAND_A) { torn->j[skeleton::ARM_A].y = 0; torn->j[skeleton::FOREARM_A].y = -25; } //arm out to the left
+                else torn->j[skeleton::KNEE_A].y = -30; //knee out to the left
+                torn->j[missing] = skeleton::badJoint();
+                draw([&] { DrawSkeleton(v, *torn, COLOR::red, t, 0.999f); });
+                const float before = g_minX;
+                draw([&] { DrawSkeleton(v, *torn, COLOR::red, t, 1); });
+                std::printf("      %s missing: the figure's left edge %.1f px just before the simple figure, %.1f px at it\n",
+                            missing == skeleton::HAND_A ? "hand" : "ankle", before, g_minX);
+                CHECK(std::abs(g_minX - before) < 0.5f && g_finite, missing == skeleton::HAND_A
+                      ? "an arm missing its hand stays when the figure becomes simple" : "a leg missing its ankle stays when the figure becomes simple");
+            }
         }
         {   //lying down across the view: a wider box, out to his joints; getting up, it narrows smoothly
             auto lying = std::make_shared<skeleton::Pose>();
@@ -562,6 +577,41 @@ int main() {
             const float atHead = (g_colMinY + g_colMaxY) / 2;
             CHECK(g_colVerts > 0 && atHead < by + bh * 0.35f, "with a skeleton the facing arrow starts at the head, not over the spine");
             g_findCol = 0;
+            //High visibility, filled head and skeleton in the box colour (the defaults): the arrow is never lost in the head
+            //disc of its own colour, facing away, to the side or towards you, from 10 to 80 m (past that the box, about 30 px
+            //tall, has no room left under the head). The arrow's vertices are the ones that come and go with Show facing.
+            const auto keepTh = config::boxThickness;
+            config::boxThickness = 4; config::boxStyle = 1; config::skeletonColor = 0; config::headMarker = 1;
+            for (const double d : {1000.0, 3000.0, 4000.0, 6000.0, 8000.0})
+                for (const double yaw : {0.0, 90.0, 180.0}) {
+                    std::vector<RenderEntity> e1 = {ent(Object::PLAYER, d, 30, 0)};
+                    e1[0].pose = standingPose(d, 30, 0);
+                    e1[0].yaw = yaw; e1[0].isVisible = true;
+                    std::vector<ImDrawVert> on, off;
+                    auto grab = [&](std::vector<ImDrawVert>& to) {
+                        draw([&] { DrawESP(e1, cam, 3); const auto& vb = ImGui::GetBackgroundDrawList()->VtxBuffer; to.assign(vb.begin(), vb.end()); });
+                    };
+                    config::showFacing = true; grab(on);
+                    config::showFacing = false; grab(off);
+                    config::showFacing = true;
+                    size_t i0 = 0;
+                    while (i0 < off.size() && i0 < on.size() && on[i0].pos.x == off[i0].pos.x && on[i0].pos.y == off[i0].pos.y && on[i0].col == off[i0].col) i0++;
+                    Vector2 hc;
+                    float hrx = 0, hry = 0;
+                    const bool head = HeadOnScreen(v, *e1[0].pose, SkeletonWidth(v, e1[0]), hc, hrx, hry);
+                    int arrow = 0, inDisc = 0;
+                    for (size_t i = i0; i < i0 + (on.size() - off.size()) && i < on.size(); i++) {
+                        if (on[i].col != COLOR::enemy()) continue; //the arrow's colour, not its dark edge
+                        arrow++;
+                        const float ex = (on[i].pos.x - (float)hc.x) / hrx, ey = (on[i].pos.y - (float)hc.y) / hry;
+                        inDisc += ex * ex + ey * ey <= 1.0f;
+                    }
+                    char msg[128];
+                    std::snprintf(msg, sizeof msg, "%.0f m, facing %s, High visibility: the facing arrow is outside the filled head (%d of %d points inside)",
+                                  d / 100, yaw == 0 ? "away" : yaw == 90 ? "to the side" : "towards you", inDisc, arrow);
+                    CHECK(head && on.size() > off.size() && arrow > 0 && inDisc == 0, msg);
+                }
+            config::boxThickness = keepTh; config::skeletonColor = 1; config::boxStyle = 3;
         }
         config::skeletonMaxDist = 120; config::showBars = true; config::showPlayerNames = true; config::showPlayerGuns = true;
         config::showFacing = true; config::showOffscreen = true; config::boxStyle = 0; config::headMarker = 1; config::skeletonColor = 0;
