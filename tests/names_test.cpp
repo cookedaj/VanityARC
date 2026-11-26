@@ -284,7 +284,7 @@ int main() {
         std::string typo = announce("shield, inventroy");
         std::printf("%s", typo.c_str());
         CHECK(typo.find("[probe] running: shield\n") != std::string::npos, "probe start: says which probes run");
-        CHECK(typo.find("unknown name \"inventroy\" is ignored (known: mesh shield bones flags rendertime stance team inventory)") != std::string::npos,
+        CHECK(typo.find("unknown name \"inventroy\" is ignored (known: mesh shield bones flags rendertime stance team inventory gunlevel)") != std::string::npos,
               "probe start: a misspelled name is reported with the known names");
         std::string good = announce("shield,inventory");
         CHECK(good.find("running: shield, inventory\n") != std::string::npos && good.find("unknown") == std::string::npos, "probe start: correct names give no warning");

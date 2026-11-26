@@ -4,6 +4,7 @@
 //the actors around you are called. It reads memory only and draws nothing.
 #include "config.h"
 #include "utils/amp.h"
+#include "utils/labels.h"
 #include "utils/localUtil.h"
 #include "utils/names.h"
 #include "utils/skeleton.h"
@@ -839,6 +840,128 @@ void inventoryProbeOne(ptr pawn, const char* who, FILE* out) {
     std::fflush(out);
 }
 
+//Gun level: only a gun on a player's back has its level in its slot (+0x38), and a gun leaves its slot while it is in his
+//hands. So each level seen on a back is remembered by the gun's name. When that gun is later in his hands, every byte of
+//his held-item record, his inventory, his weapon actor and the objects the weapon actor points to is compared with the
+//known level. A place that holds it every time, across guns of different levels, is where the game keeps a held gun's
+//level. Carry two guns of different levels and swap between them; other players nearby add samples too.
+void gunLevelProbe(ptr localPawn, const std::vector<RenderEntity>& ents, const FminimalViewInfo& vm, FILE* out) {
+    struct Score { int hit = 0, miss = 0; unsigned levels = 0; };
+    static std::unordered_map<uint64_t, Score> score; //key: region << 32 | byte offset (see label below)
+    static std::map<std::pair<ptr, std::string>, int> back; //(pawn, gun name) -> its slot number 0..3, last seen on his back
+    static std::map<ptr, std::string> lastHeld;
+    static ptr lastLocal = 0;
+    static int samples = 0, round = 0;
+    static unsigned levelsSeen = 0;
+    if (round == 0) std::fprintf(out, "\n=== GUN LEVEL PROBE: carry two guns of different levels (for example a I and a III) and swap between them every few seconds ===\n");
+    if (localPawn != lastLocal) { back.clear(); lastHeld.clear(); lastLocal = localPawn; } //a new raid: pawn addresses are reused
+    const char* const roman[] = {"I", "II", "III", "IV"};
+
+    std::vector<std::pair<double, ptr>> who;
+    for (const RenderEntity& e : ents)
+        if (e.type == Object::PLAYER && !e.isDead && e.actor != localPawn) who.push_back({e.pos.Dist(vm.Location), e.actor});
+    std::sort(who.begin(), who.end());
+    if (who.size() > 6) who.resize(6);
+    if (localPawn) who.insert(who.begin(), {0.0, localPawn});
+
+    //the game's name of a gun asset ("Stitcher"), "" when p is not an object named with prefix
+    auto gunName = [](ptr p, const char* prefix) {
+        if (!isObject(p)) return std::string();
+        const std::string n = names::name(p);
+        return n.rfind(prefix, 0) == 0 ? labels::defaultName(labels::Cat::Item, labels::itemToken(n)) : std::string();
+    };
+    for (const auto& w : who) {
+        const ptr pawn = w.second, inv = ReadMemory<ptr>(pawn + off::PAWN_INVENTORY);
+        if (!isObject(inv)) continue;
+        std::vector<std::string> onBack;
+        for (int base : off::INV_STOWED) {
+            const std::string g = gunName(ReadMemory<ptr>(inv + base + 0x18), "DA_WeaponVisuals_");
+            if (g.empty()) continue;
+            onBack.push_back(g);
+            const int q = ReadMemory<int>(inv + base + off::INV_SLOT_LEVEL);
+            if (q >= 0 && q <= 3) back[{pawn, g}] = q;
+        }
+        const ptr data = ReadMemory<ptr>(inv + off::INV_HELD);
+        const int num = ReadMemory<int>(inv + off::INV_HELD + 8);
+        if (!isValidPtr(data) || num <= 0 || num > 16) continue;
+        ptr rec = 0, weapon = 0;
+        std::string held;
+        for (int i = 0; i < num && i < 4 && held.empty(); i++) {
+            const ptr r = data + (ptr)i * 0x20, a = ReadMemory<ptr>(r);
+            if (gunName(a, "BP_WeaponActor_").empty()) continue;
+            rec = r; weapon = a;
+            held = gunName(ReadMemory<ptr>(r + 0x10), "DA_Item_");
+            if (held.empty()) held = gunName(a, "BP_WeaponActor_");
+        }
+        if (held.empty()) continue;
+        const auto it = back.find({pawn, held});
+        const bool twin = std::find(onBack.begin(), onBack.end(), held) != onBack.end();
+        const char* whoName = pawn == localPawn ? "you" : "a player";
+        if (it == back.end() || twin) { //no known level: never seen on his back, or a second gun of that name is there
+            if (lastHeld[pawn] != held) std::fprintf(out, "  %s: holds %s, level not known yet (put it away once)\n", whoName, held.c_str());
+            lastHeld[pawn] = held;
+            continue;
+        }
+        const int L = it->second;
+        if (lastHeld[pawn] != held) std::fprintf(out, "  %s: holds %s, level %s (seen on the back): sample taken\n", whoName, held.c_str(), roman[L]);
+        lastHeld[pawn] = held;
+        samples++;
+        levelsSeen |= 1u << L;
+        auto tally = [&](uint64_t region, ptr obj, size_t n) {
+            if (!isValidPtr(obj)) return;
+            const auto b = readBlock(obj, n);
+            for (size_t o = 0; o < b.size(); o++) {
+                Score& s = score[region << 32 | o];
+                if (b[o] == L) { s.hit++; s.levels |= 1u << L; } else s.miss++;
+            }
+        };
+        tally(1, rec, 0x20);
+        tally(2, inv, 0x1000);
+        tally(3, weapon, 0x1000);
+        tally(4, ReadMemory<ptr>(rec + 0x8), 0x200);
+        tally(5, ReadMemory<ptr>(rec + 0x18), 0x200);
+        const auto wb = readBlock(weapon, 0x800);
+        for (size_t o = 0x28; o + 8 <= wb.size(); o += 8) {
+            const uint64_t v = q64(wb, o);
+            if (ptrLike(v) && (ptr)v != weapon && isObject((ptr)v)) tally(0x10000 + o, (ptr)v, 0x100);
+        }
+    }
+
+    if (++round % 5 || !samples) { std::fflush(out); return; } //a report every 10 s, once there are samples
+    std::string lv;
+    for (int i = 0; i < 4; i++) if (levelsSeen >> i & 1) lv += std::string(lv.empty() ? "" : ", ") + roman[i];
+    std::fprintf(out, "\n=== GUN LEVEL PROBE: %d samples, held levels seen: %s ===\n", samples, lv.c_str());
+    if (__builtin_popcount(levelsSeen) < 2) {
+        std::fprintf(out, "  every held gun so far was level %s: swap to a gun of another level\n", lv.c_str());
+        std::fflush(out);
+        return;
+    }
+    auto label = [](uint64_t key) {
+        const uint64_t region = key >> 32, o = key & 0xFFFFFFFF;
+        char b[96];
+        if (region >= 0x10000) std::snprintf(b, sizeof b, "weapon actor +0x%lx -> object +0x%lx", (unsigned long)(region - 0x10000), (unsigned long)o);
+        else {
+            static const char* const where[] = {"", "held record", "inventory", "weapon actor", "held record +0x8 -> object", "held record +0x18 -> object"};
+            std::snprintf(b, sizeof b, "%s +0x%lx", where[region], (unsigned long)o);
+        }
+        return std::string(b);
+    };
+    std::vector<std::pair<uint64_t, Score>> best;
+    for (const auto& kv : score)
+        if (kv.second.miss <= 1 && __builtin_popcount(kv.second.levels) >= 2 && kv.second.hit >= 3) best.push_back(kv);
+    std::sort(best.begin(), best.end(), [](const auto& a, const auto& b) {
+        return a.second.miss != b.second.miss ? a.second.miss < b.second.miss : a.second.hit > b.second.hit;
+    });
+    if (best.empty()) std::fprintf(out, "  no place held the known level every time yet: keep swapping (it may be in an object this probe does not look at)\n");
+    for (size_t i = 0; i < best.size() && i < 12; i++) {
+        const Score& s = best[i].second;
+        std::string ls;
+        for (int k = 0; k < 4; k++) if (s.levels >> k & 1) ls += std::string(ls.empty() ? "" : " ") + roman[k];
+        std::fprintf(out, "  %-48s the level %d of %d times (levels %s)%s\n", label(best[i].first).c_str(), s.hit, s.hit + s.miss, ls.c_str(), s.miss ? "  (missed once)" : "");
+    }
+    std::fflush(out);
+}
+
 } // namespace
 
 //Team and local player: for you and the nearest players, the team byte, the pointers that should only be set on the pawn you
@@ -875,7 +998,7 @@ void teamProbe(ptr localPawn, const std::vector<RenderEntity>& ents, const Fmini
 //Printed once when the probes start: which ones run, and each name that matches none, so a typo does not waste a
 //whole raid with no output. Same substring test as runLiveProbe below; mode is already lower-case.
 void announceLiveProbe(const std::string& mode, FILE* out) {
-    static const char* const known[] = {"mesh", "shield", "bones", "flags", "rendertime", "stance", "team", "inventory"};
+    static const char* const known[] = {"mesh", "shield", "bones", "flags", "rendertime", "stance", "team", "inventory", "gunlevel"};
     std::string running, all;
     for (const char* k : known) {
         all += std::string(all.empty() ? "" : " ") + k;
@@ -916,6 +1039,7 @@ void runLiveProbe(const std::string& mode, ptr localPawn, const std::vector<Rend
     if (mode.find("rendertime") != std::string::npos && localPawn) renderTimeProbe(localPawn, ents, vm, out);
     if (mode.find("stance") != std::string::npos) stanceProbe(localPawn, ents, vm, out);
     if (mode.find("team") != std::string::npos) teamProbe(localPawn, ents, vm, out);
+    if (mode.find("gunlevel") != std::string::npos) gunLevelProbe(localPawn, ents, vm, out);
     if (mode.find("inventory") != std::string::npos) {
         static int round = 0;
         if (round++ % 4) return; //every 8 s: the report is long

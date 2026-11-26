@@ -139,7 +139,7 @@ if(KWINHELPER_TESTS OR KWINHELPER_TESTS_ONLY)
     kwinhelper_test(gamestate_test gamestate/GameState.cpp gamestate/Fast.cpp gamestate/Tracker.cpp gamestate/Probe.cpp utils/gamescope.cpp
             utils/names.cpp utils/labels.cpp utils/labeler.cpp memory/memory.cpp)
     target_link_libraries(gamestate_test PRIVATE pthread)
-    kwinhelper_test(names_test utils/names.cpp gamestate/Probe.cpp memory/memory.cpp)
+    kwinhelper_test(names_test utils/names.cpp utils/labels.cpp gamestate/Probe.cpp memory/memory.cpp)
     kwinhelper_test(labels_test utils/names.cpp utils/labels.cpp utils/labeler.cpp memory/memory.cpp)
     kwinhelper_test(itemvalues_test utils/itemvalues.cpp)
     kwinhelper_test(amp_test)
