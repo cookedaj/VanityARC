@@ -133,6 +133,15 @@ inline void MenuFeedKeys() {
     }
 }
 
+//How wide ImGui::Button(text) is, for ui::SameLineIfFits
+inline float ButtonW(const char* text) { return ImGui::CalcTextSize(text).x + ImGui::GetStyle().FramePadding.x * 2; }
+
+//A heading inside a section: white words with a little room above, no rule (the section's heading has that)
+inline void SubHeading(const char* text) {
+    ImGui::Dummy(ImVec2(0, ui::S(4)));
+    ImGui::TextUnformatted(text);
+}
+
 //A button for something that cannot be undone. The first click arms it: "Cancel" takes its place (same width) and
 //the real action appears to its right. The action only counts 0.6 s after arming, so a double-click never reaches
 //it, and the offer goes away by itself after 6 s. armedAt: a static the caller keeps, below 0 = not armed.
@@ -145,9 +154,9 @@ inline bool ConfirmButton(const char* label, const char* confirm, double* armedA
     if (*armedAt < 0) {
         if (ImGui::Button((std::string(label) + "###arm").c_str())) *armedAt = now;
     } else {
-        const float w = ImGui::CalcTextSize(label).x + ImGui::GetStyle().FramePadding.x * 2, x0 = ImGui::GetCursorPosX();
-        if (ImGui::Button("Cancel###arm", ImVec2(w, 0))) *armedAt = -1;
-        ui::SameLineIfFits(ImGui::CalcTextSize(confirm).x + ImGui::GetStyle().FramePadding.x * 2, x0);
+        const float x0 = ImGui::GetCursorPosX();
+        if (ImGui::Button("Cancel###arm", ImVec2(ButtonW(label), 0))) *armedAt = -1;
+        ui::SameLineIfFits(ButtonW(confirm), x0);
         if (ImGui::Button(confirm) && *armedAt >= 0 && now - *armedAt >= 0.6) {
             yes = true; *armedAt = -1;
             //the focus frame goes back to the restored button (same ID as Cancel###arm; ImHashStr restarts at "###")
@@ -189,7 +198,7 @@ inline void HighVisibilityButton() {
     ImGui::PushFont(OverlayFont(), ui::S(22));
     if (ImGui::Button("High visibility", ImVec2(ui::S(320), ui::S(46)))) { ApplyHighVisibility(); Toast("High visibility on"); }
     ImGui::PopFont();
-    ui::Note("One click: text size at least 28, menu text size at least 24, Full-size small text on, box and skeleton lines at least 4 px, full boxes, label cards, overlay and menu fully solid, hidden players at least 200 (Hidden player opacity).");
+    ui::Note("Raises text to 28, menu text to 24, lines to 4 px; Full-size small text on; all solid.");
 }
 
 //Short switches side by side in two aligned columns, filled row by row. id: the grid's own ID on its page.
@@ -220,7 +229,7 @@ inline void PageEsp() {
     SwitchGrid("##arc", {{"ARC", &config::showArc}, {"Turrets", &config::showTurrets},
                          {"Dead ARC", &config::showDeadArc}, {"ARC edge arrows", &config::showArcOffscreen}});
     MarkerColour("ARC colour", &config::arcColor, "Orange (as before)");
-    Note("Ground items and containers have their own switches and colours on the Loot tab.");
+    Note("Ground items and containers have their own switches on the Loot tab.");
     Section("NAMES");
     SwitchGrid("##names", {{"Player names", &config::showPlayerNames}, {"Player guns", &config::showPlayerGuns},
                            {"ARC names", &config::showArcNames}, {"Container names", &config::showContainerNames},
@@ -228,8 +237,7 @@ inline void PageEsp() {
     SliderD("Loot name range", &config::nameMaxLootDist, 3, 150, "%.0f m");
     Section("BOXES");
     Switch("Boxes on players", &config::showBoxes);
-    Note("Off: no box where a player's skeleton is drawn. A player without a skeleton keeps a full box, so nobody is "
-         "left unmarked; bars, names and the facing arrow stay.");
+    Note("Off: no box where a skeleton is drawn; a player without one keeps his box.");
     Choice("Box style", &config::boxStyle, {"Corners", "Full", "Sides", "Skeleton only"});
     Choice("Box colour", &config::boxColor, {"Red", "White", "Yellow", "Blue", "Green", "Violet"});
     Switch("Monochrome (white and grey)", &config::monochrome);
@@ -240,37 +248,31 @@ inline void PageEsp() {
         Switch("Numbers on the bars", &config::barNumbers);
     }
     Switch("Which way they face", &config::showFacing);
-    Note("An arrow in each player's box (pointing down: facing you) and a line on each radar dot (players and ARC) show which way they face.");
+    Note("An arrow in each box (down: facing you) and a line on each radar dot show the facing.");
     Section("SKELETON");
     Switch("Skeleton on players", &config::showSkeletons);
     Choice("Head marker", &config::headMarker, {"Ring", "Filled"});
     Choice("Skeleton colour", &config::skeletonColor, {"Same as box", "White", "Yellow"});
     SliderD("Skeleton range", &config::skeletonMaxDist, 20, 300, "%.0f m");
-    Note("Lines grow thicker as players come closer; far away the figure becomes a few thick lines. A dashed ring for a "
-         "head means the game is not animating that player right now, so the pose is an estimate. Box style Skeleton "
-         "only leaves the box out where a skeleton is drawn.");
+    Note("Lines thicken up close; a dashed head ring means the pose is only an estimate.");
     Section("PLAYERS BEHIND COVER");
     Switch("Dim players behind cover", &config::dimHidden);
     if (config::dimHidden) SliderD("Hidden player opacity", &config::hiddenAlpha, 40, 255, "%.0f");
-    Note("Dimming makes the box and skeleton of a player the game is not drawing right now (behind cover) fainter.");
+    Note("Draws the box and skeleton of a player behind cover fainter.");
     Section("DISTANCE");
     SliderD("Players range", &config::maxPlayerDist, 50, 800, "%.0f m");
     SliderD("ARC range", &config::maxArcDist, 20, 500, "%.0f m");
     SliderD("ARC arrow range", &config::arcArrowDist, 10, 150, "%.0f m");
     SliderD("Loot range", &config::maxLootDist, 5, 150, "%.0f m");
-    Note("ARC arrow range: a live ARC this near that you cannot see gets an arrow at the screen edge (never beyond ARC range).");
+    Note("ARC arrow range: an unseen live ARC this near gets an edge arrow, up to ARC range.");
     Section("YOUR HEALTH");
     Switch("Big health and shield readout", &config::showSelfHealth);
     SliderD("Low health from", &config::lowHealthFrom, 10, 90, "%.0f");
-    Note("Your own health and shield in big text at the bottom left, and a red LOW HEALTH card below the crosshair while "
-         "your health is under Low health from. Spoken cues also say \"Low health\" once when it drops under it.");
+    Note("Big health and shield at the bottom left; a red LOW HEALTH card under Low health from.");
     Section("CLOSE ENEMY WARNING");
     Switch("Big warning for a close enemy", &config::closeWarning);
     SliderD("Warning card range", &config::warnDist, 5, 100, "%.0f m"); //shown with the card off too: it also sets the spoken "Enemy close" and the bigger edge arrows
-    Note("The card has a big arrow pointing toward the nearest enemy and says ABOVE or BELOW when he is more than 3 m "
-         "higher or lower. Edge arrows for enemies within this range are bigger, and the spoken warning says \"Enemy "
-         "close\" when one comes within it, also with the card off. The first spoken warning has its own range: "
-         "Settings tab, Spoken warning range.");
+    Note("Points at the nearest enemy; the range also sets bigger edge arrows and \"Enemy close\".");
 }
 
 //The "Show" drop-down over a block of switches: 0 all on, 1 + k only switch k on, n + 1 anything else (Mixed). Worked out
@@ -312,21 +314,18 @@ inline void PageLoot() {
     Switch("Ground items", &config::showGroundItems);
     Switch("Containers", &config::showContainers);
     Switch("Show item values", &config::showItemValues);
-    Note("Ground items and Containers turn each kind of loot marker on or off as a whole; the groups below pick which "
-         "ones. Show item values adds sell prices, most valuable first, and a total to the inventory windows. Prices "
-         "come from ~/.config/kwin-helper/values.txt.");
+    Note("Show item values adds prices from values.txt and a total to the inventory windows.");
     Section("GROUND ITEMS");
     KindSwitches("Show##items", "All kinds", LootSwitches(), labels::KIND_COUNT,
                  [](int k) { return labels::kindName((labels::Kind)k); }, "##kinds", "");
     Note("Items whose name is not read yet count as Other.");
     MarkerColour("Item colour", &config::itemColor, "Cyan (as before)");
     Switch("Colour items by kind", &config::colorLootKinds);
-    Note("Guns magenta, ammo white, meds green, shields blue; everything else keeps the Item colour. Monochrome keeps them all grey.");
+    Note("Guns magenta, ammo white, meds green, shields blue; the rest keep the Item colour.");
     Section("VALUABLE ITEMS");
     Switch("Highlight valuable items", &config::highlightValuable);
     SliderD("Valuable from", &config::valuableFrom, 1000, 100000, "%.0f");
-    Note("Ground items with at least this price in ~/.config/kwin-helper/values.txt are drawn gold (white in monochrome) and "
-         "half as big again, always with their name and price (\"14k\"), anywhere within the ESP tab's Loot range.");
+    Note("Items priced at least this in values.txt are drawn gold and bigger, with their price.");
     Section("CONTAINERS");
     KindSwitches("Show##containers", "All groups", ContainerSwitches(), labels::GROUP_COUNT,
                  [](int g) { return labels::groupName((labels::Group)g); }, "##groups", "##box");
@@ -343,14 +342,14 @@ inline void PageRadar() {
     float range = config::radarRadius * config::scale / 100.0f; //metres from the centre to the edge
     if (Slider("Size", &config::radarRadius, 50.0f, 300.0f, "%.0f px")) config::scale = range * 100.0f / config::radarRadius; //keep the range
     if (Slider("Range", &range, 50.0f, 500.0f, "%.0f m")) config::scale = range * 100.0f / config::radarRadius;
-    Note("Size: how big the radar is on screen. Range: how far it reaches, from its middle to its edge.");
+    Note("Size is how big the radar is; Range is how far it reaches to its edge.");
     Section("POSITION");
-    const float R = config::radarRadius;
+    const float R = config::radarRadius, x0 = ImGui::GetCursorPosX();
     if (ImGui::Button("Top left")) { config::radarCenterX = R + 40; config::radarCenterY = R + 50; }
-    ImGui::SameLine();
+    SameLineIfFits(ButtonW("Left, above health"), x0); //the row wraps with big menu text on a narrow screen
     //panel bottom (centre + R + 14) 6 px above the HP/SH readout's card, which grows with Text size
     if (ImGui::Button("Left, above health")) { config::radarCenterX = R + 40; config::radarCenterY = SelfHealthRect().y0 - 6 - R - 14; }
-    ImGui::SameLine();
+    SameLineIfFits(ButtonW("Top right"), x0);
     if (ImGui::Button("Top right")) { config::radarCenterX = (float)config::SCREEN_W - R - 40; config::radarCenterY = R + 50; }
     Slider("Left / right", &config::radarCenterX, R, std::max(R + 1, (float)config::SCREEN_W - R), "%.0f");
     Slider("Up / down", &config::radarCenterY, R, std::max(R + 1, (float)config::SCREEN_H - R), "%.0f");
@@ -430,8 +429,7 @@ inline void DrawGameViewSettings() {
     Section("GAME VIEW: STRETCHED RESOLUTION / GAMESCOPE");
     Switch("Detect automatically", &config::gameViewAuto);
     Note(g_gameView.how.c_str());
-    Note("While this part is on screen, a yellow frame shows where the overlay thinks the game's picture is and a yellow cross shows its middle. "
-         "The frame should sit on the picture's edges (if not, fix the game view here). The cross should sit on the game's crosshair (if not, fix Shift X / Shift Y).");
+    Note("The yellow frame should sit on the game's edges and the cross on its crosshair.");
     if (!config::gameViewAuto) {
         static bool custom = false; //"Custom" was picked: keep the step buttons even when the size matches a listed one
         int idx = GAME_SIZE_CUSTOM;
@@ -454,7 +452,7 @@ inline void DrawGameViewSettings() {
         Switch("Stretch to fill the screen", &config::gameStretch);
     }
     Section("CALIBRATION");
-    Note("If markers slide away from targets near the screen edge, flip the FOV side first, then adjust Zoom.");
+    Note("If markers drift near the edges, flip FOV side first, then adjust Zoom.");
     Switch("FOV is horizontal", &config::fovIsHorizontal);
     Slider("Zoom", &config::fovScale, 0.5f, 2.0f, "%.3f");
     FineSteps("Zoom steps", &config::fovScale, 0.5, 2.0, {-0.05, -0.01, 0.01, 0.05}, "%+.2f");
@@ -470,10 +468,55 @@ inline void DrawGameViewSettings() {
     if (ImGui::IsRectVisible(ImVec2(left, top), ImVec2(left + ImGui::GetWindowWidth(), ImGui::GetCursorScreenPos().y))) DrawCalibrationGuide();
 }
 
+//CONFIGS on the Settings tab: named copies of every setting (settings.h profiles), then the main things drawn. Those
+//switches are the same values as on the ESP and Loot tabs (menu_test looks for them there), so a profile is set up here.
+inline void DrawConfigs() {
+    using namespace ui;
+    static char name[25] = "";         //24 characters: the most cleanProfileName keeps
+    static std::string chosen, result; //the profile picked in the list; what the last button did
+    static std::vector<std::string> profiles;
+    static double listedAt = -1e9;     //read again once a second, so profiles copied in by hand show up too
+    if (ImGui::GetTime() - listedAt > 1.0) { profiles = settings::listProfiles(); listedAt = ImGui::GetTime(); }
+    Section("CONFIGS");
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("Profile name");
+    ImGui::SameLine(S(LABEL_W));
+    ImGui::SetNextItemWidth(ControlW(0));
+    const bool enter = ImGui::InputText("##profilename", name, sizeof name, ImGuiInputTextFlags_EnterReturnsTrue);
+    ImGui::SetCursorPosX(S(LABEL_W));
+    if (ImGui::Button("Save profile") || enter) {
+        const std::string n = settings::cleanProfileName(name);
+        if (n.empty()) result = "Type a name first (letters, digits, spaces, - and _).";
+        else if (settings::saveProfile(n)) { result = "Saved \"" + n + "\"."; chosen = n; profiles = settings::listProfiles(); }
+        else result = "Could not save \"" + n + "\".";
+    }
+    if (profiles.empty()) Note("No saved profiles yet.");
+    else {
+        double pick = 0;
+        std::vector<const char*> items;
+        for (size_t i = 0; i < profiles.size(); i++) {
+            items.push_back(profiles[i].c_str());
+            if (profiles[i] == chosen) pick = (double)i;
+        }
+        const bool picked = Choice("Saved profiles", &pick, items.data(), (int)items.size());
+        chosen = profiles[(size_t)pick];
+        if (picked) std::snprintf(name, sizeof name, "%s", chosen.c_str()); //so Save writes over it
+        ImGui::SetCursorPosX(S(LABEL_W));
+        const float x0 = ImGui::GetCursorPosX();
+        if (ImGui::Button("Load profile")) result = settings::loadProfile(chosen) ? "Loaded \"" + chosen + "\"." : "Could not load \"" + chosen + "\".";
+        SameLineIfFits(ButtonW("Delete profile"), x0);
+        static double delArmedAt = -1;
+        if (ConfirmButton("Delete profile", "Yes, delete profile", &delArmedAt)) {
+            result = settings::deleteProfile(chosen) ? "Deleted \"" + chosen + "\"." : "Could not delete \"" + chosen + "\".";
+            profiles = settings::listProfiles();
+        }
+    }
+    if (!result.empty()) ImGui::TextWrapped("%s", result.c_str()); //white: it answers a button
+}
+
 inline void PageSettings() {
     using namespace ui;
-    Section("QUICK SETUP");
-    HighVisibilityButton();
+    DrawConfigs();
     Section("LOOK");
     Slider("Text size", &config::labelSize, 10.0f, 40.0f, "%.0f px");
     Switch("Full-size small text", &config::fullSizeText);
@@ -481,47 +524,40 @@ inline void PageSettings() {
     Slider("Menu text size", &config::menuTextSize, 15.0f, 30.0f, "%.0f px");
     Slider("Overlay opacity", &config::overlayOpacity, 0.2f, 1.0f, "%.2f");
     Slider("Menu opacity", &config::menuOpacity, 0.5f, 1.0f, "%.2f");
-    Note("Text size is for everything on the game picture; markers, health bars, edge arrows and the radar grow with it "
-         "too. Marker size makes the ARC, container, ground item and downed player markers bigger still. "
-         "Full-size small text draws distances, guns, the names by markers, the radar's ring ranges and the status "
-         "card in the full Text size instead of a little smaller. Menu text size is for this menu, the player list and "
-         "the inventory windows; it changes when you let go of the slider. Overlay opacity never fades the warnings: the "
-         "close enemy card, your health, LOW HEALTH, NO LIVE GAME DATA and the hotkey problem card stay fully solid.");
+    Note("Menu text size applies when you let go; Overlay opacity never fades the warnings.");
+    SubHeading("Appearance");
+    double accent = config::menuAccent; //an int in config.h; Choice keeps a double
+    if (Choice("Accent colour", &accent, {"White (as before)", "Red", "Yellow", "Blue", "Green", "Violet"})) config::menuAccent = (int)accent;
+    SliderD("Corner roundness", &config::menuRoundness, 0.0, 1.5, "%.1f x");
+    Switch("Section rules", &config::menuSectionRules);
     Section("SPOKEN CUES");
     if (Switch("Say hotkey results and near enemies out loud", &config::soundCues) && config::soundCues) cue::say("Spoken cues on");
     if (config::soundCues) {
         SliderD("Spoken warning range", &config::cueRange, 10, 150, "%.0f m");
         SliderD("Speech speed", &config::speechRate, -50, 50, "%.0f");
-        if (cue::missing) ImGui::TextWrapped("No sound: spd-say was not found. Install speech-dispatcher to hear the cues.");
-        else if (cue::failed) ImGui::TextWrapped("No sound: spd-say could not reach speech-dispatcher. Run 'spd-say test' in a terminal to see why.");
+        if (cue::missing) ImGui::TextWrapped("No sound: spd-say was not found; install speech-dispatcher.");
+        else if (cue::failed) ImGui::TextWrapped("No sound: spd-say cannot reach speech-dispatcher; run 'spd-say test' to see why.");
     }
-    Note("Says the result of F6, F7, F8, F9 and F10, and warns when an enemy player first comes within range, once more when "
-         "he comes within the Warning card range (\"Enemy close, left, 8 meters\"), with \"above\" or \"below\" more than "
-         "3 m up or down; at most one warning every 2 s. Also says \"Low health\", \"Shield broken\", \"Game data lost\" and "
-         "\"Game data back\". These are quiet while stream hide is on. Speech speed 0 keeps your own speech-dispatcher speed. "
-         "The big on-screen card has its own range: ESP tab, Warning card range.");
+    Note("Says F-key results and warns once when an enemy comes in range, at most every 2 s.");
     Section("HOTKEYS AND KEYBOARD");
     Switch("Hotkeys (F6, F7, F9, F10)", &config::hotkeysEnabled);
-    Note("F9 says your health and shield, how many enemies are within the Spoken warning range and where the nearest one "
-         "is, and shows it at the top of the screen.");
+    Note("F9 says your health, shield and nearby enemies, and shows it at the top.");
     Switch("Keyboard controls the menu", &config::menuKeyboard);
-    Note("While the menu is open the game gets no keys. Arrows and Tab move a thick white frame, Space presses or "
-         "switches, Esc or Insert closes the menu. Sliders: Enter, Tab or Ctrl+click lets you type an exact number "
-         "(Enter when done), or Space and then Left / Right.");
+    Note("Arrows and Tab move the white frame, Space presses, Enter types a value, Esc closes.");
     Switch("Stream hide (F8)", &config::streamHide);
-    Note("Stream hide draws nothing, so recordings and streams show no overlay. F8 works even with Hotkeys off, but not while Shift, Ctrl, Alt or Meta is held (let go of Shift first). While it is on the menu cannot be opened: press F8 first.");
+    Note("Draws nothing for streams; while on, the menu will not open until you press F8.");
     Section("SPEED");
     SliderD("Update rate", &config::trackerHz, 30, 240, "%.0f Hz");
     Note("Higher follows moving players more closely and uses more CPU.");
     Switch("Status card", &config::showDebugInfo);
-    Note("Frames per second, the update rate and how many things are tracked, at the top middle of the screen while the game is found.");
+    Note("Shows FPS, update rate and tracked count at the top middle while the game is found.");
     DrawGameViewSettings();
     Section("OVERLAY WINDOW");
     if (g_OverlayWhere) ImGui::TextWrapped("%s", g_OverlayWhere().c_str());
     if (!g_OverlayNote.empty()) ImGui::TextWrapped("%s", g_OverlayNote.c_str()); //the setup problem shown at the start
     Note("Pick the monitor with: bash start.sh DP-1 (names: kscreen-doctor -o)");
     Section("FILES AND RESET");
-    Note("Settings, names, offsets and marks are in ~/.config/kwin-helper/");
+    Note("Settings, names, offsets, marks and profiles are in ~/.config/kwin-helper/");
     static double resetArmedAt = -1;
     if (ConfirmButton("Reset all settings", "Yes, reset everything", &resetArmedAt)) { settings::resetAll(); ImGui::SetWindowPos(APP_ID, ImVec2(120, 110)); Toast("Settings reset"); }
     static double resetHvArmedAt = -1;

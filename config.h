@@ -95,6 +95,9 @@ namespace config {
     inline bool streamHide = false;        //F8: draw nothing, so screen recordings and streams show no overlay (no startup banner)
     inline float menuOpacity = 0.94f;      //the Insert menu's background
     inline float menuTextSize = 15.0f;     //px, text of the menu, the player list and the inventory windows; Insert menu: Settings tab, LOOK, "Menu text size"
+    inline int menuAccent = 0;             //the Insert menu's accent colour: 0..5 into boxColor's palette; 0 white (as before)
+    inline double menuRoundness = 1.0;     //the Insert menu's corner rounding only, times today's: 0 square to 1.5; 1 as before
+    inline bool menuSectionRules = true;   //the thin rule under the menu's section headings (on: as before)
     inline bool soundCues = true;          //say F6/F7/F8/F10 results and near enemies out loud (needs spd-say, utils/cue.h)
     inline double cueRange = 40;           //m, an enemy player first coming this close is said (at most one every 2 s)
     inline double speechRate = 0;          //Settings tab, SPOKEN CUES, "Speech speed": spd-say -r, -50 slower to +50 faster; 0 keeps your own speech-dispatcher speed

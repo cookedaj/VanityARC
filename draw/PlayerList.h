@@ -132,7 +132,7 @@ inline void DrawPlayerRows(int maxRows) {
         if (rowHov || IsInspected(key)) {
             ImDrawList* dl = ImGui::GetWindowDrawList();
             const ImVec2 a(std::max(ImGui::GetItemRectMin().x, dl->GetClipRectMin().x + S(1)), ImGui::GetItemRectMin().y);
-            dl->AddRect(a, ImGui::GetItemRectMax(), IsInspected(key) ? ui::WHITE : ui::GREY, S(ui::RADIUS), 0, S(2));
+            dl->AddRect(a, ImGui::GetItemRectMax(), IsInspected(key) ? ui::WHITE : ui::GREY, ui::Corner(ui::RADIUS), 0, S(2));
         }
         if (rowHov) ImGui::SetTooltip("Click for the inventory");
         ImGui::SameLine(); ImGui::SetCursorPosX(x0); //back to the row's start (SameLine(x0) would not do it when x0 is 0)

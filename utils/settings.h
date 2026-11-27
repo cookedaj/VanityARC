@@ -22,7 +22,7 @@
 
 namespace settings {
 
-struct Entry { const char* name; char type; void* p; double lo, hi; }; // type: b = bool, d = double, f = float
+struct Entry { const char* name; char type; void* p; double lo, hi; }; // type: b = bool, d = double, f = float, i = int
 
 inline std::vector<Entry>& table() {
     static std::vector<Entry> t = [] {
@@ -30,6 +30,7 @@ inline std::vector<Entry>& table() {
         auto B = [&](const char* n, bool* p) { v.push_back({n, 'b', p, 0, 1}); };
         auto D = [&](const char* n, double* p, double lo, double hi) { v.push_back({n, 'd', p, lo, hi}); };
         auto F = [&](const char* n, float* p, double lo, double hi) { v.push_back({n, 'f', p, lo, hi}); };
+        auto I = [&](const char* n, int* p, double lo, double hi) { v.push_back({n, 'i', p, lo, hi}); };
         B("espEnabled", &config::espEnabled);
         B("showPlayers", &config::showPlayers); B("showArc", &config::showArc); B("showPickups", &config::showPickups);
         B("showContainers", &config::showContainers); B("showDeadPlayers", &config::showDeadPlayers);
@@ -67,6 +68,8 @@ inline std::vector<Entry>& table() {
         F("boxThickness", &config::boxThickness, 1, 10);
         F("overlayOpacity", &config::overlayOpacity, 0.2, 1); F("menuOpacity", &config::menuOpacity, 0.5, 1);
         F("menuTextSize", &config::menuTextSize, 15, 30);
+        I("menuAccent", &config::menuAccent, 0, 5); D("menuRoundness", &config::menuRoundness, 0, 1.5);
+        B("menuSectionRules", &config::menuSectionRules);
         D("trackerHz", &config::trackerHz, 30, 240);
         D("listMode", &config::listMode, 0, 2); D("listRows", &config::listRows, 3, 16);
         B("showItemValues", &config::showItemValues);
@@ -88,7 +91,7 @@ inline std::vector<Entry>& table() {
 }
 
 inline double value(const Entry& e) {
-    return e.type == 'b' ? (double)*(bool*)e.p : e.type == 'd' ? *(double*)e.p : (double)*(float*)e.p;
+    return e.type == 'b' ? (double)*(bool*)e.p : e.type == 'd' ? *(double*)e.p : e.type == 'i' ? (double)*(int*)e.p : (double)*(float*)e.p;
 }
 
 //Sets a value inside its safe range. NaN and infinity are ignored.
@@ -97,6 +100,7 @@ inline void setValue(const Entry& e, double v) {
     v = std::min(e.hi, std::max(e.lo, v));
     if (e.type == 'b') *(bool*)e.p = v != 0;
     else if (e.type == 'd') *(double*)e.p = v;
+    else if (e.type == 'i') *(int*)e.p = (int)std::lround(v);
     else *(float*)e.p = (float)v;
 }
 
@@ -132,10 +136,12 @@ inline std::string path(const std::string& dir = "") {
     return ::configDir() + "/settings.txt";
 }
 
-//Returns how many lines were ignored (each is printed with its line number and the expected format)
-inline int load(const std::string& dir = "") {
+//Reads one settings file (settings.txt or a profile). Returns how many lines were ignored (each is printed with its line
+//number and the expected format)
+inline int loadFrom(const std::string& file) {
     defaults();
-    std::ifstream f(path(dir));
+    std::ifstream f(file);
+    const std::string shown = std::filesystem::path(file).filename().string();
     std::string line;
     int lineNo = 0, ignored = 0;
     while (std::getline(f, line)) {
@@ -152,25 +158,85 @@ inline int load(const std::string& dir = "") {
             for (const Entry& e : table())
                 if (name == e.name) { setValue(e, v); known = true; } //out of range: pulled to the nearest allowed value
         if (!known && ++ignored <= 5) //a few are enough to find them; the toast gives the total
-            std::printf("[!] settings.txt line %d ignored: \"%s\" (expected: a setting name, a space, a number, e.g. \"showArc 1\")\n",
-                        lineNo, line.c_str());
+            std::printf("[!] %s line %d ignored: \"%s\" (expected: a setting name, a space, a number, e.g. \"showArc 1\")\n",
+                        shown.c_str(), lineNo, line.c_str());
     }
     return ignored;
 }
 
-inline void save(const std::string& dir = "") {
+inline int load(const std::string& dir = "") { return loadFrom(path(dir)); }
+
+//Writes every setting to one file (settings.txt or a profile). False if it could not be written.
+inline bool saveTo(const std::string& target) {
     std::error_code ec;
-    std::filesystem::create_directories(std::filesystem::path(path(dir)).parent_path(), ec);
-    const std::string target = path(dir), tmp = target + ".tmp"; //write aside, then rename: never a half-written file
+    std::filesystem::create_directories(std::filesystem::path(target).parent_path(), ec);
+    const std::string tmp = target + ".tmp"; //write aside, then rename: never a half-written file
     {
         std::ofstream f(tmp, std::ios::trunc);
-        if (!f) return;
+        if (!f) return false;
         f.precision(10);
         for (const Entry& e : table()) f << e.name << ' ' << value(e) << '\n';
         f.flush();
-        if (!f) { std::filesystem::remove(tmp, ec); return; }
+        if (!f) { std::filesystem::remove(tmp, ec); return false; }
     }
     std::filesystem::rename(tmp, target, ec);
+    return !ec;
+}
+
+inline void save(const std::string& dir = "") { saveTo(path(dir)); }
+
+//---- Profiles: named copies of settings.txt in ~/.config/kwin-helper/profiles/<name>.txt, in the same format.
+
+//Letters, digits, space, underscore and hyphen only (so a name can never leave the profiles folder), trimmed, at most 24
+//characters. "" when nothing is left.
+inline std::string cleanProfileName(const std::string& raw) {
+    std::string s;
+    for (unsigned char c : raw)
+        if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == ' ' || c == '_' || c == '-') s += (char)c;
+    s.erase(0, s.find_first_not_of(' '));
+    if (s.size() > 24) s.resize(24);
+    s.erase(s.find_last_not_of(' ') + 1); //npos + 1 == 0: all spaces (or empty) leaves ""
+    return s;
+}
+
+inline std::string profilePath(const std::string& name) { return ::configDir() + "/profiles/" + cleanProfileName(name) + ".txt"; }
+
+//The saved profile names (no .txt), sorted ignoring case. Files whose names the menu could not have made are left out.
+inline std::vector<std::string> listProfiles() {
+    std::vector<std::string> names;
+    std::error_code ec;
+    for (std::filesystem::directory_iterator it(::configDir() + "/profiles", ec), end; !ec && it != end; it.increment(ec)) {
+        const std::filesystem::path& p = it->path();
+        if (p.extension() != ".txt" || !it->is_regular_file(ec)) continue;
+        const std::string name = p.stem().string();
+        if (!name.empty() && cleanProfileName(name) == name) names.push_back(name);
+    }
+    auto lower = [](std::string s) { for (char& c : s) if (c >= 'A' && c <= 'Z') c += 'a' - 'A'; return s; };
+    std::sort(names.begin(), names.end(), [&](const std::string& a, const std::string& b) {
+        const std::string la = lower(a), lb = lower(b);
+        return la != lb ? la < lb : a < b;
+    });
+    return names;
+}
+
+inline bool saveProfile(const std::string& name) {
+    return !cleanProfileName(name).empty() && saveTo(profilePath(name));
+}
+
+//Applies a profile as a start with it as settings.txt would: every value read is kept in its range, anything the file
+//lacks (a setting newer than the profile) gets its config.h default. False, and nothing changed, if it is missing.
+inline bool loadProfile(const std::string& name) {
+    std::error_code ec;
+    if (cleanProfileName(name).empty() || !std::filesystem::is_regular_file(profilePath(name), ec)) return false;
+    defaults(); //captured before resetAll, as load() does
+    resetAll();
+    loadFrom(profilePath(name));
+    return true;
+}
+
+inline bool deleteProfile(const std::string& name) {
+    std::error_code ec;
+    return !cleanProfileName(name).empty() && std::filesystem::remove(profilePath(name), ec);
 }
 
 } // namespace settings

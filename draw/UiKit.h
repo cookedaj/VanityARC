@@ -15,6 +15,7 @@
 
 #include "imgui.h"
 #include "imgui_internal.h" //DrawNavFrame: where the keyboard focus is
+#include "../config.h"      //menuAccent, menuRoundness, menuSectionRules: the windows' look (Settings tab)
 
 //The colours that mean something, for any file that draws: the one set of numbers. COLOR:: (ESP.h) takes its white,
 //grey, red, green and dead grey from here and adds what the menu can change, so on the game picture keep calling
@@ -50,6 +51,21 @@ inline constexpr float LABEL_W = 210.0f, CONTROL_W = 250.0f;
 inline constexpr float RADIUS = 5.0f, PANEL_RADIUS = 8.0f;
 inline float g_scale = 1.0f;
 inline float S(float px) { return px * g_scale; }
+//menuRoundness: 1 the corners above (as always), 0 square, up to 1.5. NaN: square. Corner() is S() with it, for the
+//windows and their controls only: the cards on the game picture keep S(RADIUS) / PANEL_RADIUS whatever it is.
+inline float Roundness() { return (float)std::min(1.5, std::max(0.0, config::menuRoundness)); }
+inline float Corner(float px) { return S(px) * Roundness(); }
+
+//What is chosen or on (the chosen tab's bar, an on switch, a heading's bar, a slider's handle, an open drop-down's
+//outline): menuAccent. 0 white as always; then Box colour's hues in its order with white and red swapped: 1 red,
+//2 yellow, 3 blue, 4 green, 5 violet (2 to 5 are COLOR::chosen's numbers, ESP.h). Every one is at least 4.5:1 on
+//black, so an on switch's black knob stays as readable; Box colour's red (207 56 56) is only 4.3:1, so this one is a
+//brighter red of the same hue (4.9:1).
+inline ImU32 AccentColor() {
+    static constexpr ImU32 hues[6] = {WHITE, IM_COL32(224, 60, 60, 255), IM_COL32(245, 215, 60, 255),
+                                      IM_COL32(70, 120, 255, 255), IM_COL32(40, 200, 70, 255), IM_COL32(170, 90, 255, 255)};
+    return hues[std::min(5, std::max(0, config::menuAccent))];
+}
 
 //The width of the control after a row's label: CONTROL_W, narrower only when the page is too narrow for it (big menu
 //text on a small screen), leaving room for what follows it (a slider's value)
@@ -84,15 +100,16 @@ inline void PushTheme(float opacity, float textSize = BASE_TEXT) {
     g_scale = textSize / BASE_TEXT;
     ImGui::PushFont(nullptr, textSize);
     const ImVec4 black(0, 0, 0, opacity), white(1, 1, 1, 1), light = ImColor(LIGHT), grey = ImColor(GREY), dim = ImColor(DIM),
-                 fill(0.28f, 0.28f, 0.28f, 1), hover(0.38f, 0.38f, 0.38f, 1), press(0.45f, 0.45f, 0.45f, 1);
+                 fill(0.28f, 0.28f, 0.28f, 1), hover(0.38f, 0.38f, 0.38f, 1), press(0.45f, 0.45f, 0.45f, 1),
+                 accent = ImColor(AccentColor());
     c(ImGuiCol_WindowBg, black); c(ImGuiCol_ChildBg, ImVec4(0, 0, 0, 0)); c(ImGuiCol_PopupBg, ImVec4(0.04f, 0.04f, 0.04f, 0.98f));
     c(ImGuiCol_Border, ImVec4(1, 1, 1, 0.55f)); c(ImGuiCol_Text, white); c(ImGuiCol_TextDisabled, grey);
     c(ImGuiCol_TitleBg, black); c(ImGuiCol_TitleBgActive, black); c(ImGuiCol_TitleBgCollapsed, black);
     c(ImGuiCol_FrameBg, fill); c(ImGuiCol_FrameBgHovered, hover); c(ImGuiCol_FrameBgActive, hover);
-    c(ImGuiCol_CheckMark, white); c(ImGuiCol_SliderGrab, white); c(ImGuiCol_SliderGrabActive, white); //white on any track
+    c(ImGuiCol_CheckMark, white); c(ImGuiCol_SliderGrab, white); c(ImGuiCol_SliderGrabActive, white); //white on any track: a coloured handle loses contrast
     c(ImGuiCol_Separator, dim); c(ImGuiCol_Header, fill); c(ImGuiCol_HeaderHovered, hover); c(ImGuiCol_HeaderActive, press);
     c(ImGuiCol_Button, fill); c(ImGuiCol_ButtonHovered, hover); c(ImGuiCol_ButtonActive, press);
-    c(ImGuiCol_Tab, fill); c(ImGuiCol_TabHovered, hover); c(ImGuiCol_TabSelected, hover); c(ImGuiCol_TabSelectedOverline, white);
+    c(ImGuiCol_Tab, fill); c(ImGuiCol_TabHovered, hover); c(ImGuiCol_TabSelected, hover); c(ImGuiCol_TabSelectedOverline, accent);
     //a grey bar on a visible track, so a page that scrolls looks like one
     c(ImGuiCol_ScrollbarBg, ImVec4(0.12f, 0.12f, 0.12f, 1)); c(ImGuiCol_ScrollbarGrab, grey);
     c(ImGuiCol_ScrollbarGrabHovered, light); c(ImGuiCol_ScrollbarGrabActive, white);
@@ -105,13 +122,13 @@ inline void PushTheme(float opacity, float textSize = BASE_TEXT) {
     ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, border); //the Border colour around every button, drop-down, slider and box
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, border);
     ImGui::PushStyleVar(ImGuiStyleVar_PopupBorderSize, border); //an open drop-down list and a tooltip too
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, S(PANEL_RADIUS));
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, S(RADIUS));
-    ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, S(RADIUS));
-    ImGui::PushStyleVar(ImGuiStyleVar_PopupRounding, S(RADIUS));
-    ImGui::PushStyleVar(ImGuiStyleVar_GrabRounding, S(RADIUS - 2)); //a slider's handle sits 2 px inside its track
-    ImGui::PushStyleVar(ImGuiStyleVar_ScrollbarRounding, S(RADIUS));
-    ImGui::PushStyleVar(ImGuiStyleVar_TabRounding, S(RADIUS));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, Corner(PANEL_RADIUS));
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, Corner(RADIUS));
+    ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, Corner(RADIUS));
+    ImGui::PushStyleVar(ImGuiStyleVar_PopupRounding, Corner(RADIUS));
+    ImGui::PushStyleVar(ImGuiStyleVar_GrabRounding, Corner(RADIUS - 2)); //a slider's handle sits 2 px inside its track
+    ImGui::PushStyleVar(ImGuiStyleVar_ScrollbarRounding, Corner(RADIUS));
+    ImGui::PushStyleVar(ImGuiStyleVar_TabRounding, Corner(RADIUS));
     //the spacing is as it was: the pages are measured to fit a 1280 px screen at 30 px text, and the player list's
     //height decides where the cards on the game picture go
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(S(8), S(5)));
@@ -128,15 +145,17 @@ inline void PopTheme() {
     g_scale = 1.0f;
 }
 
-//A heading: white, with a thick white line under its words and a thin grey one from there to the page's right side
+//A heading: white, with a thick bar in the accent (white) under its words and, with menuSectionRules, a thin grey line
+//from there to the page's right side
 inline void Section(const char* text) {
     ImGui::Dummy(ImVec2(0, S(4)));
     ImGui::TextColored(ImColor(WHITE), "%s", text);
     const float words = ImGui::GetItemRectSize().x;
     const ImVec2 p = ImGui::GetCursorScreenPos();
     ImDrawList* dl = ImGui::GetWindowDrawList();
-    dl->AddLine(ImVec2(p.x + words, p.y - S(2)), ImVec2(p.x + ImGui::GetContentRegionAvail().x, p.y - S(2)), DIM, S(1));
-    dl->AddRectFilled(ImVec2(p.x, p.y - S(3)), ImVec2(p.x + words, p.y - S(1)), WHITE); //a filled bar: sharp, where a 2 px line would blur over 3
+    if (config::menuSectionRules)
+        dl->AddLine(ImVec2(p.x + words, p.y - S(2)), ImVec2(p.x + ImGui::GetContentRegionAvail().x, p.y - S(2)), DIM, S(1));
+    dl->AddRectFilled(ImVec2(p.x, p.y - S(3)), ImVec2(p.x + words, p.y - S(1)), AccentColor()); //a filled bar: sharp, where a 2 px line would blur over 3
     ImGui::Dummy(ImVec2(0, S(3)));
 }
 
@@ -149,12 +168,13 @@ inline void Note(const char* text) {
 }
 
 //A switch: a pill with a rounded knob, the knob as big as the square half it used to have. Off: a grey outline, empty,
-//the knob on the left. On: filled white, the knob black on the right. So on and off differ by fill and by side, not
-//by colour. Under the mouse the label is underlined (and an off switch turns white); while the mouse button is down
-//the knob is half way. The whole row can be clicked.
+//the knob on the left. On: filled white (the accent), the knob black on the right. So on and off differ by fill and by
+//side, not by colour. Under the mouse the label is underlined (and an off switch turns white); while the mouse button
+//is down the knob is half way. The whole row can be clicked.
 inline bool Switch(const char* label, bool* v) {
     ImGui::PushID(label);
     const float h = S(16), w = S(32), row = h + S(6), e = S(2); //e: the gap between the pill's edge and the knob
+    const float pill = h / 2 * Roundness(); //the pill's and the knob's corners: square with menuRoundness 0
     const ImVec2 p = ImGui::GetCursorScreenPos();
     //EnableNav: ImGui leaves invisible buttons out of Tab and the arrows unless asked
     const bool pressed = ImGui::InvisibleButton("##sw", ImVec2(std::max(S(60), ImGui::GetContentRegionAvail().x), row), ImGuiButtonFlags_EnableNav);
@@ -162,10 +182,10 @@ inline bool Switch(const char* label, bool* v) {
     const bool on = *v, hov = ImGui::IsItemHovered(), held = ImGui::IsItemActive();
     ImDrawList* dl = ImGui::GetWindowDrawList();
     const ImVec2 a(p.x, p.y + S(3)), b(p.x + w, p.y + S(3) + h);
-    if (on) dl->AddRectFilled(a, b, WHITE, h / 2);
-    else dl->AddRect(a, b, hov ? WHITE : GREY, h / 2, 0, S(1));
+    if (on) dl->AddRectFilled(a, b, AccentColor(), pill);
+    else dl->AddRect(a, b, hov ? WHITE : GREY, pill, 0, S(1));
     const float kw = w / 2 - S(1) - e, kx = held ? a.x + (w - kw) / 2 : on ? b.x - e - kw : a.x + e; //the knob's width and left side
-    dl->AddRectFilled(ImVec2(kx, a.y + e), ImVec2(kx + kw, b.y - e), on ? IM_COL32_BLACK : hov ? WHITE : GREY, h / 2);
+    dl->AddRectFilled(ImVec2(kx, a.y + e), ImVec2(kx + kw, b.y - e), on ? IM_COL32_BLACK : hov ? WHITE : GREY, pill);
     const ImVec2 t(p.x + w + S(10), a.y + (h - ImGui::GetFontSize()) / 2);
     dl->AddText(t, (on || hov) ? WHITE : LIGHT, label, LabelEnd(label));
     if (hov) dl->AddRectFilled(ImVec2(t.x, b.y + S(1)), ImVec2(t.x + ImGui::CalcTextSize(label, LabelEnd(label)).x, b.y + S(3)), WHITE);
@@ -204,7 +224,9 @@ inline bool SliderD(const char* label, double* v, double lo, double hi, const ch
     return SliderRow(label, ImGuiDataType_Double, v, &lo, &hi, fmt);
 }
 
-//A drop-down list of n items; the chosen number is kept in a double (the settings are doubles)
+//A drop-down list of n items; the chosen number is kept in a double (the settings are doubles). While it is open, it
+//and its list are outlined in the accent colour, solid; with the white accent they keep the usual outline (most hues
+//at the outline's 55 % would fall under 4.5:1 on black).
 inline bool Choice(const char* label, double* v, const char* const* items, int n) {
     ImGui::PushID(label);
     ImGui::AlignTextToFramePadding();
@@ -214,11 +236,15 @@ inline bool Choice(const char* label, double* v, const char* const* items, int n
     int idx = (int)*v;
     idx = idx < 0 ? 0 : idx >= n ? n - 1 : idx;
     bool changed = false;
+    //BeginCombo's own popup ID: open since an earlier frame (so it lights the frame after the click that opens it)
+    const bool lit = AccentColor() != WHITE && ImGui::IsPopupOpen(ImHashStr("##ComboPopup", 0, ImGui::GetID("##c")), 0);
+    if (lit) ImGui::PushStyleColor(ImGuiCol_Border, AccentColor());
     if (ImGui::BeginCombo("##c", items[idx])) {
         for (int i = 0; i < n; i++)
             if (ImGui::Selectable(items[i], i == idx)) { *v = i; changed = true; }
         ImGui::EndCombo();
     }
+    if (lit) ImGui::PopStyleColor(); //after EndCombo: the list's window ends with the colour stack it began with
     ImGui::PopID();
     return changed;
 }
@@ -226,13 +252,13 @@ inline bool Choice(const char* label, double* v, std::initializer_list<const cha
     return Choice(label, v, items.begin(), (int)items.size());
 }
 
-//A tab on the left, rounded. The chosen one is lit grey with a white bar down its left side (white text on it: about
-//9:1). Under the mouse: a darker grey with a grey outline and lighter text. While the mouse button is down: lit as the
-//chosen one, without the bar.
+//A tab on the left, rounded. The chosen one is lit grey with a white (accent) bar down its left side (white text on
+//it: about 9:1). Under the mouse: a darker grey with a grey outline and lighter text. While the mouse button is down:
+//lit as the chosen one, without the bar.
 inline bool Tab(const char* label, bool selected, float w) {
     ImGui::PushID(label);
     const ImVec2 p = ImGui::GetCursorScreenPos();
-    const float h = S(32), r = S(RADIUS);
+    const float h = S(32), r = Corner(RADIUS);
     const ImVec2 q(p.x + w, p.y + h);
     const bool pressed = ImGui::InvisibleButton("##t", ImVec2(w, h), ImGuiButtonFlags_EnableNav);
     const bool hov = ImGui::IsItemHovered(), lit = selected || ImGui::IsItemActive();
@@ -242,7 +268,7 @@ inline bool Tab(const char* label, bool selected, float w) {
     if (hov && !selected) dl->AddRect(p, q, GREY, r, 0, S(1));
     if (selected) { //the bar: the left S(4) of the same rounded shape, so it follows the corners
         dl->PushClipRect(p, ImVec2(p.x + S(4), q.y), true);
-        dl->AddRectFilled(p, q, WHITE, r);
+        dl->AddRectFilled(p, q, AccentColor(), r);
         dl->PopClipRect();
     }
     dl->AddText(ImVec2(p.x + S(16), p.y + (h - ImGui::GetFontSize()) / 2), lit ? WHITE : (hov ? LIGHT : GREY), label, LabelEnd(label));
