@@ -36,6 +36,10 @@ struct Snapshot {
 constexpr double STALE_MS = 250.0;
 //Without the live camera only this new: through the snapshot's own (old) camera the markers would slide off what they mark
 constexpr double NO_CAMERA_MS = 50.0;
+//Gate for the draw-thread camera read: skip the extra ReadMemory when the snapshot is younger than this.
+//At 120 Hz tracker rate (~8 ms period) a 4 ms gate skips roughly half the frames; the snapshot's own camera
+//is close enough when it was just taken. ponytail: fixed 4 ms, tie to g_trackerHz if jitter shows.
+constexpr double FRESH_CAMERA_GATE_MS = 4.0;
 
 //How old a snapshot is at nowNs (steady_clock ns), in ms. One never read (capturedNs 0) counts as very old.
 inline double snapshotAgeMs(const Snapshot& s, int64_t nowNs) { return s.capturedNs ? (nowNs - s.capturedNs) / 1e6 : 1e9; }
@@ -71,6 +75,14 @@ public:
     //The camera as it is right now (one small read), so markers follow the view without waiting for the next
     //tracker step. False when there is no camera yet; use the snapshot's then.
     bool freshCamera(FminimalViewInfo& out) const;
+
+    //Gated: only does the read when the snapshot is older than FRESH_CAMERA_GATE_MS.
+    //Pass snapshotAgeMs(*snap, now) as snapAgeMs. When the snapshot is very fresh its own camera is accurate
+    //enough and the per-frame ReadMemory is skipped.
+    bool freshCameraGated(FminimalViewInfo& out, double snapAgeMs) const {
+        if (snapAgeMs < FRESH_CAMERA_GATE_MS) return false;
+        return freshCamera(out);
+    }
 
     //The gamescope the game was started in, if any (looked up every couple of seconds)
     gamescope::Info gamescopeInfo() const;

@@ -18,6 +18,7 @@
 #include "ESP.h"
 #include "UiKit.h"
 #include "../utils/offsets.h"
+#include "../utils/identity.h"
 
 //What the draw loop hands to the UI each frame
 struct UiFrame {
@@ -87,9 +88,12 @@ inline void DrawPlayerRows(int maxRows) {
     if (players.empty()) { ui::Note(g_ui.live ? "No players in view." : "No live data from the game."); return; }
     std::stable_partition(players.begin(), players.end(), [](const RenderEntity* e) { return !IsTeammate(*e, g_ui.localTeam); });
     using ui::S; //column positions for 15 px text, grown with the menu text size
-    //the name gets 184 px before WHERE, as much as before WHERE came (a long name would print over the distance); the
-    //row stays 810 wide, so a capped player list on a narrow screen keeps its text size
-    const float xDist = S(190), xHp = S(290), xSh = S(350), xSeen = S(410), xTeam = S(455), xGun = S(535), rowW = S(LIST_ROW_W);
+    //Every column starts where the rows do (x0: after the window's padding), so each head stands right over its column,
+    //NAME over the names too. The name gets 184 px before WHERE, as much as before WHERE came (a long name would print
+    //over the distance); the row stays 810 wide, so a capped player list on a narrow screen keeps its text size
+    const float x0 = ImGui::GetCursorPosX();
+    const float xDist = x0 + S(184), xHp = x0 + S(284), xSh = x0 + S(344), xSeen = x0 + S(404), xTeam = x0 + S(449), xGun = x0 + S(529),
+                rowW = S(LIST_ROW_W);
     ImGui::TextColored(ImColor(ui::GREY), "NAME");
     ImGui::SameLine(xDist); ImGui::TextColored(ImColor(ui::GREY), "WHERE");
     ImGui::SameLine(xHp); ImGui::TextColored(ImColor(ui::GREY), "HP");
@@ -97,6 +101,10 @@ inline void DrawPlayerRows(int maxRows) {
     ImGui::SameLine(xSeen); ImGui::TextColored(ImColor(ui::GREY), "SEEN");
     ImGui::SameLine(xTeam); ImGui::TextColored(ImColor(ui::GREY), "TEAM");
     ImGui::SameLine(xGun); ImGui::TextColored(ImColor(ui::GREY), "GUNS");
+    { //a thin line under the heads, in the gap before the first row (it takes no room: the list is as tall as it was)
+        const ImVec2 p = ImGui::GetCursorScreenPos();
+        ImGui::GetWindowDrawList()->AddLine(ImVec2(p.x, p.y - S(5)), ImVec2(p.x + rowW, p.y - S(5)), ui::DIM, S(1));
+    }
     int shown = 0;
     for (const RenderEntity* e : players) {
         if (shown++ >= maxRows) break;
@@ -104,23 +112,30 @@ inline void DrawPlayerRows(int maxRows) {
         const bool squad = g_ui.localTeam >= 0 && e->teamID == g_ui.localTeam;
         const bool marked = marks::isMarked(e->account);
         const bool mate = squad || marked;
-        const ImU32 col = e->isDead ? ui::DIM : (mate ? ui::GREY : ui::WHITE);
+        const bool downed = IsDowned(*e);
+        //The row's colour says who he is, as on the game picture: an enemy white (the strongest there is), a teammate the
+        //teammate colour, a downed player amber, a dead one grey (Monochrome: white and greys). Always fully solid, and
+        //never by colour alone: TEAM and HP say it in words.
+        const ImU32 col = COLOR::withAlpha(downed ? COLOR::downedPlayer() : e->isDead ? COLOR::deadPlayer() : mate ? COLOR::mate() : ui::WHITE, 255);
         ImGui::PushID((const void*)e->actor); //by the actor: two players sharing an account (a body and its owner) get rows of their own
         const std::string name = !e->label.empty() ? e->label : (e->account.empty() ? "Unknown" : e->account.substr(0, 8));
         ImGui::SetNextItemAllowOverlap(); //the TEAM button on top of the row takes its own clicks (and hides the row tooltip)
-        //An outline, not a fill (a lit fill would wash out the grey and dim names): white while its inventory is open,
-        //grey under the mouse. Its left side sits before the name; where the window clips it, the other three sides show.
+        //An outline, not a fill (a lit fill would wash out the coloured names), rounded as the controls are: white while
+        //its inventory is open, grey under the mouse. All four sides show: its left side starts no further left than
+        //the window draws (rows in a box without padding would have it cut off).
         ImGui::PushStyleColor(ImGuiCol_Header, IM_COL32_BLACK_TRANS);
         ImGui::PushStyleColor(ImGuiCol_HeaderHovered, IM_COL32_BLACK_TRANS);
         ImGui::PushStyleColor(ImGuiCol_HeaderActive, IM_COL32_BLACK_TRANS);
         if (ImGui::Selectable("##row", IsInspected(key), 0, ImVec2(rowW, S(20)))) ToggleInspect(key);
         ImGui::PopStyleColor(3);
         const bool rowHov = ImGui::IsItemHovered();
-        if (rowHov || IsInspected(key))
-            ImGui::GetWindowDrawList()->AddRect(ImVec2(ImGui::GetWindowPos().x + S(2), ImGui::GetItemRectMin().y), ImGui::GetItemRectMax(),
-                                                IsInspected(key) ? ui::WHITE : ui::GREY, 0.0f, 0, S(2));
+        if (rowHov || IsInspected(key)) {
+            ImDrawList* dl = ImGui::GetWindowDrawList();
+            const ImVec2 a(std::max(ImGui::GetItemRectMin().x, dl->GetClipRectMin().x + S(1)), ImGui::GetItemRectMin().y);
+            dl->AddRect(a, ImGui::GetItemRectMax(), IsInspected(key) ? ui::WHITE : ui::GREY, S(ui::RADIUS), 0, S(2));
+        }
         if (rowHov) ImGui::SetTooltip("Click for the inventory");
-        ImGui::SameLine(S(6));
+        ImGui::SameLine(); ImGui::SetCursorPosX(x0); //back to the row's start (SameLine(x0) would not do it when x0 is 0)
         ImGui::PushStyleColor(ImGuiCol_Text, ImColor(col).Value);
         ImGui::TextUnformatted(name.c_str());
         char b[48];
@@ -129,8 +144,10 @@ inline void DrawPlayerRows(int maxRows) {
         const int side = FlatDir(g_ui.vm, e->pos);
         std::snprintf(b, sizeof b, "%.0f m %s", e->pos.Dist(g_ui.vm.Location) / 100.0, side < 0 ? "" : sides[side]);
         ImGui::SameLine(xDist); ImGui::TextUnformatted(b);
-        //under Low health from (ESP tab, YOUR HEALTH) the word LOW follows the number, so it is not told by colour alone
-        if (e->isDead) std::snprintf(b, sizeof b, "down");
+        //under Low health from (ESP tab, YOUR HEALTH) the word LOW follows the number, so it is not told by colour alone;
+        //a downed player's amber row says DOWN, a dead one's grey row "down" (all that is known of him, see IsDowned)
+        if (downed) std::snprintf(b, sizeof b, "%s", DOWN_WORD);
+        else if (e->isDead) std::snprintf(b, sizeof b, "down");
         else std::snprintf(b, sizeof b, IsLowHealth(e->playerHealth) ? "%.0f LOW" : "%.0f", e->playerHealth);
         ImGui::SameLine(xHp); ImGui::TextUnformatted(b);
         if (e->hasShield && e->shield >= 1.0) std::snprintf(b, sizeof b, "%.0f", e->shield); else std::snprintf(b, sizeof b, "-");
@@ -218,7 +235,8 @@ inline void DrawInspectWindows() {
                 ui::Note(g_ui.live ? "Not in view right now." : "No live data from the game.");
             } else {
                 char b[160];
-                std::snprintf(b, sizeof b, "%.0f m   -   %s", e->pos.Dist(g_ui.vm.Location) / 100.0, e->isDead ? "down" : "alive");
+                std::snprintf(b, sizeof b, "%.0f m   -   %s", e->pos.Dist(g_ui.vm.Location) / 100.0,
+                              IsDowned(*e) ? "downed" : e->isDead ? "down" : "alive");
                 ImGui::TextUnformatted(b);
                 std::snprintf(b, sizeof b, "Health %.0f", e->playerHealth);
                 std::string line = b;
@@ -254,7 +272,7 @@ inline void DrawInspectWindows() {
                         shown.push_back({&r, listAt.try_emplace(r.category, listAt.size()).first->second, p < 0 ? -1 : p * r.count});
                     }
                     std::stable_sort(shown.begin(), shown.end(), [](const Shown& a, const Shown& b) { return a.list != b.list ? a.list < b.list : a.worth > b.worth; });
-                    if (values && !havePrices) ui::Note("No prices yet: add lines like 'Snap Hook | 14000' to ~/.config/kwin-helper/values.txt");
+                    if (values && !havePrices) ui::Note(("No prices yet: add lines like 'Snap Hook | 14000' to ~/.config/" + std::string(CONFIG_DIR_NAME) + "/values.txt").c_str());
                     else if (havePrices) {
                         long total = 0;
                         int unpriced = 0;

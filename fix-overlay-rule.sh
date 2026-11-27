@@ -27,7 +27,11 @@ if [ -z "$POS" ] || [ -z "$WH" ]; then
 fi
 
 F="${KWINRULES_FILE:-kwinrulesrc}"
-TITLE="KWin Helper"          # must match OVERLAY_NAME in config.h
+# !!! MANUAL SYNC POINT: TITLE must stay BYTE-IDENTICAL to APP_TITLE in utils/identity.h.
+# The overlay's GLFW window is titled with APP_TITLE and the rule below matches on it
+# (titlematch 1). A shell script can't include the C++ header, so if these drift the KWin
+# rule silently stops matching and the overlay sinks under the game. Change both together.
+TITLE="KWin Helper"
 DESC="KWin Helper Fix"
 
 rd() { kreadconfig6 --file "$F" "$@"; }

@@ -14,9 +14,6 @@ https://youtu.be/tiK0ihPw6m8
 Using cmake:
 cmake -B cmake-build-release -DCMAKE_BUILD_TYPE=Release && cmake --build cmake-build-release
 
-NOTE: This will likely fail due to an error about only cmake 3.2 being available. 
-Ask AI/Google how to get the required version (or just change it in CMakeLists.txt, though I am unsure of the consequences).
-
 OR
 
 Google/ask AI how to set up the build utility inside of CLion (Release build).
@@ -107,7 +104,7 @@ cmake -B cmake-build-tests -DKWINHELPER_TESTS=ON && cmake --build cmake-build-te
 
 On a machine without the graphics packages (a container, WSL), use `-DKWINHELPER_TESTS_ONLY=ON` instead: it builds only the tests. The tests always run with `HOME` set to `cmake-build-tests/test-home`, so they never touch your real `~/.config/kwin-helper`.
 
-They cover the name decoders, the label tables, the keyboard layout, the Insert menu (typing, hover ID clashes), a fuzz run over garbage memory, the batched memory reads, the projection and label decluttering, the ESP drawing, and the tracker thread against the old read path (`gamestate_test`).
+The 16 of them cover the name decoders, the label tables, the item sell values, the gun levels (`Stitcher 4`, `AMP Il Toro`), the keyboard layout, the Insert menu (typing, hover ID clashes), saved settings and the offsets file reading back safely, the hand-marked teammates file, a fuzz run over garbage memory, the batched memory reads, the gamescope command line and stretched picture, the projection and label decluttering, the stick-figure maths, the ESP and radar drawing, and the tracker thread against the old read path (`gamestate_test`).
 
 ## How the overlay works now
 

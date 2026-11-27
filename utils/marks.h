@@ -4,6 +4,8 @@
 #ifndef KWINHELPER_MARKS_H
 #define KWINHELPER_MARKS_H
 
+#include "identity.h"   // ::configDir(): one source for ~/.config/kwin-helper
+
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -20,8 +22,7 @@ inline std::set<std::string>& set() { static std::set<std::string> s; return s; 
 inline unsigned& ver() { static unsigned v = 1; return v; }
 inline std::string path(const std::string& dir) {
     if (!dir.empty()) return dir + "/teammates.txt";
-    const char* home = std::getenv("HOME");
-    return std::string(home ? home : ".") + "/.config/kwin-helper/teammates.txt";
+    return ::configDir() + "/teammates.txt";
 }
 inline bool valid(const std::string& a) { return !a.empty() && a.size() <= 32 && a.find_first_of(" \t\r\n") == std::string::npos; }
 } // namespace detail

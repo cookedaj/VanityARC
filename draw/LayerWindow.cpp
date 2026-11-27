@@ -16,6 +16,7 @@
 #include <cstring>
 
 #include "wlr-layer-shell-client.h"
+#include "../utils/identity.h"
 
 struct LayerWindow::Impl {
     wl_display* dpy = nullptr;
@@ -191,7 +192,7 @@ struct LayerWindow::Impl {
         on = target; //nullptr: learned from the surface's enter event
         scale = 1;   //a new surface starts at scale 1
         applyScale();
-        ls = zwlr_layer_shell_v1_get_layer_surface(shell, surf, target, ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY, "kwin-helper");
+        ls = zwlr_layer_shell_v1_get_layer_surface(shell, surf, target, ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY, APP_ID);
         static const zwlr_layer_surface_v1_listener ll = {onConfigure, onClosed};
         zwlr_layer_surface_v1_add_listener(ls, &ll, this);
         zwlr_layer_surface_v1_set_size(ls, 0, 0); //0 + all four edges anchored = the whole output

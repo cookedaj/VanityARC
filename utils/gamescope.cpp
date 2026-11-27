@@ -91,6 +91,13 @@ Info parseArgs(const std::vector<std::string>& argv) {
 
 Info find(pid_t gamePid) {
     if (gamePid <= 0) return {};
+    //Cache the result per game PID: the environ and gamescope parent don't change while the PID lives.
+    static pid_t cachedPid = 0;
+    static Info   cachedInfo;
+    if (gamePid == cachedPid) return cachedInfo;
+    cachedPid  = gamePid;
+    cachedInfo = {};
+
     //gamescope sets GAMESCOPE_WAYLAND_DISPLAY for everything it starts: without it the game is not in a gamescope,
     //whatever other gamescope is running
     static const char key[] = "\0GAMESCOPE_WAYLAND_DISPLAY="; //entries are NUL-separated: match a whole name
@@ -106,7 +113,7 @@ Info find(pid_t gamePid) {
         if (argv.empty()) continue;
         Info in = parseArgs(argv);
         in.pid = p;
-        return in;
+        return cachedInfo = in;
     }
 
     //None of its parents (it was moved to another parent): the gamescope with the highest pid
@@ -123,7 +130,7 @@ Info find(pid_t gamePid) {
         best = parseArgs(argv);
         best.pid = pid;
     }
-    return best;
+    return cachedInfo = best;
 }
 
 } // namespace gamescope

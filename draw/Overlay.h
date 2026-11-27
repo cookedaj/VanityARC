@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cfloat>
 #include <cmath>
+#include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <initializer_list>
@@ -12,6 +13,7 @@
 
 #include "imgui.h"
 
+#include "UiKit.h" //ui::RADIUS, theme::panelBg: the corners and the card black every drawing file shares
 #include "../config.h"
 
 //Set by the window code: true while the menu is open (the overlay then takes the mouse), false otherwise
@@ -45,6 +47,7 @@ inline void LoadOverlayFonts() {
     ImFont* r = regular ? io.Fonts->AddFontFromFileTTF(regular, 15.0f) : nullptr;
     if (!r) r = io.Fonts->AddFontDefaultVector();
     ImFont* b = bold ? io.Fonts->AddFontFromFileTTF(bold, 15.0f) : nullptr;
+    if (!regular && !bold) std::fprintf(stderr, "no system font found, using ImGui fallback\n");
     g_overlayFont = b ? b : r;
 }
 
@@ -125,10 +128,14 @@ constexpr float CARD_PAD_X = 4, CARD_PAD_Y = 2;
 inline float OutlineWidth(float size) { return std::max(1.0f, std::round(size / 12.0f)); }
 //The light border round a card: 1 px, 2 px from 18 px text
 inline float CardBorder(float size) { return size >= 18.0f ? 2.0f : 1.0f; }
+//A card's corners: the controls' radius (UiKit.h), the same at every text size. The text is only CARD_PAD_X and
+//CARD_PAD_Y inside the card's edge however big it is, so a corner that grew with the text (as the padded panels' does,
+//ESP.h PanelRound) would run the border through the first and last letters, and past 10 px leave them outside the card.
+constexpr float CARD_ROUND = ui::RADIUS;
 
 //Text centred on x. Plain: white with a black outline, readable over any background. Card: on a nearly solid dark
-//rectangle with a light border. Never wider than the screen (see FitSize). dl: where to draw (null: the background
-//list, under the menu)
+//card with rounded corners and a light border. Never wider than the screen (see FitSize). dl: where to draw (null: the
+//background list, under the menu)
 inline void DrawLabelCentered(float x, float y, const char* text, float size = 15.0f, ImU32 color = IM_COL32(255, 255, 255, 255), bool card = false,
                               ImDrawList* dl = nullptr) {
     ImFont* font = OverlayFont();
@@ -141,11 +148,17 @@ inline void DrawLabelCentered(float x, float y, const char* text, float size = 1
     if (!dl) dl = ImGui::GetBackgroundDrawList();
     if (card) {
         const ImVec2 a(p.x - CARD_PAD_X, p.y - CARD_PAD_Y), b(p.x + ts.x + CARD_PAD_X, p.y + ts.y + CARD_PAD_Y);
-        dl->AddRectFilled(a, b, Fade(IM_COL32(0, 0, 0, 230)));
+        //the fill without ImGui's soft fringe (half a pixel past a rounded shape's edge): the card ends exactly at a and
+        //b, the room labels keep free for it, and its straight edges are as sharp as the square card's were
+        const ImDrawListFlags flags = dl->Flags;
+        dl->Flags &= ~ImDrawListFlags_AntiAliasedFill;
+        dl->AddRectFilled(a, b, Fade(theme::panelBg), CARD_ROUND);
+        dl->Flags = flags;
         //the border lies 1 px inside the card's edge (its soft edge reaches no further out than the card), so the card
-        //takes no more room than before and keeps a thin dark line round the light one
+        //takes no more room than before and keeps a thin dark line round the light one; its corners turn round the same
+        //middle as the card's, so that line is as thin there
         const float t = CardBorder(size), in = t / 2 + 0.5f;
-        dl->AddRect(ImVec2(a.x + in, a.y + in), ImVec2(b.x - in, b.y - in), Fade(IM_COL32(210, 210, 210, 255)), 0.0f, 0, t);
+        dl->AddRect(ImVec2(a.x + in, a.y + in), ImVec2(b.x - in, b.y - in), Fade(IM_COL32(210, 210, 210, 255)), CARD_ROUND - in - 0.5f, 0, t);
         dl->AddText(font, size, p, Fade(color), text);
         return;
     }

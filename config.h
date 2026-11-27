@@ -15,6 +15,7 @@ namespace config {
     inline bool showPlayers = true;
     inline bool showArc = true;
     inline bool showPickups = true;     //items on the ground
+    inline bool& showGroundItems = showPickups; //the same switch under its menu name ("Ground items"): one value, saved as showPickups
     inline bool showContainers = true;  //lootable containers
     inline bool showDeadPlayers = true;
     inline bool showDeadArc = true;
@@ -58,10 +59,21 @@ namespace config {
     inline bool showSelfHealth = true;     //your own health and shield in big text at the bottom left, and a LOW HEALTH card below lowHealthFrom
     inline double lowHealthFrom = 35;      //ESP tab, YOUR HEALTH, "Low health from": under this the LOW HEALTH card shows and "Low health" is said (10 to 90)
     inline bool showFacing = true;         //an arrow in each player's box and a line on each radar dot: the way they face
+    inline bool showBoxes = true;          //the box around a live player. Off: no box where his skeleton is drawn; a player whose skeleton
+                                           //is not drawn (switch off, no pose, beyond skeletonMaxDist) keeps a full box, as with boxStyle 3,
+                                           //so nobody is ever left unmarked. His bars, name and facing arrow stay either way.
     inline bool showSkeleton = true;       //a stick figure on players (the box stays; players without a readable pose get the box only)
+    inline bool& showSkeletons = showSkeleton; //the same switch, plural name: one value, saved as showSkeleton
     inline double skeletonMaxDist = 120;   //m, further players only get the box: the pose is read for nearer ones only
     inline double headMarker = 1;          //ESP tab, SKELETON, "Head marker": 0 a ring, 1 a filled disc with a dark edge
     inline double skeletonColor = 0;       //ESP tab, SKELETON, "Skeleton colour": 0 same as the box, 1 white, 2 yellow
+    //Colours of the other markers: 0 is the colour they always had; 1 to 5 are boxColor's (1 white, 2 yellow, 3 blue, 4 green,
+    //5 violet; no red, that is the enemies'). Monochrome overrides them all, as it does boxColor.
+    inline double arcColor = 0;            //live ARC, their edge arrows and radar dots: 0 orange (destroyed ARC keep their greyish orange)
+    inline double containerColor = 0;      //containers: 0 green
+    inline double itemColor = 0;           //ground items: 0 cyan (kind colours and the valuable gold still win)
+    inline float markerScale = 1.0f;       //size of the ARC, container, ground item and down-player markers, times SizeScale(): 1 (as before,
+                                           //and the smallest allowed) to 3. Only ever bigger than today.
     inline float overlayOpacity = 1.0f;    //everything the overlay draws (menu excluded) is multiplied by this
     inline double trackerHz = 120;         //how often players and ARC are read (30 to 240)
     inline double listMode = 1;            //player list at the bottom: 0 off, 1 always, 2 only while the menu is open
@@ -116,8 +128,6 @@ namespace config {
     // Markers off near the screen edge? Insert menu > Settings > Calibration: flip "FOV is horizontal", then adjust "Zoom".
     inline int SCREEN_H = 1440;
     inline int SCREEN_W = 2560;
-
-    inline const auto OVERLAY_NAME = "KWin Helper"; //Name of the overlay
 
 }
 

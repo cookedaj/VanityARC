@@ -57,7 +57,7 @@ int main() {
 
     ImGuiWindow* w = ImGui::FindWindowByName("kwin-helper");
     CHECK(w != nullptr, "menu window exists");
-    g_MenuTab = 4; //the Settings page (it has the game view part too)
+    g_MenuTab = 3; //the Settings page (it has the game view part too)
     g_OverlayNote = "Monitor 'DP-9' not found (have: DP-1)\nThe desktop chose the monitor"; //the overlay window part shows it
     for (int i = 0; i < 3; i++) frame([] { DrawMenu(); });
     CHECK(true, "menu draws the Settings page");
@@ -432,32 +432,7 @@ int main() {
                 CHECK(hovered.count(sw("Ground items")) && hovered.count(sw("Guns")) && hovered.count(sw("Containers")) &&
                       hovered.count(sw("Other##box")) && hovered.count(sw("Medical##box")), msg);
             }
-            if (tab == 2) { //the rows of players in view scroll sideways in a box of their own, and 'mark' can be reached
-                ImGuiWindow* rows = nullptr;
-                for (ImGuiWindow* win : G->Windows) if (std::strstr(win->Name, "##rows")) rows = win;
-                bool reached = false;
-                if (rows) {
-                    ImGui::SetScrollY(rows->ParentWindow, rows->ParentWindow->ScrollMax.y); //the rows are at the page's end
-                    frame([] { DrawMenu(); }); frame([] { DrawMenu(); });
-                    ImGui::SetScrollX(rows, rows->ScrollMax.x);
-                    frame([] { DrawMenu(); }); frame([] { DrawMenu(); });
-                    const void* rowPtr = (const void*)fake[1].actor; //an enemy with an account: his row has a 'mark' button
-                    const ImGuiID markId = ImGui::GetIDWithSeed("mark", nullptr, ImHashData(&rowPtr, sizeof rowPtr, rows->ID));
-                    const float k = text / ui::BASE_TEXT;
-                    for (float y = rows->Pos.y + 2; y < rows->Pos.y + rows->Size.y && !reached; y += 5 * k)
-                        for (float x = rows->Pos.x + 4; x < rows->Pos.x + rows->Size.x && !reached; x += 9 * k) {
-                            io.AddMousePosEvent(x, y);
-                            frame([] { DrawMenu(); }); frame([] { DrawMenu(); });
-                            reached = G->HoveredId == markId;
-                        }
-                    io.AddMousePosEvent(-1000, -1000);
-                    ImGui::SetScrollX(rows, 0); ImGui::SetScrollY(rows->ParentWindow, 0);
-                    frame([] { DrawMenu(); }); frame([] { DrawMenu(); });
-                }
-                std::snprintf(msg, sizeof msg, "Players tab (menu text %.0f px, %d wide): the rows have a sideways scrollbar and the mouse reaches 'mark'", text, config::SCREEN_W);
-                CHECK(rows && rows->ScrollbarX && reached, msg);
-            }
-            if (tab == 4) {
+            if (tab == 3) {
                 std::snprintf(msg, sizeof msg, "Settings tab (menu text %.0f px): the mouse reaches Menu text size, the calibration step buttons and Quit", text);
                 CHECK(hovered.count(slider("Menu text size")) && hovered.count(in("Zoom steps", "+0.01")) && hovered.count(in("Shift X steps", "-10")) &&
                       hovered.count(in("Shift Y steps", "+10")) && hovered.count(in("Reset calibration", "###arm")) && hovered.count(ImGui::GetIDWithSeed("Quit overlay", nullptr, pageId)), msg);

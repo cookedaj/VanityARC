@@ -7,6 +7,7 @@
 #include "utils/labels.h"
 #include "utils/localUtil.h"
 #include "utils/names.h"
+#include "utils/obfstr.h"
 #include "utils/skeleton.h"
 
 #include <algorithm>
@@ -66,7 +67,7 @@ bool isDA(ptr p) { return nm(p).rfind("DA_", 0) == 0; }
 std::string gunTag(uint64_t v) {
     std::string s = tag(v);
     const std::string n = ptrLike(v) && isObject((ptr)v) ? names::name((ptr)v) : std::string();
-    for (const char* p : {"DA_Item_", "BP_WeaponActor_", "DA_WeaponVisuals_"})
+    for (const std::string& p : {OBF("DA_Item_"), OBF("BP_WeaponActor_"), OBF("DA_WeaponVisuals_")})
         if (n.rfind(p, 0) == 0) {
             const int l = amp::gunLevel(n).level;
             s += l >= 5 ? " [AMP]" : l > 0 ? " [level " + std::to_string(l) + "]" : std::string(" [no level in name]");
@@ -356,7 +357,7 @@ void runNameProbe(const std::vector<RenderEntity>& ents, const std::vector<Rende
 
     probePlayers(out, players, me ? me->actor : 0, playerNames, accountIds);
 
-    std::fprintf(out, "ARC TYPES (EnemyTypeDataAsset @actor+0x%X; sample = nearest actor of that type)\n", off::ARC_TYPE_ASSET);
+    std::fprintf(out, "ARC TYPES (%s @actor+0x%X; sample = nearest actor of that type)\n", OBF("EnemyTypeDataAsset").c_str(), off::ARC_TYPE_ASSET);
     for (auto& kv : arc) {
         arcTypes.total += kv.second.count;
         if (isDA(kv.first)) arcTypes.ok += kv.second.count;
@@ -396,7 +397,32 @@ void runNameProbe(const std::vector<RenderEntity>& ents, const std::vector<Rende
 // Live probes: KWINHELPER_PROBE=<names>, see announceLiveProbe; set before starting (see the README). Read only.
 //==============================================================================================
 #ifdef KWINHELPER_PROBES //the offset-finding probes: not in the release build (cmake -DKWINHELPER_PROBES=ON)
+#include <cstdarg>
 namespace {
+
+//The loot and downed probes below stream their copy-paste lines to stdout AND append them to
+//~/.config/kwin-helper/probe-offsets.txt (the same ~/.config/kwin-helper spot runNameProbe uses for probe-names.txt),
+//so a found offset survives the console scrollback. Append, not atomic-replace: these two probes report one event at a
+//time as it happens, rather than rewriting a whole report each tick. Opened lazily; if the file can't be opened (dir
+//missing, read-only) the probe just prints to stdout.
+FILE* probeOffsetsFile() {
+    static FILE* f = [] {
+        const char* home = std::getenv("HOME");
+        const std::string p = std::string(home ? home : ".") + "/.config/kwin-helper/probe-offsets.txt";
+        FILE* g = std::fopen(p.c_str(), "a");
+        if (g) std::fprintf(g, "\n# === probe-offsets.txt: loot / downed probe run ===\n");
+        return g;
+    }();
+    return f;
+}
+
+//printf to the console (out) and, when it opens, to probe-offsets.txt: every line worth copying back goes through here
+__attribute__((format(printf, 2, 3)))
+void tee(FILE* out, const char* fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt); std::vfprintf(out, fmt, ap); va_end(ap);
+    if (FILE* f = probeOffsetsFile()) { va_start(ap, fmt); std::vfprintf(f, fmt, ap); va_end(ap); std::fflush(f); }
+}
 
 //Every object the pawn points to between +0x300 and +0x1400 (its components), with where the pointer sits
 struct Comp { int pawnOff; ptr obj; };
@@ -962,6 +988,145 @@ void gunLevelProbe(ptr localPawn, const std::vector<RenderEntity>& ents, const F
     std::fflush(out);
 }
 
+//Loot: the "hide looted containers" feature needs one offset that says "this container has been searched / emptied".
+//The overlay reads no per-instance container state today (only the class name, once), so this finds it. Watch the
+//SEARCH containers near you (the actor and its components): a byte that flips 0 -> 1 is a candidate "looted/searched"
+//flag; a TArray whose Num drops to 0 is the contents emptying. Walk up, loot a container, and see which byte flips.
+//This mirrors flagProbe (0/1 bytes over time) but over containers, and adds the contents-array check from the
+//feasibility note. Read only.
+//CRITICAL WORLD-CONSISTENCY CHECK (stated on screen too): also watch a container SOMEONE ELSE loots — leave one and have
+//a squadmate open it, or loot one, walk off, and come back. This probe watches EVERY container near you and prints the
+//container's address with each flip, so you can tell a self-looted one from a someone-else one. If the flip only ever
+//happens for containers YOU open, the flag is client-local and hide-looted is UNRELIABLE -> drop the feature. It is safe
+//only if the flag also flips for a container you never touched.
+//Where a confirmed offset goes: utils/offsets.h  live::containerLooted (a byte offset on a SEARCH actor, default -1 =
+//off; parse "container_looted <off>" in live::load, reset in live::reset), read per in-range container in
+//gamestate/Fast.cpp where the static positions are batch-read, then gate the draw in draw/ESP.h (the SEARCH branch).
+void lootProbe(const std::vector<RenderEntity>& ents, const FminimalViewInfo& vm, FILE* out) {
+    constexpr double WATCH_M = 8.0; //containers this close are watched; the count is capped so the reads stay cheap
+    struct ByteW { uint8_t last; int flips; };
+    struct ArrW  { int last; bool reported; };
+    struct Can   { std::unordered_map<uint32_t, ByteW> b; std::unordered_map<uint32_t, ArrW> a; };
+    static std::unordered_map<ptr, Can> watch; //per container actor; key32 = (region << 16) | offset, region 0 = the actor, else a component's pawn-offset
+    static bool intro = false;
+    if (!intro) {
+        intro = true;
+        tee(out, "\n=== LOOT PROBE: watching SEARCH containers within %.0f m (read only) ===\n", WATCH_M);
+        tee(out, "  Walk up to a container and LOOT it. A byte that flips 0 -> 1 is the candidate 'looted/searched' flag; a\n");
+        tee(out, "  contents TArray whose Num drops to 0 is the other candidate. Each line names the container's address.\n");
+        tee(out, "  CRITICAL: also watch a container SOMEONE ELSE loots (leave one, have a squadmate open it, or loot-walk-return).\n");
+        tee(out, "  If the flip only happens for containers YOU open, the flag is client-local and hide-looted is unreliable -> drop it.\n");
+        tee(out, "  Confirmed offset -> utils/offsets.h live::containerLooted (byte on a SEARCH actor); then gate draw/ESP.h.\n");
+    }
+    std::vector<std::pair<double, ptr>> cans;
+    for (const RenderEntity& e : ents)
+        if (e.type == Object::SEARCH) { const double d = e.pos.Dist(vm.Location) / 100.0; if (d <= WATCH_M) cans.push_back({d, e.actor}); }
+    std::sort(cans.begin(), cans.end());
+    if (cans.size() > 10) cans.resize(10);
+
+    auto scan = [&](ptr actor, double dist, int region, const std::vector<uint8_t>& blk) {
+        Can& c = watch[actor];
+        for (size_t o = 0x28; o < blk.size(); o++) { //a byte that flips 0 -> 1: the looted / searched flag
+            const uint32_t k = ((uint32_t)region << 16) | (uint32_t)o;
+            auto it = c.b.find(k);
+            if (it == c.b.end()) { c.b[k] = {blk[o], 0}; continue; }
+            ByteW& w = it->second;
+            if (blk[o] == w.last) continue;
+            const uint8_t from = w.last; w.last = blk[o]; w.flips++;
+            if (from == 0 && blk[o] == 1 && w.flips <= 4) {
+                if (region == 0) tee(out, "  [%.1f m] container 0x%lx  +0x%zx  0 -> 1   <- candidate looted flag (offsets.txt: container_looted 0x%zx)\n", dist, (unsigned long)actor, o, o);
+                else             tee(out, "  [%.1f m] container 0x%lx  component @actor+0x%x -> +0x%zx  0 -> 1   <- candidate looted flag (in a sub-component)\n", dist, (unsigned long)actor, region, o);
+            }
+        }
+        for (size_t o = 0; o + 16 <= blk.size(); o += 8) { //a contents TArray {data ptr, int Num, int Max} whose Num drops to 0
+            uint64_t data = q64(blk, o); int32_t num = 0, mx = 0;
+            std::memcpy(&num, &blk[o + 8], 4); std::memcpy(&mx, &blk[o + 12], 4);
+            const uint32_t k = ((uint32_t)region << 16) | (uint32_t)o;
+            auto it = c.a.find(k);
+            const bool looksFull = ptrLike(data) && num >= 1 && num <= 64 && mx >= num && mx <= 1024; //a populated contents array
+            if (it == c.a.end()) { if (looksFull) c.a[k] = {num, false}; continue; } //only start tracking arrays that had items
+            ArrW& w = it->second;
+            if (num == 0 && w.last > 0 && !w.reported) { //cleared (data may be nulled too): the looted signal
+                w.reported = true;
+                if (region == 0) tee(out, "  [%.1f m] container 0x%lx  TArray +0x%zx  Num %d -> 0   <- candidate contents array (looted = Num==0)\n", dist, (unsigned long)actor, o, w.last);
+                else             tee(out, "  [%.1f m] container 0x%lx  TArray in component @actor+0x%x -> +0x%zx  Num %d -> 0   <- candidate contents array\n", dist, (unsigned long)actor, region, o, w.last);
+            } else if (looksFull) { w.last = num; w.reported = false; } //still / again has items
+        }
+    };
+    for (const auto& cd : cans) {
+        const ptr actor = cd.second;
+        scan(actor, cd.first, 0, readBlock(actor, 0x1400)); //the actor's own fields (covers the 0x300..0x1400 census range and below it)
+        for (const Comp& comp : componentsOf(actor)) scan(actor, cd.first, comp.pawnOff, readBlock(comp.obj, 0x600)); //and a storage sub-component
+    }
+    std::fflush(out);
+}
+
+//Downed vs dead: the overlay sets isDead = (player health < 1) (gamestate/Fast.cpp, "t.ent.isDead = t.ent.playerHealth < 1").
+//A knocked / downed player (alive, awaiting revive or finish) and a dead body BOTH read health 0, so they look the same
+//and cannot be told apart. This finds the field that distinguishes them. Watch the nearest DOWN players (health < 1):
+//snapshot their small byte fields when first seen down (the KNOCKED baseline), then report any byte that changes to a
+//new value while they stay down (the KNOCKED -> DEAD transition: finish or bleed-out). For each candidate it prints the
+//knocked value, the dead value, and the SAME byte read from a nearby ALIVE player, so you can pick the field that reads
+//three distinct stable values (alive / knocked / dead) or a clean bool. diffScan-style over the player actor + its
+//components, like flagProbe. Read only.
+//On screen: walk near a knocked (downed, not finished) enemy, watch the probe, then let him bleed out or be finished.
+//No keypress is needed -- the actual death IS the signal; the byte that changes at that moment is the one.
+//Where a confirmed field goes: a new live:: offset read in gamestate/Fast.cpp right by "isDead = playerHealth < 1";
+//keep isDead and add isKnocked (RenderEntity + the draw) so a down player splits into knocked vs dead.
+void downedProbe(ptr localPawn, const std::vector<RenderEntity>& ents, const FminimalViewInfo& vm, FILE* out) {
+    struct ByteW { uint8_t knocked; uint8_t last; int changes; };
+    struct Tgt   { std::unordered_map<uint32_t, ByteW> b; };
+    static std::unordered_map<ptr, Tgt> down; //per down player; key32 = (region << 16) | offset, region 0 = the pawn, else a component's pawn-offset
+    static bool intro = false;
+    if (!intro) {
+        intro = true;
+        tee(out, "\n=== DOWNED PROBE: telling a KNOCKED player from a DEAD one (both read health 0) (read only) ===\n");
+        tee(out, "  Walk near a knocked (downed, revivable) enemy, then let him bleed out or be finished. For each small byte\n");
+        tee(out, "  that changes while he stays down, the knocked value, the dead value and a nearby ALIVE player's value are\n");
+        tee(out, "  printed: pick the field that reads three distinct stable values (alive / knocked / dead), or a clean bool.\n");
+        tee(out, "  No keypress: the death itself is the signal. Confirmed field -> a new live:: offset read in gamestate/Fast.cpp\n");
+        tee(out, "  by 'isDead = playerHealth < 1' (keep isDead, add isKnocked).\n");
+    }
+    //nearest ALIVE player, so each candidate line can show what the same byte reads when a player is up (alive != knocked)
+    ptr alive = 0; double aliveD = 1e18;
+    for (const RenderEntity& e : ents)
+        if (e.type == Object::PLAYER && e.actor != localPawn && !e.isDead) { const double d = e.pos.Dist(vm.Location); if (d < aliveD) { aliveD = d; alive = e.actor; } }
+    auto aliveByte = [&](int region, size_t o) -> int {
+        if (!alive) return -1;
+        ptr base = alive;
+        if (region != 0) { base = ReadMemory<ptr>(alive + region); if (!isValidPtr(base)) return -1; }
+        if (!isValidPtr(base + o)) return -1;
+        return (int)ReadMemory<uint8_t>(base + o);
+    };
+
+    for (const RenderEntity& e : ents) {
+        if (e.type != Object::PLAYER || e.actor == localPawn) continue;
+        if (!e.isDead) { down.erase(e.actor); continue; } //up (or revived): forget the baseline so the next knock re-baselines
+        const double dist = e.pos.Dist(vm.Location) / 100.0;
+        Tgt& t = down[e.actor];
+        auto scan = [&](int region, const std::vector<uint8_t>& blk) {
+            for (size_t o = 0x28; o < blk.size(); o++) {
+                const uint8_t v = blk[o];
+                if (v > 16) continue; //only small bool / enum-like bytes: a state flag, not a counter or pointer byte. ponytail: cap 16; raise if a wider state enum is suspected
+                const uint32_t k = ((uint32_t)region << 16) | (uint32_t)o;
+                auto it = t.b.find(k);
+                if (it == t.b.end()) { t.b[k] = {v, v, 0}; continue; } //first sight while down = the knocked baseline
+                ByteW& w = it->second;
+                if (v == w.last) continue;
+                w.last = v; w.changes++;
+                if (v != w.knocked && w.changes <= 3) { //changed away from the knocked value while still down = the dead state
+                    const int a = aliveByte(region, o);
+                    if (region == 0) tee(out, "  [%.1f m] player 0x%lx  +0x%zx  knocked %u  dead %u  alive %d   <- candidate downed/dead field (actor+0x%zx)\n", dist, (unsigned long)e.actor, o, w.knocked, v, a, o);
+                    else             tee(out, "  [%.1f m] player 0x%lx  component @pawn+0x%x -> +0x%zx  knocked %u  dead %u  alive %d   <- candidate (in a sub-component)\n", dist, (unsigned long)e.actor, region, o, w.knocked, v, a);
+                }
+            }
+        };
+        scan(0, readBlock(e.actor, 0x1400)); //the pawn's own fields
+        for (const Comp& comp : componentsOf(e.actor)) scan(comp.pawnOff, readBlock(comp.obj, 0x600)); //and its components (incl. the health component)
+    }
+    std::fflush(out);
+}
+
 } // namespace
 
 //Team and local player: for you and the nearest players, the team byte, the pointers that should only be set on the pawn you
@@ -999,20 +1164,25 @@ void teamProbe(ptr localPawn, const std::vector<RenderEntity>& ents, const Fmini
 //whole raid with no output. Same substring test as runLiveProbe below; mode is already lower-case.
 void announceLiveProbe(const std::string& mode, FILE* out) {
     static const char* const known[] = {"mesh", "shield", "bones", "flags", "rendertime", "stance", "team", "inventory", "gunlevel"};
+    static const char* const extra[] = {"loot", "downed"}; //the two offset-finding probes added later; kept out of the "known:" line so its text is unchanged, but still recognised so they run and are not warned about
+    auto matches = [&](const std::string& tok) {
+        for (const char* k : known) if (tok.find(k) != std::string::npos) return true;
+        for (const char* k : extra) if (tok.find(k) != std::string::npos) return true;
+        return false;
+    };
     std::string running, all;
     for (const char* k : known) {
         all += std::string(all.empty() ? "" : " ") + k;
         if (mode.find(k) != std::string::npos) running += std::string(running.empty() ? "" : ", ") + k;
     }
+    for (const char* k : extra) if (mode.find(k) != std::string::npos) running += std::string(running.empty() ? "" : ", ") + k;
     std::fprintf(out, "[probe] running: %s\n", running.empty() ? "nothing (no known name)" : running.c_str());
     std::string tok;
     for (size_t i = 0; i <= mode.size(); i++) { //a name is a run of letters: "shield,inventory" and "shield inventory" both work
         const char c = i < mode.size() ? mode[i] : ',';
         if (c >= 'a' && c <= 'z') { tok += c; continue; }
         if (tok.empty()) continue;
-        bool hit = false;
-        for (const char* k : known) hit = hit || tok.find(k) != std::string::npos;
-        if (!hit) std::fprintf(out, "[probe] unknown name \"%s\" is ignored (known: %s)\n", tok.c_str(), all.c_str());
+        if (!matches(tok)) std::fprintf(out, "[probe] unknown name \"%s\" is ignored (known: %s)\n", tok.c_str(), all.c_str());
         tok.clear();
     }
     std::fflush(out);
@@ -1040,6 +1210,8 @@ void runLiveProbe(const std::string& mode, ptr localPawn, const std::vector<Rend
     if (mode.find("stance") != std::string::npos) stanceProbe(localPawn, ents, vm, out);
     if (mode.find("team") != std::string::npos) teamProbe(localPawn, ents, vm, out);
     if (mode.find("gunlevel") != std::string::npos) gunLevelProbe(localPawn, ents, vm, out);
+    if (mode.find("loot") != std::string::npos) lootProbe(ents, vm, out);           //hide-looted-containers: finds the "searched" flag / emptied contents array
+    if (mode.find("downed") != std::string::npos) downedProbe(localPawn, ents, vm, out); //knocked vs dead: finds the field that splits a downed player from a dead body
     if (mode.find("inventory") != std::string::npos) {
         static int round = 0;
         if (round++ % 4) return; //every 8 s: the report is long

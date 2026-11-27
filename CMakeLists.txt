@@ -109,10 +109,16 @@ target_compile_options(kwin-helper PRIVATE ${KWINHELPER_WARNINGS})
 if(KWINHELPER_PROBES)
     target_compile_definitions(kwin-helper PRIVATE KWINHELPER_PROBES)
 endif()
-if(CMAKE_BUILD_TYPE STREQUAL "Release")
-    target_compile_options(kwin-helper PRIVATE -ffunction-sections -fdata-sections)
-    target_link_options(kwin-helper PRIVATE -s -Wl,--gc-sections)
-endif()
+target_compile_definitions(kwin-helper PRIVATE $<$<CONFIG:Release>:IMGUI_DISABLE_DEBUG_TOOLS>)
+target_compile_options(kwin-helper PRIVATE -ffunction-sections -fdata-sections)
+target_link_options(kwin-helper PRIVATE -s -Wl,--gc-sections -Wl,--build-id=none)
+# Binary hardening (main target only; the tests above don't get these).
+target_compile_options(kwin-helper PRIVATE -fstack-protector-strong -fPIE -fcf-protection=full)
+# _FORTIFY_SOURCE needs optimisation (warns/breaks at -O0), so Release-only, matching IMGUI_DISABLE_DEBUG_TOOLS above.
+target_compile_definitions(kwin-helper PRIVATE $<$<CONFIG:Release>:_FORTIFY_SOURCE=2>)
+target_link_options(kwin-helper PRIVATE -pie -Wl,-z,relro -Wl,-z,now -Wl,-z,noexecstack)
+add_custom_command(TARGET kwin-helper POST_BUILD
+    COMMAND strip -R .comment "$<TARGET_FILE:kwin-helper>")
 endif() # NOT KWINHELPER_TESTS_ONLY
 # --- Headless tests (they need no game and no display): cmake -B cmake-build-tests -DKWINHELPER_TESTS=ON
 option(KWINHELPER_TESTS "Build the headless tests" OFF)
@@ -149,4 +155,29 @@ if(KWINHELPER_TESTS OR KWINHELPER_TESTS_ONLY)
             ${IMGUI_DIR}/imgui.cpp ${IMGUI_DIR}/imgui_draw.cpp ${IMGUI_DIR}/imgui_tables.cpp ${IMGUI_DIR}/imgui_widgets.cpp)
     kwinhelper_test(esp_test utils/labels.cpp utils/itemvalues.cpp
             ${IMGUI_DIR}/imgui.cpp ${IMGUI_DIR}/imgui_draw.cpp ${IMGUI_DIR}/imgui_tables.cpp ${IMGUI_DIR}/imgui_widgets.cpp)
+
+    # Test gate: assert N>0 passed and 0 failed (ctest exits 0 when no tests exist; --no-tests=error needs 3.26+)
+    file(WRITE ${CMAKE_BINARY_DIR}/test_gate.cmake [=[
+execute_process(
+    COMMAND "${CTEST}" --test-dir "${DIR}" --output-on-failure
+    RESULT_VARIABLE rc OUTPUT_VARIABLE out)
+message("${out}")
+string(REGEX MATCH "([0-9]+) tests? passed" _ "${out}")
+set(passed "${CMAKE_MATCH_1}")
+string(REGEX MATCH "([0-9]+) tests? failed" _ "${out}")
+set(failed "${CMAKE_MATCH_1}")
+if(NOT passed OR passed EQUAL 0)
+    message(FATAL_ERROR "GATE: 0 tests passed")
+endif()
+if(failed AND NOT failed EQUAL 0)
+    message(FATAL_ERROR "GATE: ${failed} test(s) failed")
+endif()
+message("GATE OK: ${passed} passed, ${failed} failed")
+]=])
+    add_custom_target(check
+        COMMAND ${CMAKE_COMMAND}
+            -DCTEST=${CMAKE_CTEST_COMMAND}
+            -DDIR=${CMAKE_BINARY_DIR}
+            -P ${CMAKE_BINARY_DIR}/test_gate.cmake
+        VERBATIM)
 endif()

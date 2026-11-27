@@ -81,10 +81,13 @@ inline Vector3 headCentre(const Pose& p) {
 }
 
 //How thick the stick figure's lines are, in px. boxH: how tall his box would be standing at his distance, so the lines
-//grow as he comes closer (about 7 px at 5 m on a 1440p screen). Never thinner than the box's own lines (th), never
-//thinner when he is closer, and at most MAX_LINE px (or th, if that is more).
+//grow as he comes closer (1/50 of that height: about 4 px at 10 m on a 1440p screen). Never thinner than the box's own
+//lines (th), never thinner when he is closer, and at most MAX_LINE px (or th, if that is more). The cap is reached
+//about 6 m away on a 1440p screen (a box 300 px tall): nearer than that the figure grows and its lines do not, so a
+//player next to you is not drawn with fat limbs. (It was 12 px: with the dark edge and the wrist dots the drawing adds,
+//bars 16 px wide and wrists 26 px. Up to 6 px nothing changed, so no figure further away got thinner.)
 constexpr float LINE_PER_PX = 1.0f / 50.0f;
-constexpr float MAX_LINE = 12.0f;
+constexpr float MAX_LINE = 6.0f;
 inline float thickness(float th, float boxH) {
     const float t = std::isfinite(boxH) ? boxH * LINE_PER_PX : th;
     return std::clamp(t, th, std::max(th, MAX_LINE));

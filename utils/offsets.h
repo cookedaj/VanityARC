@@ -6,6 +6,8 @@
 #ifndef KWINHELPER_OFFSETS_H
 #define KWINHELPER_OFFSETS_H
 
+#include "identity.h"   // ::configDir(): one source for ~/.config/kwin-helper
+
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -35,8 +37,7 @@ inline std::vector<InvArray> invArrays = builtInArrays();
 
 inline std::string path(const std::string& dir = "") {
     if (!dir.empty()) return dir + "/offsets.txt";
-    const char* home = std::getenv("HOME");
-    return std::string(home ? home : ".") + "/.config/kwin-helper/offsets.txt";
+    return ::configDir() + "/offsets.txt";
 }
 
 inline void reset() {

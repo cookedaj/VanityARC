@@ -27,6 +27,7 @@
 #include <unistd.h>
 #include <utility>
 #include <vector>
+#include "identity.h"
 
 //Set by the Insert key or SIGUSR1; the main loop clears it
 inline std::atomic<bool> g_MenuToggle{false};
@@ -182,7 +183,7 @@ inline void HotkeyRun() {
         } else {
             std::printf("[!] Insert hotkey is off: no keyboard found.\n");
         }
-        std::printf("    Meanwhile you can toggle the menu with:  pkill -USR1 -x kwin-helper\n");
+        std::printf("    Meanwhile you can toggle the menu with:  pkill -USR1 -x %s\n", APP_ID);
     } else {
         std::printf("[+] Press Insert to open the menu (%zu keyboard device%s)\n", fds.size(), fds.size() == 1 ? "" : "s");
     }
@@ -244,7 +245,7 @@ inline std::thread StartHotkey() { //SIGUSR1/SIGUSR2 handlers are installed in m
         return std::thread(HotkeyThread);
     } catch (const std::exception& e) { //no thread (out of threads or memory): the overlay runs on without the hotkeys
         std::fprintf(stderr, "[!] Insert hotkey is off: its thread could not start (%s).\n"
-                             "    Toggle the menu with:  pkill -USR1 -x kwin-helper\n", e.what());
+                             "    Toggle the menu with:  pkill -USR1 -x %s\n", e.what(), APP_ID);
         return std::thread(); //not joinable: main() skips the join
     }
 }

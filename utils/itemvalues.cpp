@@ -1,5 +1,7 @@
 #include "itemvalues.h"
 
+#include "identity.h"   // ::configDir(): one source for ~/.config/kwin-helper
+
 #include <algorithm>
 #include <cctype>
 #include <chrono>
@@ -32,9 +34,8 @@ std::string& dirOverride() {
 }
 
 std::string configDir() {
-    if (!dirOverride().empty()) return dirOverride();
-    const char* home = std::getenv("HOME");
-    return std::string(home ? home : ".") + "/.config/kwin-helper";
+    if (!dirOverride().empty()) return dirOverride(); //tests only (setDir); default path comes from identity.h
+    return ::configDir();
 }
 
 //Lookup key: letters and digits only, lower case, so "Lance's Mixtape (5th edition)" and "(5th Edition)" match. A name

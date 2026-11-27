@@ -1,5 +1,8 @@
 #include "labels.h"
 
+#include "identity.h"   // ::configDir(): one source for ~/.config/kwin-helper
+#include "obfstr.h"     // OBF(): game asset-name prefixes are XOR-obfuscated, not plaintext in the binary
+
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
@@ -22,9 +25,8 @@ std::string g_dir;
 std::mutex g_mu;
 
 std::string configDir() {
-    if (!g_dir.empty()) return g_dir;
-    const char* home = std::getenv("HOME");
-    return std::string(home ? home : ".") + "/.config/kwin-helper";
+    if (!g_dir.empty()) return g_dir; //tests only (setDir); default path comes from identity.h
+    return ::configDir();
 }
 
 std::string lower(std::string s) {
@@ -39,13 +41,13 @@ std::string norm(const std::string& s) {
     return o;
 }
 
-bool startsWith(const std::string& s, const char* p) { return s.compare(0, std::char_traits<char>::length(p), p) == 0; }
+bool startsWith(const std::string& s, const std::string& p) { return s.compare(0, p.size(), p) == 0; }
 
 std::string stripPrefix(std::string s) {
-    static const char* prefixes[] = {"DA_EnemyType_", "DA_Item_", "DA_WeaponVisuals_", "BP_WeaponActor_", "BP_SocketContainer_",
-                                     "BP_SalvageContainer_", "BP_PickupBase_", "DA_"};
-    for (const char* p : prefixes)
-        if (startsWith(s, p)) { s.erase(0, std::char_traits<char>::length(p)); break; }
+    static const std::string prefixes[] = {OBF("DA_EnemyType_"), OBF("DA_Item_"), OBF("DA_WeaponVisuals_"), OBF("BP_WeaponActor_"),
+                                           OBF("BP_SocketContainer_"), OBF("BP_SalvageContainer_"), OBF("BP_PickupBase_"), "DA_"};
+    for (const std::string& p : prefixes)
+        if (startsWith(s, p)) { s.erase(0, p.size()); break; }
     if (s.size() > 2 && s.compare(s.size() - 2, 2, "_C") == 0) s.erase(s.size() - 2);
     return s;
 }
@@ -472,9 +474,9 @@ const char* catName(Cat c) {
 
 std::string itemToken(const std::string& raw) {
     std::string s = raw;
-    static const char* prefixes[] = {"DA_Item_", "DA_WeaponVisuals_", "BP_WeaponActor_"};
-    for (const char* p : prefixes)
-        if (startsWith(s, p)) { s.erase(0, std::char_traits<char>::length(p)); break; }
+    static const std::string prefixes[] = {OBF("DA_Item_"), OBF("DA_WeaponVisuals_"), OBF("BP_WeaponActor_")};
+    for (const std::string& p : prefixes)
+        if (startsWith(s, p)) { s.erase(0, p.size()); break; }
     if (s.size() > 2 && s.compare(s.size() - 2, 2, "_C") == 0) s.erase(s.size() - 2);
     return s;
 }
@@ -565,7 +567,7 @@ Group containerKind(const std::string& cls) {
     if (hasAny(n, {"locker", "museumcrate"})) return Group::Lockers;
     if (hasAny(n, {"dumpster", "trash"})) return Group::Trash;
     if (hasAny(n, {"arcprobe", "assessor", "husk", "courier", "emperorrelay"})) return Group::Arc;
-    if (hasAny(n, {"snowpile", "candleberries", "volcanicrock"}) || startsWith(cls, "BP_SalvageContainer_")) return Group::Nature;
+    if (hasAny(n, {"snowpile", "candleberries", "volcanicrock"}) || startsWith(cls, OBF("BP_SalvageContainer_"))) return Group::Nature;
     if (hasAny(n, {"raidercache", "firstwavecache", "dropoffstation"})) return Group::Caches;
     return Group::Other;
 }

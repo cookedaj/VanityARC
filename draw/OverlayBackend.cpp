@@ -22,6 +22,7 @@
 #include "LayerWindow.h"
 #include "Overlay.h"
 #include "../config.h"
+#include "../utils/identity.h"
 
 namespace {
 
@@ -114,7 +115,7 @@ bool initGlfw() {
     config::SCREEN_W = (int)(mode->width / (xs > 0 ? xs : 1.0f) + 0.5f);
     config::SCREEN_H = (int)(mode->height / (ys > 0 ? ys : 1.0f) + 0.5f);
 
-    g_glfw = glfwCreateWindow(config::SCREEN_W, config::SCREEN_H, config::OVERLAY_NAME, nullptr, nullptr);
+    g_glfw = glfwCreateWindow(config::SCREEN_W, config::SCREEN_H, APP_TITLE, nullptr, nullptr);
     if (!g_glfw) return false;
 
     glfwSetWindowPos(g_glfw, 0, 0);
@@ -164,7 +165,7 @@ bool InitOverlay() {
     //Where the menu remembers its window position: with the other saved settings, not in whatever folder kwin-helper was started from
     {
         const char* home = std::getenv("HOME");
-        const std::string dir = std::string(home ? home : ".") + "/.config/kwin-helper";
+        const std::string dir = std::string(home ? home : ".") + "/.config/" + CONFIG_DIR_NAME;
         std::error_code ec;
         std::filesystem::create_directories(dir, ec);
         g_iniPath = dir + "/imgui.ini";

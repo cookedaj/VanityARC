@@ -208,9 +208,10 @@ int main() {
     //Line thickness: never thinner than the box, never thinner as the player comes closer (his box grows), capped
     {
         CHECK(thickness(1.5f, 10) == 1.5f && thickness(4, 0) == 4, "far away: the box's own thickness");
-        CHECK(std::fabs(thickness(1.5f, 370) - 7.4f) < 1e-3f, "a player about 5 m away (box 370 px): about 7 px");
-        CHECK(thickness(1.5f, 1e5f) == MAX_LINE && thickness(10, 1e5f) == 12 && thickness(1.5f, NAN) == 1.5f,
-              "capped at 12 px; an unknown box size gives the box's thickness");
+        CHECK(std::fabs(thickness(1.5f, 250) - 5.0f) < 1e-3f && thickness(1.5f, 370) == MAX_LINE,
+              "a player about 7 m away (box 250 px): 5 px; 5 m away (box 370 px): already at the cap");
+        CHECK(thickness(1.5f, 1e5f) == MAX_LINE && MAX_LINE == 6 && thickness(10, 1e5f) == 10 && thickness(1.5f, NAN) == 1.5f,
+              "capped at 6 px, or at the box's thickness if that is more; an unknown box size gives the box's thickness");
         bool rising = true, inside = true;
         for (float th : {1.0f, 1.5f, 4.0f, 10.0f}) {
             float last = 0;

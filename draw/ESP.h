@@ -10,8 +10,10 @@
 
 #include "Declutter.h"
 #include "Overlay.h"
+#include "UiKit.h" //theme::downed, theme::dead: the palette the menu shares
 #include "W2S.h"
 #include "../utils/gameview.h"
+#include "../utils/identity.h"
 #include "../utils/itemvalues.h"
 #include "../utils/labels.h"
 #include "../utils/localUtil.h"
@@ -52,39 +54,49 @@ inline float CrosshairX() {
 }
 
 namespace COLOR {
-    inline ImU32 red = IM_COL32(207, 56, 56, 255);
-    inline ImU32 deadRed = IM_COL32(210, 120, 120, 255);   //a down player's cross: a light, greyish red, not the enemy red
+    //The colours the palette names (theme::, UiKit.h) are read from it, so the windows and the game picture share one
+    //set of numbers. They are variables here because ESPInit may halve some of their alphas at startup.
+    inline ImU32 red = theme::enemy;
+    inline ImU32 dead = theme::dead;                        //a dead player's X: grey, no colour left in it
     inline ImU32 orange = IM_COL32(240, 168, 43, 255);
     inline ImU32 deadOrange = IM_COL32(190, 150, 100, 255); //destroyed ARC: a light, greyish orange, not the live ARC orange
-    inline ImU32 green = IM_COL32(34, 189, 39, 255);
+    inline ImU32 green = theme::teammate;
     inline ImU32 cyan = IM_COL32(39, 219, 217, 255);
-    inline ImU32 white = IM_COL32(255, 255, 255, 255);
-    inline ImU32 grey = IM_COL32(170, 170, 170, 255);
+    inline ImU32 white = theme::text;
+    inline ImU32 grey = theme::textMuted;
 
     inline ImU32 shield = IM_COL32(80, 170, 255, 255);
 
     inline bool mono() { return config::monochrome; } //white and grey only
 
-    //The enemy colour chosen in the menu
-    inline ImU32 enemy() {
-        if (mono()) return white;
-        switch ((int)config::boxColor) {
-            case 1: return IM_COL32(255, 255, 255, 255);
-            case 2: return IM_COL32(245, 215, 60, 255);
-            case 3: return IM_COL32(70, 120, 255, 255);
-            case 4: return IM_COL32(40, 200, 70, 255);
-            case 5: return IM_COL32(170, 90, 255, 255);
-            default: return red;
-        }
+    inline ImU32 withAlpha(ImU32 color, int alpha) {
+        return (color & 0x00FFFFFF) | ((ImU32)(alpha & 0xFF) << 24);
     }
+
+    //A colour picked in the menu: 1 to 5 are white, yellow, blue, green and violet (Box colour's, and the same five for
+    //ARC, containers and ground items); 0 or anything else is own, the colour that kind always had, whose alpha is kept
+    inline ImU32 chosen(double choice, ImU32 own) {
+        ImU32 c;
+        switch ((int)choice) {
+            case 1: c = IM_COL32(255, 255, 255, 255); break;
+            case 2: c = IM_COL32(245, 215, 60, 255); break;
+            case 3: c = IM_COL32(70, 120, 255, 255); break;
+            case 4: c = IM_COL32(40, 200, 70, 255); break;
+            case 5: c = IM_COL32(170, 90, 255, 255); break;
+            default: return own;
+        }
+        return withAlpha(c, (int)(own >> IM_COL32_A_SHIFT));
+    }
+    inline ImU32 enemy() { return mono() ? white : chosen(config::boxColor, red); } //Box colour (ESP tab)
     inline ImU32 mate() { return mono() ? grey : green; }
     //Down players and destroyed ARC: solid, never faint; told apart from the living by their shape and the word on their
     //label (DOWN, DEAD), and in monochrome by a mid grey instead of white
-    inline ImU32 deadGrey = IM_COL32(150, 150, 150, 255);
-    inline ImU32 arc(bool dead) { return mono() ? (dead ? deadGrey : white) : (dead ? deadOrange : orange); }
-    inline ImU32 container() { return mono() ? IM_COL32(150, 150, 150, 170) : green; }
-    //Ground items: cyan. With "Colour items by kind" (Loot tab) guns are magenta, ammo white, meds green and shields blue;
-    //the rest stay cyan. Monochrome: light grey for all of them.
+    inline ImU32 deadGrey = theme::dead;
+    //ARC colour (ESP tab) for the live ones; destroyed ARC keep their greyish orange
+    inline ImU32 arc(bool dead) { return mono() ? (dead ? deadGrey : white) : dead ? deadOrange : chosen(config::arcColor, orange); }
+    inline ImU32 container() { return mono() ? IM_COL32(150, 150, 150, 170) : chosen(config::containerColor, green); } //Container colour (Loot tab)
+    //Ground items: cyan, or Item colour (Loot tab). With "Colour items by kind" (Loot tab) guns are magenta, ammo white,
+    //meds green and shields blue; the rest stay as they are. Monochrome: light grey for all of them.
     inline ImU32 pickup(int kind = -1) {
         if (mono()) return IM_COL32(215, 215, 215, 200);
         if (config::colorLootKinds) switch ((labels::Kind)kind) {
@@ -94,16 +106,14 @@ namespace COLOR {
             case labels::Kind::Shield: return IM_COL32(70, 150, 255, 255);
             default: break;
         }
-        return cyan;
+        return chosen(config::itemColor, cyan);
     }
     inline ImU32 gold = IM_COL32(255, 215, 0, 255);
     inline ImU32 valuable() { return mono() ? white : gold; } //"Highlight valuable items" (Loot tab)
-    inline ImU32 deadPlayer() { return mono() ? deadGrey : deadRed; }
+    inline ImU32 deadPlayer() { return mono() ? deadGrey : dead; } //the dead player's X
+    //The downed player's icon and DOWN line: the palette's amber. Monochrome: the grey of the down, told by its shape.
+    inline ImU32 downedPlayer() { return mono() ? deadGrey : theme::downed; }
     inline ImU32 shieldBar() { return mono() ? IM_COL32(170, 170, 170, 255) : shield; }
-
-    inline ImU32 withAlpha(ImU32 color, int alpha) {
-        return (color & 0x00FFFFFF) | ((ImU32)(alpha & 0xFF) << 24);
-    }
 
     //Red at 0 to green at 1 (white in monochrome)
     inline ImU32 health(float f) {
@@ -120,12 +130,25 @@ inline void ESPInit() {
         COLOR::cyan = COLOR::withAlpha(COLOR::cyan, 128);
     }
     if (config::makeDeadBotESPTranslucent) COLOR::deadOrange = COLOR::withAlpha(COLOR::deadOrange, 128);
-    if (config::makeDeadPlayerESPTranslucent) COLOR::deadRed = COLOR::withAlpha(COLOR::deadRed, 128);
+    if (config::makeDeadPlayerESPTranslucent) COLOR::dead = COLOR::withAlpha(COLOR::dead, 128);
 }
 
 //How much bigger markers, bars, edge arrows and the radar's lines and dots are drawn: they grow with Text size, and are
 //never smaller than at the 15 px default (1)
 inline float SizeScale() { return std::max(1.0f, config::labelSize / 15.0f); }
+//...and the ARC, container, ground item and down-player markers once more by Marker size (Settings tab, LOOK): 1, the
+//size they always had, up to 3. Never under 1, whatever the setting holds.
+inline float MarkerScale() { return SizeScale() * std::min(3.0f, std::max(1.0f, config::markerScale)); }
+//The corners of the overlay's own panels (the close-enemy card, LOW HEALTH, the radar) are rounded by this much: the
+//windows' radius (UiKit.h), growing with Text size as the panels do
+inline float PanelRound() { return ui::PANEL_RADIUS * SizeScale(); }
+//Such a panel's fill, and a frame t px thick along its edge. dl: where to draw (null: the background list)
+inline void DrawPanel(const LabelRect& r, ImU32 fill, ImDrawList* dl = nullptr) {
+    (dl ? dl : ImGui::GetBackgroundDrawList())->AddRectFilled(ImVec2(r.x0, r.y0), ImVec2(r.x1, r.y1), Fade(fill), PanelRound());
+}
+inline void DrawPanelFrame(const LabelRect& r, ImU32 color, float t, ImDrawList* dl = nullptr) {
+    (dl ? dl : ImGui::GetBackgroundDrawList())->AddRect(ImVec2(r.x0, r.y0), ImVec2(r.x1, r.y1), Fade(color), PanelRound(), 0, t);
+}
 
 //The size of the smaller text (distances, guns, the labels by markers, the radar's ring ranges, the status card): f times
 //Text size, or the full Text size with "Full-size small text" (Settings tab, LOOK)
@@ -214,7 +237,8 @@ inline float DrawHotkeyCard(float y, const char* why, const char* fix, ImDrawLis
     y += big / 2 + 8 + ls / 2;
     DrawLabelCentered(x, y, fix, ls, COLOR::white, true, dl);
     y += ls + 8;
-    DrawLabelCentered(x, y, "Open the menu meanwhile with:  pkill -USR1 -x kwin-helper", ls, COLOR::white, true, dl);
+    const std::string openCmd = std::string("Open the menu meanwhile with:  pkill -USR1 -x ") + APP_ID;
+    DrawLabelCentered(x, y, openCmd.c_str(), ls, COLOR::white, true, dl);
     return y + ls + 10;
 }
 
@@ -497,7 +521,7 @@ inline void DrawLowHealth(double hp, float below = 0, float above = 0, ImDrawLis
     const float y = LowHealthY(below, above), x = LowHealthX(y); //x: off the HP/SH readout
     const LabelRect r = LowHealthRect(y);
     if (!COLOR::mono()) //white on solid red; monochrome: white on the dark card
-        DrawRectFilled(r.x0, r.y0, r.x1, r.y1, COLOR::red, dl);
+        DrawPanel(r, COLOR::red, dl);
     DrawLabelCentered(x, y, "LOW HEALTH", config::labelSize * 2.4f, COLOR::white, COLOR::mono(), dl);
     g_lowHealthRect = r;
 }
@@ -652,7 +676,7 @@ inline float BoxThickness() { return std::min(10.0f, std::max(1.0f, config::boxT
 
 //Is his stick figure drawn? The switch, a pose, and within Skeleton range of the camera.
 inline bool SkeletonShown(const View& v, const RenderEntity& ent) {
-    return config::showSkeleton && ent.pose && ent.pos.Dist(v.loc) / 100.0 <= config::skeletonMaxDist;
+    return config::showSkeletons && ent.pose && ent.pos.Dist(v.loc) / 100.0 <= config::skeletonMaxDist;
 }
 
 //How tall a standing player's box is at his distance, in px. The skeleton's thickness and its simple far figure go by
@@ -1023,10 +1047,31 @@ inline std::string PlayerNameText(const std::string& name, bool squad, bool mark
     return name.empty() ? std::string(tag) : std::string(tag) + "  " + name;
 }
 
-//The label by a down player's cross ("DOWN  12m": a player at 0 health, as the player list says) and a destroyed ARC's
+//The label by a down player's marker ("DOWN  12m": a player at 0 health, as the player list says) and a destroyed ARC's
 //word ("DEAD  Tick  12m")
 constexpr const char* DOWN_WORD = "DOWN";
 constexpr const char* DEAD_WORD = "DEAD";
+
+//Is a player at 0 health downed (knocked: he crawls and can still be revived) and not dead for good? The tracker cannot
+//tell yet: it reads health only (isDead: health under 1), and that is 0 either way. So nobody counts as downed, and every
+//player at 0 health gets the dead player's small grey X with the word DOWN, which is all that is known of him.
+//Once RenderEntity carries a flag for it, return it here: the amber icon below, his amber DOWN line and his amber row in
+//the player list follow from this one place. The X's word can then become DEAD_WORD (here and "down" in PlayerList.h;
+//tests/esp_test.cpp checks DOWN today).
+inline bool IsDowned(const RenderEntity&) { return false; }
+
+//A downed player's icon: a thick ring on a dark disc with a solid arrowhead pointing down in its middle. Round where the
+//dead player's X is all corners, amber where that is grey, and as big as that X was before it was halved: r is the old
+//X's radius, the ring's middle line runs at r and is as thick as the old X's strokes, so it reaches 1.25 r (the old X
+//1.18 r). Told from the X by shape alone too (monochrome).
+inline float DownedIconReach(float r) { return r + std::max(2.0f, r * 0.5f) / 2 + 1.0f; } //its dark disc's radius
+inline void DrawDownedIcon(float x, float y, float r, ImU32 color) {
+    ImDrawList* dl = ImGui::GetBackgroundDrawList();
+    const float a = r * 0.42f; //the arrowhead: 2a wide, 1.65a tall, its middle on the ring's
+    dl->AddCircleFilled(ImVec2(x, y), DownedIconReach(r), Fade(IM_COL32(0, 0, 0, 200)), 0);
+    dl->AddCircle(ImVec2(x, y), r, Fade(color), 0, std::max(2.0f, r * 0.5f));
+    dl->AddTriangleFilled(ImVec2(x - a, y - 0.55f * a), ImVec2(x + a, y - 0.55f * a), ImVec2(x, y + 1.1f * a), Fade(color));
+}
 
 inline void DrawESP(const std::vector<RenderEntity>& entities, FminimalViewInfo vm, int localPlayerTeam) {
     const View v(vm, MakeProjection());
@@ -1038,7 +1083,7 @@ inline void DrawESP(const std::vector<RenderEntity>& entities, FminimalViewInfo 
     }
     const float W = (float)config::SCREEN_W, H = (float)config::SCREEN_H;
     const float ls = config::labelSize, ls2 = SmallTextSize(0.9f);
-    const float k = SizeScale(); //markers grow with the text size
+    const float k = MarkerScale(); //markers grow with the text size, and with Marker size
     auto onScreen = [&](double x, double y) { return x > -60 && x < W + 60 && y > -60 && y < H + 60; };
     std::vector<EdgeArrow> edge, arcEdge;
     char buf[64];
@@ -1069,11 +1114,17 @@ inline void DrawESP(const std::vector<RenderEntity>& entities, FminimalViewInfo 
             if (squad && !config::showTeammates) continue; //a hand mark is always drawn (in the teammate colour): it may be stale
             if (!mate && config::hideUnknownTeams && localPlayerTeam < 0) continue; //no team to compare with
             if (ent.isDead) {
-                if (!config::showDeadPlayers || !front || !onScreen(sp.x, sp.y)) continue;
-                const double rad = getProportionalRadius(dist, config::maxPlayerDist) * k;
-                DrawCross((float)sp.x, (float)sp.y, (float)rad, COLOR::deadPlayer());
+                //At 0 health. Downed: the amber icon, as big as the X always was, and his DOWN line in amber too; the
+                //Dead players switch does not hide him. Dead: the X at half that size, in the palette's grey.
+                const bool downed = IsDowned(ent);
+                if ((!downed && !config::showDeadPlayers) || !front || !onScreen(sp.x, sp.y)) continue;
+                const float full = (float)(getProportionalRadius(dist, config::maxPlayerDist) * k); //the X's radius before it was halved
+                const float rad = downed ? DownedIconReach(full) : full / 2; //how far the marker reaches: its labels keep clear of it
+                if (downed) DrawDownedIcon((float)sp.x, (float)sp.y, full, COLOR::downedPlayer());
+                else DrawCross((float)sp.x, (float)sp.y, rad, COLOR::deadPlayer());
                 snprintf(buf, sizeof buf, "%s  %.0fm", DOWN_WORD, dist);
-                QueueMarkerLabel((float)sp.x, (float)sp.y, (float)rad, buf, ls2, 2, dist);
+                QueueMarkerLabel((float)sp.x, (float)sp.y, rad, buf, ls2, 2, dist);
+                if (downed) PendingLabels().back().color = COLOR::downedPlayer();
                 //the name line as on a live player: TEAM or MARKED in the teammate colour, also with Player names off,
                 //so a down squad mate is told from a down enemy
                 if (config::showPlayerNames || mate)
@@ -1095,7 +1146,8 @@ inline void DrawESP(const std::vector<RenderEntity>& entities, FminimalViewInfo 
             const float m = std::max(3.0f, th / 2 + 1); //how far the outline's dark edge reaches past the box (3 px up to th 4)
             const int style = (int)config::boxStyle;
             const bool skel = SkeletonShown(v, ent);
-            if (style == 3) { if (!skel) DrawBoxOutlined(x0, y0, w, h, color, th); } //Skeleton only: the full box for a player without one
+            //Skeleton only, or Boxes on players off: no box where his skeleton is drawn, the full box for a player without one
+            if (style == 3 || !config::showBoxes) { if (!skel) DrawBoxOutlined(x0, y0, w, h, color, th); }
             else if (style == 1) DrawBoxOutlined(x0, y0, w, h, color, th);
             else if (style == 2) DrawSidesBox(x0, y0, w, h, color, th);
             else DrawCornerBox(x0, y0, w, h, color, th);
@@ -1197,7 +1249,7 @@ inline void DrawESP(const std::vector<RenderEntity>& entities, FminimalViewInfo 
                 nameOn = config::showContainerNames && dist <= config::nameMaxLootDist;
                 shape = DrawSquareFilled;
             } else if (ent.type == Object::PICKUP) {
-                if (!config::showPickups || dist > config::maxLootDist) continue;
+                if (!config::showGroundItems || dist > config::maxLootDist) continue;
                 if (!KindShown(LootSwitches(), labels::KIND_COUNT, ent.itemKind)) continue; //Loot tab, GROUND ITEMS
                 if (config::highlightValuable && !ent.label.empty()) {
                     const long p = ItemPrice(ent.itemKey, ent.label, ent.gameName);
@@ -1404,8 +1456,9 @@ inline std::string DrawCloseEnemyWarning(const std::vector<RenderEntity>& entiti
     g_warnSide = newSide;
     if (!besideHere && onReadout(centre, cy, stickGap)) cx = beside; //moved below or above him to the readout's height
     g_warnBeside = cx != centre;
-    DrawRectFilled(cx - hx, cy - hy, cx + hx, cy + hy, IM_COL32(0, 0, 0, 220), dl);
-    DrawRectOutline(cx - hx, cy - hy, cx + hx, cy + hy, COLOR::enemy(), 3.0f, dl);
+    const LabelRect card{cx - hx, cy - hy, cx + hx, cy + hy};
+    DrawPanel(card, IM_COL32(0, 0, 0, 220), dl);
+    DrawPanelFrame(card, COLOR::enemy(), 3.0f, dl);
     if (arrow) { //its middle in the middle of its column; screen up is ahead of you, right is your right
         const float ux = (float)(r / flat), uy = (float)(-f / flat), ax = cx - hx + 10 + 0.75f * L;
         DrawArrow(ax + ux * L / 2, cy + uy * L / 2, ux, uy, L, COLOR::white, dl);
@@ -1446,8 +1499,8 @@ inline void DrawRadar(const std::vector<RenderEntity>& entities, FminimalViewInf
 
     //Panel, rings, crosshairs
     const LabelRect P = RadarPanel(); //wider and taller with the title, which follows Text size
-    DrawRectFilled(P.x0, P.y0, P.x1, P.y1, IM_COL32(0, 0, 0, 150));
-    DrawRectOutline(P.x0, P.y0, P.x1, P.y1, line, 1.0f);
+    DrawPanel(P, IM_COL32(0, 0, 0, 150));
+    DrawPanelFrame(P, line, 1.0f);
     DrawCircleFilled(cx, cy, R, IM_COL32(0, 0, 0, 110));
     const float ringT = 1.5f * k, edgeT = 2.0f * k; //the inner rings and the cross; the outer ring
     for (int i = 1; i <= 3; i++) DrawCircleRing(cx, cy, R * i / 3.0f, i == 3 ? IM_COL32(255, 255, 255, 200) : line, i == 3 ? edgeT : ringT);

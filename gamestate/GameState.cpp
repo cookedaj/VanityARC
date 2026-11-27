@@ -127,17 +127,21 @@ ptr GameState::cameraViaController(ptr vtableCam) {
         const FminimalViewInfo v = ReadMemory<FminimalViewInfo>(cam + off::VIEW_MATRIX);
         return viewUsable(v) && std::abs(v.FOV - 70.0) <= 60.0 ? cam : 0; //the check scan() makes on the vtable's camera
     }
-    //The vtable works: find which PlayerController field holds that camera, so it can go in config.h before a patch
+    //The vtable works: find which PlayerController field holds that camera, so it can go in config.h before a patch.
+    //Diagnostic only: the "PlayerController" / "config.h" / PC_CAMERA_MANAGER hint must not reach the release binary's strings(1).
+#ifdef KWINHELPER_PROBES
     ptr words[0x800 / sizeof(ptr)] = {};
     ReadMemoryBuffer(pc, words, sizeof words);
-    if (words[0] == 0) return vtableCam; //not readable now (a failed read is all zeros): try again at the next scan
-    camFieldTold_ = true;
-    size_t at = 0;
-    for (size_t i = 1; i < sizeof words / sizeof words[0] && !at; i++) if (words[i] == vtableCam) at = i * sizeof(ptr);
-    if (at) std::printf("[i] The camera is also at PlayerController+0x%zX: off::PC_CAMERA_MANAGER = 0x%zX%s\n", at, at,
-                        at == off::PC_CAMERA_MANAGER ? "   (matches config.h)" : "   (put it in config.h: a stale CAMMANAGER then no longer blanks the overlay)");
-    else std::printf("[i] The camera is not in the PlayerController's first 0x800 bytes: off::PC_CAMERA_MANAGER not learned\n");
-    std::fflush(stdout);
+    if (words[0] != 0) { //not readable now (a failed read is all zeros): try again at the next scan
+        camFieldTold_ = true;
+        size_t at = 0;
+        for (size_t i = 1; i < sizeof words / sizeof words[0] && !at; i++) if (words[i] == vtableCam) at = i * sizeof(ptr);
+        if (at) std::printf("[i] The camera is also at PlayerController+0x%zX: off::PC_CAMERA_MANAGER = 0x%zX%s\n", at, at,
+                            at == off::PC_CAMERA_MANAGER ? "   (matches config.h)" : "   (put it in config.h: a stale CAMMANAGER then no longer blanks the overlay)");
+        else std::printf("[i] The camera is not in the PlayerController's first 0x800 bytes: off::PC_CAMERA_MANAGER not learned\n");
+        std::fflush(stdout);
+    }
+#endif
     return vtableCam;
 }
 
@@ -409,6 +413,7 @@ void printVtableSummary(const std::vector<RenderEntity>& ents, const FminimalVie
 //read straight from memory here, so a wrong PLAYER vtable shows up as NO HEALTH instead of a fake 100.
 //"pose n/m": n of the m players near enough for a stick figure (you included) have one (left out when nobody is that near).
 void printStatusLine(const std::vector<RenderEntity>& others, const RenderEntity* me, int posed, int poseWanted) {
+#ifdef KWINHELPER_PROBES //diagnostic status line (team id, HP, entity census): never in the release build, never in its strings(1)
     int players = 0, playersDead = 0, arcs = 0, arcsDead = 0, pickups = 0, searches = 0;
     for (const auto& e : others) {
         switch (e.type) {
@@ -446,6 +451,9 @@ void printStatusLine(const std::vector<RenderEntity>& others, const RenderEntity
         std::printf("%s\n", line);
         std::fflush(stdout);
     }
+#else
+    (void)others; (void)me; (void)posed; (void)poseWanted; //nothing printed in Release
+#endif
 }
 
 void getPosPtr(ptr actor) {

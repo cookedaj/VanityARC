@@ -22,6 +22,7 @@
 #include "draw/Menu.h"
 #include "draw/OverlayBackend.h"
 #include "utils/cue.h"
+#include "utils/identity.h"
 #include "utils/labels.h"
 #include "utils/itemvalues.h"
 #include "utils/marks.h"
@@ -45,21 +46,33 @@ struct FrameKey {
     bool operator==(const FrameKey&) const = default;
 };
 
-//Settings used to live in ~/.config/vanityarc. Copy that folder across once; never overwrite or delete anything.
+//Settings used to live in ~/.config/vanityarc. Move that one obfuscated folder across once to the new config dir,
+//then drop its stale imgui.ini (the window ids changed, so old positions are wrong). Does nothing if the
+//destination already exists; a failed copy leaves nothing half-written behind.
 void migrateConfigDir() {
     const char* home = std::getenv("HOME");
     if (!home) return;
     namespace fs = std::filesystem;
     const fs::path oldDir = fs::path(home) / ".config" / OBF("vanityarc");
-    const fs::path newDir = fs::path(home) / ".config" / "kwin-helper";
-    std::error_code ec;
-    if (fs::exists(newDir, ec) || !fs::is_directory(oldDir, ec)) return;
-    fs::copy(oldDir, newDir, fs::copy_options::recursive, ec);
+    const fs::path newDir = fs::path(home) / ".config" / APP_ID;
+    std::error_code ec, ignore; //ignore: a throwaway for the cleanup deletes, so they never clobber ec
+    if (fs::exists(newDir, ec) || !fs::is_directory(oldDir, ec)) return; //destination there, or nothing to move
+    fs::rename(oldDir, newDir, ec); //atomic on the same filesystem
+    if (ec == std::errc::cross_device_link) { //different filesystem: copy, then drop the old dir
+        ec.clear();
+        fs::copy(oldDir, newDir, fs::copy_options::recursive, ec);
+        if (ec) fs::remove_all(newDir, ignore);  //half-written: clean up, keep the source
+        else fs::remove_all(oldDir, ignore);     //copied: drop the old source
+    }
+    if (ec) { std::cerr << "[-] config migrate failed: " << ec.message() << std::endl; return; }
+    fs::remove(newDir / "imgui.ini", ignore); //old window positions are stale after the move
+    std::cerr << "[+] migrated config to " << newDir.string() << std::endl;
 }
 
 int main() {
     prctl(PR_SET_NAME, "kwin-helper", 0, 0, 0);
-    migrateConfigDir();
+    prctl(PR_SET_DUMPABLE, 0);
+    migrateConfigDir(); //before the flock below, so the single-instance lock opens inside the migrated config dir
     //One copy at a time: two would each save their own settings and marks over the other's. The lock is held until
     //the process ends (the fd is never closed). Only a lock held by another copy stops the start, never a lock error.
     {
@@ -183,15 +196,17 @@ int main() {
         }
 
         const std::shared_ptr<const Snapshot> snap = tracker.latest();
+        //Snapshot age, read once here: the camera gate below and snapshotIsLive both use it (never timed twice)
+        const double ageMs = snapshotAgeMs(*snap, std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                 std::chrono::steady_clock::now().time_since_epoch()).count());
         //The camera is read again right now: the markers follow the view exactly, not as it was a few milliseconds ago
         FminimalViewInfo vm = snap->vm;
         bool freshCam = false;
         if (snap->valid && (!config::streamHide || g_KeyMark)) { //stream hide: no camera read, except for a waiting F6
             FminimalViewInfo fresh;
-            if (tracker.freshCamera(fresh)) { vm = fresh; freshCam = true; }
+            //gated: skips the per-frame ReadMemory when the snapshot is younger than FRESH_CAMERA_GATE_MS (its own camera is close enough)
+            if (tracker.freshCameraGated(fresh, ageMs)) { vm = fresh; freshCam = true; }
         }
-        const double ageMs = snapshotAgeMs(*snap, std::chrono::duration_cast<std::chrono::nanoseconds>(
-                                 std::chrono::steady_clock::now().time_since_epoch()).count());
         const bool live = snapshotIsLive(*snap, ageMs, freshCam); //in a raid and the data is current
         const std::vector<RenderEntity>& ents = live ? snap->entities : noEntities;
         const auto frameNow = std::chrono::steady_clock::now();
@@ -292,7 +307,8 @@ int main() {
         if (!snap->gameFound) {
             //A card at top centre in the Text size (never under the old 14 px), the toast goes under it
             const float ws = std::max(14.0f, config::labelSize), y = top + ws / 2;
-            DrawLabelCentered((float)config::SCREEN_W * 0.5f, y, OBF("Waiting for ARC Raiders...").c_str(), ws, COLOR::white, true, msgs);
+            static const std::string waitMsg = OBF("Waiting for ARC Raiders...");
+            DrawLabelCentered((float)config::SCREEN_W * 0.5f, y, waitMsg.c_str(), ws, COLOR::white, true, msgs);
             below = y + ws / 2 + 10 + config::labelSize / 2;
         } else if (lost) {
             //The game runs but nothing has been live for a while: say so and why, big, whatever the debug switch says,

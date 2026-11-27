@@ -5,6 +5,10 @@
 #   with the Insert hotkey before you have logged out/in after joining group "input":
 #                 sg input -c "bash start.sh"
 set -euo pipefail
+# A stray KWINHELPER_SKIP_SANDBOX_CHECK in the environment (inherited from a parent shell or an old export) would
+# silently switch off the binary's PID-namespace safety check. Drop it so a launch through this script always runs
+# that check; to skip it on purpose, set it on a direct run of the binary rather than through this launcher.
+unset KWINHELPER_SKIP_SANDBOX_CHECK
 export PATH="$PATH:/usr/sbin:/sbin"   # getcap/setcap live here on Debian and openSUSE, off a normal user's PATH
 SELF="$(readlink -f "$0")"
 cd "$(dirname "$SELF")"
@@ -13,7 +17,7 @@ cd "$(dirname "$SELF")"
 # same script with the group, so the Insert hotkey works right away without logging out.
 if [ -z "${KWINHELPER_SG:-}" ] && ! id -nG | tr ' ' '\n' | grep -qx input \
    && getent group input | cut -d: -f4 | tr ',' '\n' | grep -qx "$(id -un)"; then
-    exec sg input -c "env KWINHELPER_SG=1 bash '$SELF' $*"
+    exec sg input -c "env KWINHELPER_SG=1 bash ${SELF@Q} ${*@Q}"
 fi
 
 # KWINHELPER_BIN picks another build (the probe build, see the README); the release build is the default
@@ -51,7 +55,7 @@ command -v getcap >/dev/null && command -v setcap >/dev/null || {
 }
 if ! getcap "$BIN" 2>/dev/null | grep -q cap_sys_ptrace; then
     echo "[+] First start after a build: giving kwin-helper permission to read the game (sudo password needed once)"
-    sudo setcap cap_sys_ptrace=eip "$BIN"
+    sudo setcap cap_sys_ptrace=ep "$BIN"
 fi
 
 # The overlay shows on the monitor the game is on: the primary one unless you name another
@@ -63,16 +67,26 @@ if [ -n "$MON" ]; then export KWINHELPER_MONITOR="$MON"; echo "[+] Overlay monit
 
 # If kwin-helper crashes, it is started again after 2 seconds. Quitting on purpose (F10, the menu's Quit, Ctrl+C,
 # pkill kwin-helper) exits with 0 and ends this script too. A stop within 20 s of starting is not retried: it would
-# only fail again (already running, no overlay, a crash at start).
+# only fail again (already running, no overlay, a crash at start). A binary that keeps crashing is not respawned
+# forever either: after 5 crashes in a row the script gives up, so a crash loop cannot run unbounded. A session
+# that lasted 5 min or more clears the count, so an occasional crash in a long game still restarts as before.
 trap ':' INT   # Ctrl+C reaches kwin-helper too (same process group), so it can save and release the keyboard
+fails=0
 while :; do
     t=$SECONDS
     "$BIN" && exit 0
     rc=$?
-    if [ $((SECONDS - t)) -lt 20 ]; then
+    ran=$((SECONDS - t))
+    if [ "$ran" -lt 20 ]; then
         echo "[-] kwin-helper stopped right after starting (exit $rc): not restarting it" >&2
         exit "$rc"
     fi
-    echo "[!] kwin-helper stopped unexpectedly (exit $rc): restarting it in 2 seconds" >&2
+    if [ "$ran" -ge 300 ]; then fails=0; fi   # a long, healthy session resets the crash streak
+    fails=$((fails + 1))
+    if [ "$fails" -ge 5 ]; then
+        echo "[-] kwin-helper has crashed $fails times in a row: giving up (run start.sh again to retry)" >&2
+        exit "$rc"
+    fi
+    echo "[!] kwin-helper stopped unexpectedly (exit $rc): restarting it in 2 seconds [$fails/5]" >&2
     sleep 2
 done

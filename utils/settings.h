@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "../config.h"
+#include "identity.h"   // ::configDir(): one source for ~/.config/kwin-helper
 
 namespace settings {
 
@@ -60,6 +61,9 @@ inline std::vector<Entry>& table() {
         D("maxPlayerDist", &config::maxPlayerDist, 50, 800); D("maxArcDist", &config::maxArcDist, 20, 500);
         D("maxLootDist", &config::maxLootDist, 5, 150); D("nameMaxLootDist", &config::nameMaxLootDist, 3, 150);
         D("boxStyle", &config::boxStyle, 0, 3); D("boxColor", &config::boxColor, 0, 5);
+        B("showBoxes", &config::showBoxes); //showGroundItems / showSkeletons are other names for showPickups / showSkeleton above: no lines of their own
+        D("arcColor", &config::arcColor, 0, 5); D("containerColor", &config::containerColor, 0, 5); D("itemColor", &config::itemColor, 0, 5);
+        F("markerScale", &config::markerScale, 1, 3); //never under 1: markers are never smaller than they were
         F("boxThickness", &config::boxThickness, 1, 10);
         F("overlayOpacity", &config::overlayOpacity, 0.2, 1); F("menuOpacity", &config::menuOpacity, 0.5, 1);
         F("menuTextSize", &config::menuTextSize, 15, 30);
@@ -125,8 +129,7 @@ inline void clampAll() {
 
 inline std::string path(const std::string& dir = "") {
     if (!dir.empty()) return dir + "/settings.txt";
-    const char* home = std::getenv("HOME");
-    return std::string(home ? home : ".") + "/.config/kwin-helper/settings.txt";
+    return ::configDir() + "/settings.txt";
 }
 
 //Returns how many lines were ignored (each is printed with its line number and the expected format)

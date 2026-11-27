@@ -61,11 +61,14 @@ size_t ReadMemoryPrefix(uintptr_t address, void* buffer, size_t size)
     return (size_t)got;
 }
 
+thread_local int ReadScatterError = 0;
+
 size_t ReadScatter(pid_t pid, ReadReq* r, size_t n)
 {
     //process_vm_readv stops at the first read it cannot do and reports how many bytes came before it. So: find which
     //read that was, mark it failed, and carry on with the ones after it.
     thread_local std::vector<struct iovec> loc, rem;
+    ReadScatterError = 0;
     size_t ok = 0, i = 0;
     while (i < n) {
         const size_t cnt = std::min<size_t>(n - i, 1024); //IOV_MAX
@@ -79,6 +82,7 @@ size_t ReadScatter(pid_t pid, ReadReq* r, size_t n)
         ssize_t got = process_vm_readv(pid, loc.data(), cnt, rem.data(), cnt, 0);
         if (got < 0) {
             if (errno != EFAULT) { //no such process / no permission: nothing in this batch or the ones after it can be read
+                ReadScatterError = errno; //EPERM (permission denied / process died) or ESRCH (no such process)
                 for (size_t k = i; k < n; k++) { std::memset(r[k].dst, 0, r[k].len); r[k].ok = false; }
                 return ok;
             }
@@ -113,7 +117,9 @@ pid_t FindGamePID() {
     //Every Unreal game under Proton has a GameThread. Prefer the one whose command line names ARC Raiders; the first
     //other one is only used when none does (so a wrong guess at the name never stops the overlay from attaching).
     pid_t other = 0;
+#if debug
     std::string otherLine;
+#endif
     std::error_code ec; //error_code overloads: a process that exits while we scan must not throw
     for (fs::directory_iterator it("/proc", ec), end; !ec && it != end; it.increment(ec)) {
         const std::string pid_str = it->path().filename().string();
@@ -140,20 +146,28 @@ pid_t FindGamePID() {
             std::string lower = cmdline;
             std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) { return (char)std::tolower(c); });
             const bool arc = lower.find(OBF("pioneer")) != std::string::npos || lower.find(OBF("raiders")) != std::string::npos;
+#if debug
             const std::string line = "[+] Found game process: PID " + std::to_string(pid) + " (" + comm_name + ") with " +
                                      std::to_string(thread_count) + " threads: " + cmdline;
+#endif
             if (arc) {
+#if debug
                 std::cout << line << std::endl;
+#endif
                 return pid;
             }
             if (other == 0) {
                 other = pid;
+#if debug
                 otherLine = line + OBF(" (does not look like ARC Raiders)");
+#endif
             }
         }
     }
 
+#if debug
     if (other != 0) std::cout << otherLine << std::endl;
+#endif
     return other; //0: not running (yet); the caller decides whether to say so and retry
 }
 

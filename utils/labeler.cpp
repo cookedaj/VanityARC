@@ -11,6 +11,7 @@
 #include "labels.h"
 #include "log.h"
 #include "names.h"
+#include "obfstr.h"
 #include "offsets.h"
 
 namespace labeler {
@@ -70,7 +71,7 @@ double nowSec() {
 
 bool isImagePtr(uintptr_t p) { return p >= ImageBase && p < ImageEnd; }
 bool isObj(uintptr_t o) { return isValidPtr(o) && isImagePtr(ReadMemory<uintptr_t>(o)); }
-bool startsWith(const std::string& s, const char* p) { return s.compare(0, std::char_traits<char>::length(p), p) == 0; }
+bool startsWith(const std::string& s, const std::string& p) { return s.compare(0, p.size(), p) == 0; }
 
 Info& infoOf(uintptr_t actor, double t) {
     Info& in = g_cache[actor];
@@ -104,7 +105,7 @@ std::string hex64(uint64_t v) {
 }
 
 //name of the object at p when it starts with prefix, else ""
-std::string assetName(uintptr_t p, const char* prefix) {
+std::string assetName(uintptr_t p, const std::string& prefix) {
     if (!isObj(p)) return "";
     std::string n = names::name(p);
     return startsWith(n, prefix) ? n : std::string();
@@ -123,15 +124,15 @@ std::string gunsOf(uintptr_t pawn) {
         for (int i = 0; i < num && i < 4; i++) {
             uintptr_t rec = data + (uintptr_t)i * 0x20;
             const uintptr_t weapon = ReadMemory<uintptr_t>(rec);
-            if (assetName(weapon, "BP_WeaponActor_").empty()) continue; //not a gun
-            std::string asset = assetName(ReadMemory<uintptr_t>(rec + 0x10), "DA_Item_");
-            if (asset.empty()) asset = assetName(weapon, "BP_WeaponActor_");
+            if (assetName(weapon, OBF("BP_WeaponActor_")).empty()) continue; //not a gun
+            std::string asset = assetName(ReadMemory<uintptr_t>(rec + 0x10), OBF("DA_Item_"));
+            if (asset.empty()) asset = assetName(weapon, OBF("BP_WeaponActor_"));
             const int q = ReadMemory<uint8_t>(weapon + WEAPON_LEVEL); //0..3 = level I..IV; anything else: not shown
             if (!asset.empty()) held.push_back(itemName(labels::itemToken(asset), true, q <= 3 ? q + 1 : 0));
         }
     }
     for (int base : INV_STOWED) {
-        std::string asset = assetName(ReadMemory<uintptr_t>(inv + base + 0x18), "DA_WeaponVisuals_");
+        std::string asset = assetName(ReadMemory<uintptr_t>(inv + base + 0x18), OBF("DA_WeaponVisuals_"));
         if (asset.empty()) continue;
         const int q = ReadMemory<int>(inv + base + INV_SLOT_LEVEL); //0..3 = level I..IV; anything else: not shown
         stowed.push_back(itemName(labels::itemToken(asset), true, q >= 0 && q <= 3 ? q + 1 : 0));
@@ -220,7 +221,7 @@ std::string findItemAsset(uintptr_t actor, uintptr_t& a, int& off) {
     std::string n;
     for (int o : {PICKUP_ITEM_ASSET, g_pickupOff}) {
         a = ReadMemory<uintptr_t>(actor + o);
-        n = assetName(a, "DA_Item_");
+        n = assetName(a, OBF("DA_Item_"));
         if (!n.empty()) { off = o; return n; }
         if (o == g_pickupOff) break; //nothing learned yet: one field to try
     }
@@ -229,7 +230,7 @@ std::string findItemAsset(uintptr_t actor, uintptr_t& a, int& off) {
     ReadMemoryBuffer(actor + 0x400, w, sizeof w);
     for (int i = 0; i < (int)(sizeof w / sizeof *w); i++) {
         if (!isValidPtr(w[i])) continue; //nulls and small numbers cost no read
-        n = assetName(w[i], "DA_Item_");
+        n = assetName(w[i], OBF("DA_Item_"));
         if (n.empty()) continue;
         a = w[i];
         off = 0x400 + i * 8;
@@ -279,17 +280,17 @@ void refine(RenderEntity& e) {
     double t = nowSec();
     Info& in = infoOf(e.actor, t);
     refreshClass(in, e.actor, t);
-    if (startsWith(in.cls, "BP_Pickup")) e.type = Object::PICKUP;
+    if (startsWith(in.cls, OBF("BP_Pickup"))) e.type = Object::PICKUP;
 }
 
 std::optional<Object> kindByName(uintptr_t actor) {
     if (!names::ready()) return std::nullopt;
     const std::string cls = names::name(actor);
     if (cls.empty()) return std::nullopt; //its own name did not read: ask another actor
-    if (!assetName(ReadMemory<uintptr_t>(actor + ARC_TYPE_ASSET), "DA_EnemyType_").empty()) return Object::ARC;
-    if (!assetName(ReadMemory<uintptr_t>(actor + off::MESH), "CharacterMesh").empty()) //a character: a player has a PlayerState, an AI one does not
+    if (!assetName(ReadMemory<uintptr_t>(actor + ARC_TYPE_ASSET), OBF("DA_EnemyType_")).empty()) return Object::ARC;
+    if (!assetName(ReadMemory<uintptr_t>(actor + off::MESH), OBF("CharacterMesh")).empty()) //a character: a player has a PlayerState, an AI one does not
         return isObj(ReadMemory<uintptr_t>(actor + PAWN_PLAYERSTATE)) ? Object::PLAYER : Object::NONE;
-    for (const char* p : {"BP_SocketContainer_", "BP_SalvageContainer_", "BP_Pickup"})
+    for (const std::string& p : {OBF("BP_SocketContainer_"), OBF("BP_SalvageContainer_"), OBF("BP_Pickup")})
         if (startsWith(cls, p)) return Object::SEARCH; //refine() then tells ground items apart, as for the config.h vtable
     return Object::NONE;
 }

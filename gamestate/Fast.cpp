@@ -15,6 +15,7 @@
 
 #include "utils/labeler.h"
 #include "utils/log.h"
+#include "utils/obfstr.h"
 #include "utils/offsets.h"
 
 void printStatusLine(const std::vector<RenderEntity>& others, const RenderEntity* me, int posed, int poseWanted); //GameState.cpp
@@ -78,12 +79,13 @@ bool GameState::scan(ptr uworld) {
     if (!isValidPtr(uworld)) {
         //The link that read 0 (see getUworld). The menu stops the chain at CHAIN_1 (no PlayerController yet); in a raid a
         //stop means the offsets in config.h are stale for this game build.
-        static const char* const stop[4] = {
-            "no game world: UWorld chain stops at UWORLD_RVA (reads 0: offsets stale?)",
-            "no game world: UWorld chain stops at UWORLD_CHAIN_1 (menu, or offsets stale)",
-            "no game world: UWorld chain stops at UWORLD_CHAIN_2 (menu, or offsets stale)",
-            "no game world: UWorld chain stops at UWORLD_CHAIN_3 (menu, or offsets stale)"};
-        fault_ = stop[chainStop_ >= 0 ? chainStop_ : 0];
+        //OBF so these UWorld-chain names never land in the shipped binary's strings(1); .c_str() stays valid (static)
+        static const std::string stop[4] = {
+            OBF("no game world: UWorld chain stops at UWORLD_RVA (reads 0: offsets stale?)"),
+            OBF("no game world: UWorld chain stops at UWORLD_CHAIN_1 (menu, or offsets stale)"),
+            OBF("no game world: UWorld chain stops at UWORLD_CHAIN_2 (menu, or offsets stale)"),
+            OBF("no game world: UWorld chain stops at UWORLD_CHAIN_3 (menu, or offsets stale)")};
+        fault_ = stop[chainStop_ >= 0 ? chainStop_ : 0].c_str();
         logThrottled("[-] Invalid Uworld (not in a raid yet?)");
         return false;
     }
@@ -94,14 +96,14 @@ bool GameState::scan(ptr uworld) {
     lastWorld_ = uworld;
     //PersistentLevel at UWorld+0x170 is encrypted; the plain pointer is in LevelCollections[0] (see config.h)
     ptr levelCollection = ReadMemory<ptr>(uworld + off::LEVEL_COLLECTIONS);
-    if (!isValidPtr(levelCollection)) { fault_ = "no level yet: loading (or LEVEL_COLLECTIONS is stale)"; logThrottled("[-] No level collection yet"); return false; }
+    if (!isValidPtr(levelCollection)) { static const std::string f = OBF("no level yet: loading (or LEVEL_COLLECTIONS is stale)"); fault_ = f.c_str(); logThrottled("[-] No level collection yet"); return false; }
     ptr persistentLevel = ReadMemory<ptr>(levelCollection + off::PERSISTENT_LEVEL);
-    if (!isValidPtr(persistentLevel)) { fault_ = "no level yet: loading (or PERSISTENT_LEVEL is stale)"; logThrottled("[-] No persistent level yet"); return false; }
+    if (!isValidPtr(persistentLevel)) { static const std::string f = OBF("no level yet: loading (or PERSISTENT_LEVEL is stale)"); fault_ = f.c_str(); logThrottled("[-] No persistent level yet"); return false; }
     struct { ptr data; int num, max; } arr{}; //Level::Actors: the list and its count side by side, so one read (zero if it fails)
     ReadMemoryBuffer(persistentLevel + off::ACTORS_PTR, &arr, sizeof arr);
     const ptr actorsPtr = arr.data;
     const int count = arr.num;
-    if (!(isValidPtr(actorsPtr) && count > 0 && count < 250000)) { fault_ = "actor list not readable: loading (or ACTORS_PTR is stale)"; logThrottled("[-] Actor list not readable yet"); return false; }
+    if (!(isValidPtr(actorsPtr) && count > 0 && count < 250000)) { static const std::string f = OBF("actor list not readable: loading (or ACTORS_PTR is stale)"); fault_ = f.c_str(); logThrottled("[-] Actor list not readable yet"); return false; }
 
     std::vector<ptr> actors((size_t)count);
     ReadMemoryBuffer(actorsPtr, actors.data(), actors.size() * sizeof(ptr));
@@ -236,10 +238,12 @@ void GameState::learnKinds(const std::unordered_map<ptr, std::pair<int, ptr>>& u
         L.decided = true;
         L.next = now + NONE_FOR;
         if (L.kind == Object::NONE) continue;
+#ifdef KWINHELPER_PROBES //diagnostic only: the class names and config.h hint must not reach the release binary's strings(1)
         const char* kind = L.kind == Object::PLAYER ? "PLAYER" : L.kind == Object::ARC ? "ARC" : "SEARCH";
         std::printf("[+] Learned vtable 0x%llx = %s from its actors' names (put it in config.h as vtabels::%s to skip learning)\n",
                     (unsigned long long)vt, kind, kind);
         std::fflush(stdout);
+#endif
     }
 }
 
@@ -610,6 +614,7 @@ void GameState::runLiveProbeIfAsked(const std::vector<RenderEntity>& ents, const
 #endif
 }
 
+#ifdef KWINHELPER_PROBES
 //KWINHELPER_SELFCHECK=1 (the release build too): once in a raid, each game number in config.h is checked against what it
 //must look like, and PASS / FAIL / SKIP is printed per number and saved to ~/.config/kwin-helper/selfcheck.txt.
 //You are found without any vtable: the pawn whose Controller is the PlayerController the UWorld chain passes through
@@ -817,6 +822,7 @@ void GameState::chainReportIfAsked() {
     if (FILE* f = std::fopen(path.c_str(), "w")) { std::fputs(rep.c_str(), f); std::fclose(f); }
     else std::printf("[!] Self-check: could not save %s\n", path.c_str());
 }
+#endif // KWINHELPER_PROBES
 
 gsRet GameState::step() {
     if (isDebugMode || probeNames) return tick(); //the diagnostic modes want the unfiltered view
@@ -825,10 +831,12 @@ gsRet GameState::step() {
     //No world or camera: no full self-check report (it needs them). Without a world the UWorld chain report is written
     //instead, so a stale offset shows up before a raid too. While one is asked for, the console says so.
     auto failed = [&](const char* why) -> gsRet {
+#ifdef KWINHELPER_PROBES
         if (self_.stage) {
             chainReportIfAsked();
             logThrottled((std::string("[-] Self-check waiting, no full report until a world and camera are found: ") + why).c_str());
         }
+#endif
         return {.fault = why};
     };
     //The world takes 4 reads one after another, so it is checked before every scan and about 30 times a second, not on
@@ -853,13 +861,16 @@ gsRet GameState::step() {
     else {
         logThrottled("[-] Invalid rawEntities or no viewMatrix");
         camActor_ = 0; //find the camera again at the next step
-        return failed("no camera found (CAMMANAGER vtable or VIEW_MATRIX is stale?)");
+        static const std::string f = OBF("no camera found (CAMMANAGER vtable or VIEW_MATRIX is stale?)");
+        return failed(f.c_str());
     }
     if (statics_.empty() && dyn_.empty()) logThrottled("[-] No ent found, may be in practice range or its just not working");
 
     gsRet out = assemble(vm);
     runLiveProbeIfAsked(out.entities, vm);
+#ifdef KWINHELPER_PROBES
     if (self_.stage) selfCheckIfAsked(vm);
+#endif
 
     //The same one-line status as always, every 2 s (see printStatusLine): me / players / ARC / containers / stick figures
     static auto lastStatus = clk::now() - std::chrono::seconds(10);
@@ -871,10 +882,7 @@ gsRet GameState::step() {
         //Players near enough for a stick figure, and not one of them has had a pose for 5 s: say why (a patch that
         //changed the skeleton or moved an offset would otherwise turn every stick figure off without a word)
         if (poseWanted_ && !posed_ && t0 - poseOkAt_ >= std::chrono::seconds(5))
-            logThrottled(("[-] Stick figures: none drawn for 5 s: " + poseWhy_ +
-                          ". Run the bones probe: build the probe version (README, probes section), then "
-                          "KWINHELPER_BIN=./cmake-build-probe/kwin-helper KWINHELPER_PROBE=bones bash start.sh, "
-                          "and copy the === BONES PROBE lines").c_str());
+            logThrottled(("[-] Stick figures: none drawn for 5 s: " + poseWhy_).c_str());
     }
     timing_.lastStepMs = ms(t0, clk::now());
     return out;

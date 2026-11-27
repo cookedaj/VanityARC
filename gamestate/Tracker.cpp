@@ -22,13 +22,6 @@ constexpr int KEEP_MS = 250;      //a failed step this soon after a good one is 
 constexpr int NO_GAME_MS = 200;
 thread_local std::mt19937 jitterRng{std::random_device{}()}; //uneven step times: a fixed rhythm is easy to spot
 
-//Finding the game needs no permission, reading it does. The kernel checks permission before it looks at the address,
-//so one byte from any address tells: EPERM = the ptrace capability is missing (a rebuild not started with start.sh)
-bool readDenied(pid_t pid) {
-    char b;
-    iovec l{&b, 1}, r{(void*)0x10000, 1};
-    return process_vm_readv(pid, &l, 1, &r, 1, 0) < 0 && errno == EPERM;
-}
 } // namespace
 
 bool processAlive(pid_t pid) { return pid > 0 && access(("/proc/" + std::to_string(pid)).c_str(), F_OK) == 0; }
@@ -131,15 +124,17 @@ void Tracker::run() {
     auto next = clk::now(); //when the next step is due, in full clock precision so the set rate is the rate that runs
     auto findImage = [&] {
         if (!lookup_.image(ProcessId)) std::cout << "[-] The game's .exe was not found in its memory map: using the usual address" << std::endl;
-        const unsigned run = ImageStamp, rec = GAME_PE_STAMP;
+        [[maybe_unused]] const unsigned run = ImageStamp, rec = GAME_PE_STAMP;
         const bool updated = run != 0 && rec != 0 && run != rec; //an unknown build never counts
         updated_ = updated;
+#ifdef KWINHELPER_PROBES //build-stamp report leaks the game's PE timestamp: probe/dev builds only, not Release
         char line[200];
         if (run == 0) std::snprintf(line, sizeof line, "[-] Game build stamp: not readable (no update check)");
         else if (rec == 0) std::snprintf(line, sizeof line, "[+] Game build stamp 0x%08X (config.h GAME_PE_STAMP not recorded: no update check)", run);
         else if (updated) std::snprintf(line, sizeof line, "[-] GAME UPDATED: build stamp 0x%08X, config.h GAME_PE_STAMP is 0x%08X: markers may be wrong", run, rec);
         else std::snprintf(line, sizeof line, "[+] Game build stamp 0x%08X matches config.h", run);
         std::cout << line << std::endl;
+#endif
     };
 
     while (!stop_) {
@@ -173,7 +168,9 @@ void Tracker::run() {
             lastWorld = t0;
             const pid_t p = lookup_.find();
             if (p != 0 && p != ProcessId) {
+#ifdef KWINHELPER_PROBES //leaks process PIDs: probe/dev builds only, not Release
                 std::cout << "[*] Switching from PID " << ProcessId.load() << " to PID " << p << std::endl;
+#endif
                 cam_ = 0;
                 ProcessId = p;
                 findImage();
@@ -235,7 +232,7 @@ void Tracker::run() {
         s->selfHealth = r.selfHealth;
         s->selfShield = r.selfShield;
         s->valid = r.valid;
-        if (!r.valid) s->fault = readDenied(ProcessId) ? "no permission to read the game: start the overlay with start.sh" : r.fault;
+        if (!r.valid) s->fault = ReadScatterError == EPERM ? "no permission to read the game: start the overlay with start.sh" : r.fault;
         s->gameFound = true;
         s->gameUpdated = updated_;
         s->seq = ++seq;

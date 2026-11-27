@@ -39,6 +39,9 @@ struct ReadReq {
 };
 size_t ReadScatter(pid_t pid, ReadReq* reqs, size_t n);
 size_t ReadScatter(ReadReq* reqs, size_t n); //Overload thats to be used
+//The errno from the last ReadScatter that hit a non-EFAULT error (EPERM = permission denied, ESRCH = process gone).
+//0 when every call in the batch reached the address check. Set on the calling thread.
+extern thread_local int ReadScatterError;
 
 pid_t FindGamePID();
 

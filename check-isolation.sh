@@ -56,10 +56,13 @@ else
     else ok "no window-listing or screen-capture protocol is offered to the sandbox"; fi
 fi
 
+# This section matches the overlay by its process name "kwin-helper" (= APP_ID in
+# utils/identity.h; the cover window title is "KWin Helper" = APP_TITLE). The header
+# can't be included from a shell script, so keep these literals in sync with it by hand.
 echo "6. kwin-helper itself"
 KP="$(pgrep -x kwin-helper | head -1)"
 if [ -z "$KP" ]; then
-    note "kwin-helper is not running: start it and run this again for the live checks"
+    bad "kwin-helper is not running: start it and run this again for the live checks"
 else
     [ "$(awk '/^NSpid:/ {print NF-1}' "/proc/$KP/status" 2>/dev/null)" = 1 ] && ok "it runs in the host PID namespace" || bad "it runs inside a sandbox namespace"
     seen=0
@@ -67,9 +70,15 @@ else
         [ "$(cat "/proc/$GAME/root/proc/$d/comm" 2>/dev/null)" = "kwin-helper" ] && seen=1
     done
     [ "$seen" = 0 ] && ok "the game's own /proc does not list it" || bad "the game's own /proc lists it"
+    # The overlay sets PR_SET_DUMPABLE(0) (and carries file caps), so the kernel reparents
+    # its /proc entries to root and a same-user process can no longer read its environ. An
+    # unreadable environ is therefore the wanted state, not a skipped check; a readable one
+    # means that protection is off. (Run as a normal user, per the header - as root environ
+    # stays readable whatever the dumpable flag, and this check would misreport.)
     if [ ! -r "/proc/$KP/environ" ]; then
-        note "its ptrace permission hides its sockets and environment from you: not checked"
+        ok "it is non-dumpable: its environment and sockets are hidden from same-user processes"
     else
+        bad "it is dumpable: its environment and sockets are exposed to same-user processes (PR_SET_DUMPABLE(0) not in effect)"
         if ! command -v ss >/dev/null 2>&1; then note "ss is not installed (package iproute2): socket check skipped"
         elif ss -xp 2>/dev/null | grep "pid=$KP," | awk '{print $5}' | grep -q '^@'; then bad "it holds a named abstract socket (visible through the shared network namespace)"; else ok "it holds no named abstract socket"; fi
         tr '\0' '\n' < "/proc/$KP/environ" 2>/dev/null | grep -qiE 'vanity|raiders|pioneer|steam|proton' && note "its environment names the project folder (readable only from the host, not from the sandbox)" || ok "its environment is clean"
